@@ -1,0 +1,35 @@
+[project]
+name = "clip-tray"
+version = "0.1.0"
+description = "GPU-accelerated clip management pipeline — encode, upload, share."
+requires-python = ">=3.11"
+authors = [{ name = "chasem" }]
+license = { text = "MIT" }
+
+dependencies = [
+    "PyQt6",
+    "PyQt6-Qt6",
+    "PyQt6-sip",
+]
+
+[project.scripts]
+clip-tray = "clip_tray.__main__:main"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["clip_tray*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
