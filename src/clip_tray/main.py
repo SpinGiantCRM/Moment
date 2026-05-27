@@ -39,12 +39,10 @@ def main() -> None:
     # Install exception hook
     sys.excepthook = excepthook
 
-    # Enable High DPI scaling
+    # Qt6 has High DPI always-on; set rounding policy for sharp rendering
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
 
     app = QApplication(sys.argv)
     app.setApplicationName("clip-tray")
