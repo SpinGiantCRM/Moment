@@ -248,3 +248,37 @@ ffmpeg -hwaccel cuda -y
 rclone copy {mp4} {remote}:{bucket}/
 rclone delete {remote}:{bucket}/{path}    # on re-upload
 ```
+
+## AI Context Structure
+
+```
+.ai_context/               # AI session memory (gitignored)
+├── architecture.md        # Full architecture overview
+├── DECISIONS.md            # Architecture decision log
+├── .ai_state.md            # Current project state
+└── prompt_templates.md     # Reusable prompt patterns
+
+specs/                      # Micro-specs for Freebuff handoffs
+├── spec-seven.md     (backend core — game_profiles, discord_bot, import_export)
+├── spec-eight.md     (pages — stats, trash, webhook)
+├── spec-nine.md      (widgets — pip, audio_mixer, transition_picker)
+├── spec-ten.md       (editor — timeline, filters, overlays, merge, GIF)
+├── spec-eleven.md    (infrastructure — Discord bot subcommand, MCP server)
+└── spec-twelve.md    (About dialog — shortcuts, license, credits)
+```
+
+## MCP Servers Available
+
+| Server | Purpose |
+|--------|---------|
+| narsil | Semantic code search (clip-tray + Vulkan-Voxy repos indexed) |
+| canvas-mcp | UI design prototyping via HTML/CSS canvas |
+| github | PR/issue/release management |
+
+## Subagents
+
+| Agent | When to use |
+|-------|-------------|
+| clip-tray-tester | Running or reviewing pytest tests. Knows SQLite :memory: and ffmpeg mocking patterns. |
+| explore | Codebase research. Prefer for any non-trivial file exploration. |
+| research | Web/docs research. Use context7 for library API questions. |

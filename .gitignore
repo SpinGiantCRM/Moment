@@ -34,5 +34,15 @@ Thumbs.db
 /tmp/
 *.bak
 
+# AI context (session memory, not version-controlled)
+.ai_context/
+
+# Virtual environment
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
 # Logs
 *.log

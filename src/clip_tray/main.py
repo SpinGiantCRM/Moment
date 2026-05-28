@@ -1,58 +1,37 @@
-"""Application bootstrap — QApplication, excepthook, launcher."""
+"""Application bootstrap — CLI entry point for clip-tray.
 
-import logging
-import os
+Supports subcommands::
+
+    clip-tray           launch the GUI (default)
+    clip-tray bot       start the Discord bot
+    clip-tray mcp       start the MCP server
+"""
+
+from __future__ import annotations
+
 import sys
-import traceback
-
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QMessageBox
-
-LOG_PATH = os.path.expanduser("~/.local/share/clip-tray.log")
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_PATH),
-        logging.StreamHandler(),
-    ],
-)
-
-
-def excepthook(exc_type, exc_value, exc_tb) -> None:
-    """Global exception hook — logs and shows a dialog for unhandled errors."""
-    logging.critical("Unhandled exception", exc_info=(exc_type, exc_value, exc_tb))
-    if issubclass(exc_type, KeyboardInterrupt):
-        sys.exit(1)
-    msg = QMessageBox(QMessageBox.Icon.Critical, "clip-tray Error", str(exc_value))
-    msg.setDetailedText("".join(traceback.format_exception(exc_type, exc_value, exc_tb)))
-    msg.exec()
 
 
 def main() -> None:
-    """Launch the clip-tray application."""
-    # Log startup info
-    logging.info("clip-tray v0.1.0 starting")
-    logging.info(f"Python {sys.version}")
+    """Main entry point — dispatch to subcommand or start GUI."""
+    argv = sys.argv[1:]
 
-    # Install exception hook
-    sys.excepthook = excepthook
+    # Subcommand dispatch
+    if argv and argv[0] == "bot":
+        from clip_tray.bot.main import run_bot
 
-    # Qt6 has High DPI always-on; set rounding policy for sharp rendering
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
+        sys.exit(run_bot(argv[1:]))
 
-    app = QApplication(sys.argv)
-    app.setApplicationName("clip-tray")
-    app.setOrganizationName("clip-tray")
-    app.setQuitOnLastWindowClosed(False)
+    if argv and argv[0] == "mcp":
+        from clip_tray.mcp.main import run_mcp
 
-    # Lazy import to avoid circular issues at module level
-    from clip_tray.ui.app import AppManager  # noqa: PLC0415
+        sys.exit(run_mcp(argv[1:]))
 
-    manager = AppManager()
-    manager.start()
+    # Default: launch GUI
+    from clip_tray.ui.app import main as gui_main
 
-    sys.exit(app.exec())
+    gui_main()
+
+
+if __name__ == "__main__":
+    main()

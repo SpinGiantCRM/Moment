@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Name=Moment
+Comment=GPU-accelerated clip management pipeline — capture, encode, upload, share
+Exec=clip-tray
+Icon=moment
+Terminal=false
+Categories=Utility;AudioVideo;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+
+Actions=open-encoded;settings;
+
+[Desktop Action open-encoded]
+Name=Open Encoded Folder
+Exec=clip-tray --open-encoded
+NoDisplay=true
+
+[Desktop Action settings]
+Name=Settings
+Exec=clip-tray --settings
+NoDisplay=true
