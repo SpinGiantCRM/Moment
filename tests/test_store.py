@@ -3,31 +3,28 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from moment.core.models import (
     Bookmark,
     Clip,
     ClipStatus,
-    ClipType,
-    ClipVisibility,
     EditProfile,
     FilterConfig,
     Folder,
     GameProfile,
     ReviewCardConfig,
     SegmentEdit,
-    Tag,
     Task,
     TaskKind,
     TaskStatus,
     Webhook,
     WebhookLogEntry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -361,7 +358,6 @@ class TestMigration:
         assert count == 0
 
     def test_migrate_valid_json(self, store) -> None:
-        import os
         fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="clip_migration_test_")
         os.close(fd)
         data = [
@@ -389,35 +385,177 @@ class TestMigration:
             assert not os.path.exists(tmp_path)
             assert os.path.exists(tmp_path + ".bak")
         finally:
-            try:
-                os.unlink(tmp_path)
-            except FileNotFoundError:
-                pass
-            try:
-                os.unlink(tmp_path + ".bak")
-            except FileNotFoundError:
-                pass
+            for suffix in ("", ".bak"):
+                try:
+                    os.unlink(tmp_path + suffix)
+                except FileNotFoundError:
+                    pass
 
     def test_migrate_already_populated(self, store) -> None:
         """If DB already has clips, JSON is renamed without importing."""
         _make_clip(store, id="existing")
-        import os
         fd, tmp_path = tempfile.mkstemp(suffix=".json", prefix="clip_migration_test_")
         os.close(fd)
         with open(tmp_path, "w") as f:
-            json.dump([{"id": "dup", "stem": "test", "source_path": "/tmp/dup.mkv", "title": "Duplicate"}], f)
+            json.dump(
+                [{
+                    "id": "dup",
+                    "stem": "test",
+                    "source_path": "/tmp/dup.mkv",
+                    "title": "Duplicate",
+                }],
+                f,
+            )
         try:
             count = store.migrate_from_json(Path(tmp_path))
             assert count == 0  # No new clips imported
         finally:
-            try:
-                os.unlink(tmp_path)
-            except FileNotFoundError:
-                pass
-            try:
-                os.unlink(tmp_path + ".bak")
-            except FileNotFoundError:
-                pass
+            for suffix in ("", ".bak"):
+                try:
+                    os.unlink(tmp_path + suffix)
+                except FileNotFoundError:
+                    pass
+
+    def test_migrate_old_dirs_renames(self, store) -> None:
+        """_migrate_old_dirs renames clip-tray dirs to moment dirs."""
+        import shutil as _shutil
+
+        old_dir = Path(tempfile.mkdtemp(prefix="clip_tray_", suffix="_data"))
+        new_dir = old_dir.parent / f"moment_data_{uuid.uuid4().hex[:8]}"
+
+        try:
+            with (
+                patch("moment.core.store._OLD_DATA_DIR", str(old_dir)),
+                patch("moment.core.store._DEFAULT_DATA_DIR", str(new_dir)),
+            ):
+                from moment.core.store import Store as _Store
+
+                fd, dbp = tempfile.mkstemp(suffix=".db")
+                os.close(fd)
+                try:
+                    s = _Store(db_path=dbp)
+                    # _migrate_old_dirs should rename old_dir to new_dir
+                    assert new_dir.exists()
+                    s.close()
+                finally:
+                    for sfx in ("", "-wal", "-shm"):
+                        try:
+                            os.unlink(dbp + sfx)
+                        except FileNotFoundError:
+                            pass
+        finally:
+            for d in (old_dir, new_dir):
+                if d.exists():
+                    _shutil.rmtree(d, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — empty DB
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyDB:
+    def test_list_clips_empty(self, store) -> None:
+        assert store.list_clips() == []
+
+    def test_list_clips_with_status_empty(self, store) -> None:
+        assert store.list_clips(status=ClipStatus.DONE) == []
+
+    def test_list_tags_empty(self, store) -> None:
+        assert store.list_tags() == []
+
+    def test_list_folders_empty(self, store) -> None:
+        assert store.list_folders() == []
+
+    def test_list_webhooks_empty(self, store) -> None:
+        assert store.list_webhooks() == []
+
+    def test_list_game_profiles_empty(self, store) -> None:
+        assert store.list_game_profiles() == []
+
+    def test_get_pending_tasks_empty(self, store) -> None:
+        assert store.get_pending_tasks() == []
+
+    def test_get_aggregate_stats_empty(self, store) -> None:
+        stats = store.get_aggregate_stats()
+        assert stats["total_clips"] == 0
+        assert stats["total_storage_bytes"] == 0
+
+    def test_get_clip_none_empty_db(self, store) -> None:
+        assert store.get_clip("anything") is None
+
+    def test_get_edit_profile_none_empty_db(self, store) -> None:
+        assert store.get_edit_profile("anything") is None
+
+    def test_get_game_profile_none_empty_db(self, store) -> None:
+        assert store.get_game_profile("anything") is None
+
+
+# ---------------------------------------------------------------------------
+# Edge cases — malformed data
+# ---------------------------------------------------------------------------
+
+
+class TestMalformedData:
+    def test_insert_clip_no_explode(self, store) -> None:
+        """Minimal insert with only required fields."""
+        clip = Clip(
+            id="min",
+            stem="min",
+            source_path=Path("/tmp/min.mkv"),
+        )
+        store.insert_clip(clip)
+        fetched = store.get_clip("min")
+        assert fetched is not None
+        assert fetched.duration == 0.0
+        assert fetched.file_size == 0
+
+    def test_insert_clip_very_long_title(self, store) -> None:
+        """Very long titles should not break the DB."""
+        clip = Clip(
+            id="long",
+            stem="long_title",
+            source_path=Path("/tmp/long.mkv"),
+            title="A" * 2000,
+        )
+        store.insert_clip(clip)
+        fetched = store.get_clip("long")
+        assert fetched is not None
+        assert len(fetched.title) == 2000
+
+    def test_insert_clip_unicode(self, store) -> None:
+        """Unicode in title, game, and tags should survive round-trip."""
+        clip = Clip(
+            id="uni",
+            stem="unicode",
+            source_path=Path("/tmp/uni.mkv"),
+            title="🔥 精彩片段",
+            game="反恐精英",
+        )
+        store.insert_clip(clip)
+        store.set_tags("uni", ["冠军", "✨"])
+        fetched = store.get_clip("uni")
+        assert fetched is not None
+        assert fetched.title == "🔥 精彩片段"
+        assert fetched.game == "反恐精英"
+        assert set(fetched.tags) == {"冠军", "✨"}
+
+    def test_insert_clip_null_strings(self, store) -> None:
+        """Null/None fields should be handled."""
+        clip = Clip(
+            id="nulls",
+            stem="nulls",
+            source_path=Path("/tmp/nulls.mkv"),
+            title=None,
+            game=None,
+            r2_url=None,
+            r2_path=None,
+        )
+        store.insert_clip(clip)
+        fetched = store.get_clip("nulls")
+        assert fetched is not None
+        assert fetched.title == ""
+        assert fetched.game is None
 
 
 # ---------------------------------------------------------------------------

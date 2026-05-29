@@ -6,11 +6,25 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
+from PyQt6.QtWidgets import QApplication
 
 from moment.core.store import Store
+
+# ---------------------------------------------------------------------------
+# QApplication (session-scoped for UI tests)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def qapp() -> QApplication:
+    """Session-scoped QApplication for UI tests using offscreen platform."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    return app
 
 
 @pytest.fixture

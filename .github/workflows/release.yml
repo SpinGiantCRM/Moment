@@ -1,0 +1,98 @@
+name: Release
+
+# Triggered manually (workflow_dispatch) or when a version tag is pushed.
+# Builds a wheel + sdist and attaches them to the GitHub Release.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build — produce wheel and sdist
+  # ---------------------------------------------------------------------------
+  build:
+    name: "Build wheel + sdist"
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build dependencies
+        run: |
+          pip install --upgrade pip build
+
+      - name: Build wheel + sdist
+        run: python -m build --wheel --sdist
+
+      - name: Verify wheel contents
+        run: |
+          echo "=== sdist ==="
+          tar tzf dist/*.tar.gz | head -20
+          echo ""
+          echo "=== wheel ==="
+          unzip -l dist/*.whl | head -40
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Release — create GitHub Release and attach artifacts
+  # ---------------------------------------------------------------------------
+  release:
+    name: "Create GitHub Release"
+    runs-on: ubuntu-24.04
+    needs: build
+    # Only run on tag push (not manual dispatch) to avoid double-releasing
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "v${{ steps.version.outputs.version }}"
+          body: |
+            ## Moment v${{ steps.version.outputs.version }}
+
+            GPU-accelerated game clip manager for Linux.
+
+            ### Installation
+
+            ```bash
+            pip install moment==${{ steps.version.outputs.version }}
+            ```
+
+            Or download the wheel from the assets below.
+
+            ### Changes
+
+            See the commit history for details.
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-alpha') || contains(github.ref, '-beta') }}

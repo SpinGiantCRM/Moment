@@ -43,17 +43,28 @@ from PyQt6.QtWidgets import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Design tokens (Moment dark palette)
+# Design tokens — import Moment's palette from resources.py at module
+# load so the overlay stays in sync with the application theme.
 # ---------------------------------------------------------------------------
 
-_COLOR_BG = "#3c3c3c"
-_COLOR_BG_LIGHTER = "#4a4a4a"
-_COLOR_ACCENT = "#60a5fa"
-_COLOR_REC = "#ef4444"  # red recording dot
-_COLOR_TEXT = "#e5e7eb"
-_COLOR_TEXT_MUTED = "#9ca3af"
-_COLOR_SUCCESS = "#22c55e"
-_COLOR_BORDER = "#555555"
+def _resolve_color(token: str, fallback: str) -> str:
+    """Resolve a palette token at import time, falling back to the hex value."""
+    try:
+        from moment.ui.resources import color
+
+        return color(token)
+    except ImportError:
+        return fallback
+
+
+_COLOR_BG = _resolve_color("--bg-window", "#3c3c3c")
+_COLOR_BG_LIGHTER = _resolve_color("--bg-elevated", "#404040")
+_COLOR_ACCENT = _resolve_color("--accent-blue", "#60a5fa")
+_COLOR_REC = _resolve_color("--accent-red", "#ef4444")
+_COLOR_TEXT = _resolve_color("--text-primary", "#d9d9d9")
+_COLOR_TEXT_MUTED = _resolve_color("--text-secondary", "#a1a1aa")
+_COLOR_SUCCESS = _resolve_color("--accent-green", "#4ade80")
+_COLOR_BORDER = _resolve_color("--bg-hover", "#555555")
 
 _OVERLAY_WIDTH = 440
 _OVERLAY_HEIGHT = 360

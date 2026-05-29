@@ -5,6 +5,21 @@ description = "GPU-accelerated game clip manager for Linux. Capture, edit, and s
 requires-python = ">=3.11"
 authors = [{ name = "chasem" }]
 license = { text = "GPL-3.0" }
+keywords = ["gaming", "clips", "recording", "gpu", "nvenc", "linux"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video :: Capture",
+    "Topic :: Multimedia :: Video :: Conversion",
+    "Topic :: Utilities",
+]
 
 dependencies = [
     "PyQt6",

@@ -36,6 +36,12 @@ if TYPE_CHECKING:
 
 from moment.core.config import _PATH_DEFAULTS
 
+# Resolve palette colours for the Appearance tab (with fallback)
+try:
+    from moment.ui.resources import color as _palette_color
+except ImportError:
+    _palette_color = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 # Encoding presets
@@ -60,6 +66,19 @@ _ENCODE_TIMINGS = ["immediately", "after_game", "when_idle"]
 _GAME_EXIT_BEHAVIORS = ["open_editor", "prompt", "nothing"]
 _REVIEW_SIZES = ["small", "medium", "large"]
 
+# Appearance tab swatches: (label, token, fallback_hex)
+_APPEARANCE_SWATCHES: list[tuple[str, str, str]] = [
+    ("Window BG", "--bg-window", "#3c3c3c"),
+    ("Surface", "--bg-surface", "#333333"),
+    ("Elevated", "--bg-elevated", "#404040"),
+    ("Inset", "--bg-inset", "#2a2a2a"),
+    ("Primary Text", "--text-primary", "#d9d9d9"),
+    ("Secondary", "--text-secondary", "#a1a1aa"),
+    ("Accent Blue", "--accent-blue", "#60a5fa"),
+    ("Accent Red", "--accent-red", "#f87171"),
+    ("Accent Green", "--accent-green", "#4ade80"),
+]
+
 
 class SettingsDialog(QDialog):
     """Tabbed settings dialog — saves on tab switch, no Apply button."""
@@ -79,6 +98,7 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_notifications_tab(), "Notifications")
         self._tabs.addTab(self._build_game_tab(), "Game Detection")
         self._tabs.addTab(self._build_recording_tab(), "Recording")
+        self._tabs.addTab(self._build_appearance_tab(), "Appearance")
         self._tabs.addTab(self._build_storage_tab(), "Storage Locations")
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -348,6 +368,76 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(overlay_gb)
 
+        layout.addStretch()
+        return tab
+
+    def _build_appearance_tab(self) -> QWidget:
+        """Appearance tab — live color swatches showing the Moment palette."""
+        # Resolve palette from resources if available, else fall back to hex
+        if _palette_color is not None:
+            _swatch_colors: dict[str, str] = {
+                name: _palette_color(token)
+                for name, token, _hex in _APPEARANCE_SWATCHES
+            }
+        else:
+            _swatch_colors = {}
+
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        gb = QGroupBox("Theme Palette")
+        gb_layout = QVBoxLayout(gb)
+        gb_layout.setSpacing(8)
+
+        desc = QLabel(
+            "Moment uses a dark palette. Below are the current theme colors.\n"
+            "Theme switching (light/dark) is planned for a future release."
+        )
+        desc.setObjectName("muted")
+        desc.setWordWrap(True)
+        gb_layout.addWidget(desc)
+
+        # Color swatches grid
+        swatch_grid = QHBoxLayout()
+        swatch_grid.setSpacing(6)
+
+        for label, token, fallback_hex in _APPEARANCE_SWATCHES:
+            hex_val = _swatch_colors.get(label, fallback_hex)
+            swatch_widget = QWidget()
+            swatch_widget.setFixedSize(64, 64)
+            swatch_layout = QVBoxLayout(swatch_widget)
+            swatch_layout.setContentsMargins(0, 0, 0, 0)
+            swatch_layout.setSpacing(4)
+
+            swatch = QLabel()
+            swatch.setFixedSize(48, 48)
+            swatch.setStyleSheet(
+                f"background-color: {hex_val};"
+                "border-radius: 8px;"
+                "border: 1px solid var(--bg-hover);"
+            )
+            swatch.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            swatch_layout.addWidget(swatch, alignment=Qt.AlignmentFlag.AlignCenter)
+
+            swatch_label = QLabel(label)
+            swatch_label.setObjectName("cardMeta")
+            swatch_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            swatch_label.setStyleSheet("font-size: 10px;")
+            swatch_layout.addWidget(swatch_label)
+
+            swatch_grid.addWidget(swatch_widget)
+
+        gb_layout.addLayout(swatch_grid)
+
+        # Theme note
+        theme_note = QLabel(
+            "Custom themes, font scaling, and accent color overrides are coming soon."
+        )
+        theme_note.setObjectName("muted")
+        theme_note.setWordWrap(True)
+        gb_layout.addWidget(theme_note)
+
+        layout.addWidget(gb)
         layout.addStretch()
         return tab
 

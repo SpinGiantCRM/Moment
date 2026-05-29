@@ -1,0 +1,14 @@
+[Unit]
+Description=Moment Discord Bot
+Documentation=https://github.com/SpinGiantCRM/moment
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=moment bot
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

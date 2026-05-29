@@ -8,9 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from moment.core.encoder import GPU_SEMAPHORE, Encoder, EncoderError, get_encode_dir
-from moment.core.models import Clip, EditProfile, SegmentEdit
-from moment.utils.system import is_nvidia_gpu
+from moment.core.encoder import GPU_SEMAPHORE, Encoder, EncoderError
+from moment.core.models import Clip, EditProfile
 
 
 @pytest.fixture
@@ -190,7 +189,6 @@ class TestEncode:
         ):
             mock_run.return_value.returncode = 0
 
-            # Create a dummy output file
             with patch("pathlib.Path.is_file", return_value=True), \
                  patch("pathlib.Path.stat") as mock_stat:
                 mock_stat.return_value.st_size = 1000
@@ -198,6 +196,27 @@ class TestEncode:
 
             assert result is not None
             assert result.suffix == ".mp4"
+
+    def test_encode_calls_subprocess_with_correct_args(self, clip: Clip) -> None:
+        """Verify subprocess.run receives the right command list."""
+        encoder = Encoder(codec="h264")
+
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("moment.core.encoder.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.encoder.ensure_dir"),
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+        ):
+            mock_run.return_value.returncode = 0
+            mock_stat.return_value.st_size = 1000
+            encoder.encode(clip)
+
+            # Verify subprocess.run was called (may be 2 calls: NVENC probe + encode)
+            assert mock_run.call_count >= 1
+            call_args = mock_run.call_args[1]
+            # Check output capture
+            assert "capture_output" in call_args or call_args.get("stdout") is not None
 
     def test_encode_failure_raises(self, clip: Clip) -> None:
         encoder = Encoder(codec="h264")

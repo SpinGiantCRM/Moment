@@ -10,16 +10,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QAction, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QPushButton,
-    QSizePolicy,
     QStackedWidget,
     QStatusBar,
     QToolButton,
@@ -34,12 +32,14 @@ logger = logging.getLogger(__name__)
 
 # Page indices
 _PAGE_GRID = 0
-_PAGE_PLAYER = 1
-_PAGE_STATS = 2
-_PAGE_TRASH = 3
-_PAGE_WEBHOOK = 4
+_PAGE_RECORD = 1
+_PAGE_PLAYER = 2
+_PAGE_STATS = 3
+_PAGE_TRASH = 4
+_PAGE_WEBHOOK = 5
 
 _NAV_BUTTONS = [
+    ("Record", _PAGE_RECORD),
     ("Grid", _PAGE_GRID),
     ("Player", _PAGE_PLAYER),
     ("Stats", _PAGE_STATS),
@@ -107,7 +107,7 @@ class MainWindow(QMainWindow):
 
         # Show grid by default
         self._nav_buttons[_PAGE_GRID].setChecked(True)
-        self._stack.setCurrentIndex(_PAGE_GRID)
+        self._stack.setCurrentIndex(_PAGE_RECORD)
 
     # ==================================================================
     # Toolbar
@@ -159,9 +159,17 @@ class MainWindow(QMainWindow):
         """Create and add all pages to the stack."""
         from moment.ui.pages.grid_page import GridPage
         from moment.ui.pages.player_page import PlayerPage
+        from moment.ui.pages.recording_page import RecordingPage
         from moment.ui.pages.stats_page import StatsPage
         from moment.ui.pages.trash_page import TrashPage
         from moment.ui.pages.webhook_page import WebhookPage
+
+        # Recording (default landing page)
+        self._recording_page = RecordingPage()
+        self._recording_page.start_recording.connect(self._on_start_recording)
+        self._recording_page.stop_recording.connect(self._on_stop_recording)
+        self._recording_page.save_clip.connect(self._on_recording_save_clip)
+        self._stack.addWidget(self._recording_page)
 
         # Grid
         self._grid_page = GridPage(self._store)
@@ -203,7 +211,9 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(index)
 
         # Refresh pages when switching to them
-        if index == _PAGE_GRID:
+        if index == _PAGE_RECORD:
+            pass  # Recording page is stateless
+        elif index == _PAGE_GRID:
             self._grid_page.refresh()
         elif index == _PAGE_STATS:
             self._stats_page.refresh()
@@ -331,6 +341,24 @@ class MainWindow(QMainWindow):
         logger.debug("Clip restored: %s", clip_id)
         self._grid_page.refresh()
 
+    # ==================================================================
+    # Recording page signal handlers
+    # ==================================================================
+
+    def _on_start_recording(self) -> None:
+        """Handle start-recording from the recording page."""
+        logger.info("Start recording requested")
+        self._recording_page.set_recording()
+
+    def _on_stop_recording(self) -> None:
+        """Handle stop-recording from the recording page."""
+        logger.info("Stop recording requested")
+        self._recording_page.set_ready()
+
+    def _on_recording_save_clip(self, duration: int) -> None:
+        """Handle save-clip from the recording page."""
+        logger.info("Save %ds clip requested from recording page", duration)
+
     def _on_trash_changed(self) -> None:
         """Handle trash change — refresh grid."""
         logger.debug("Trash changed")
@@ -339,6 +367,11 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # Public helpers
     # ==================================================================
+
+    @property
+    def recording_page(self):
+        """The recording page instance."""
+        return self._recording_page
 
     @property
     def grid_page(self):
