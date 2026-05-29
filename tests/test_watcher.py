@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from clip_tray.core.watcher import MIN_FILE_AGE, SCAN_INTERVAL, WATCH_DIR, Watcher
+from moment.core.watcher import MIN_FILE_AGE, SCAN_INTERVAL, WATCH_DIR, Watcher
 
 
 @pytest.fixture

@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.config import Config
-from clip_tray.core.discord_bot import (
+from moment.core.config import Config
+from moment.core.discord_bot import (
     AUTO_START_AUTO,
     AUTO_START_AUTO_DELAYED,
     AUTO_START_DISABLED,
@@ -21,7 +21,7 @@ from clip_tray.core.discord_bot import (
     _status_emoji,
     _DISCORD_AVAILABLE,
 )
-from clip_tray.core.models import Clip, ClipStatus, Webhook
+from moment.core.models import Clip, ClipStatus, Webhook
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ class TestImportWithoutDiscord:
         """
         # The module was imported at the top of this file without error.
         # _DISCORD_AVAILABLE reflects the real state.
-        from clip_tray.core.discord_bot import DiscordBot
+        from moment.core.discord_bot import DiscordBot
         assert DiscordBot is not None
         # Verify the bot reports unavailability correctly
         assert DiscordBot.is_available.fget(None) is False  # type: ignore[arg-type]
@@ -103,7 +103,7 @@ class TestLifecycle:
         bot.start()
         assert not bot.is_running
 
-    @patch("clip_tray.core.discord_bot._DISCORD_AVAILABLE", False)
+    @patch("moment.core.discord_bot._DISCORD_AVAILABLE", False)
     def test_start_when_unavailable(self, bot):
         bot.start()
         assert not bot.is_running
@@ -152,15 +152,15 @@ class TestWebhookDispatch:
         result = bot.send_webhook(clip, wh)
         assert result is False
 
-    @patch("clip_tray.core.discord_bot._DISCORD_AVAILABLE", False)
+    @patch("moment.core.discord_bot._DISCORD_AVAILABLE", False)
     def test_send_when_unavailable(self, bot):
         clip = Clip(id="c1", stem="t1", source_path=Path("/tmp/t1.mkv"))
         wh = Webhook(id="w1", url="https://discord.com/api/webhooks/1")
         result = bot.send_webhook(clip, wh)
         assert result is False
 
-    @patch("clip_tray.core.discord_bot._DISCORD_AVAILABLE", True)
-    @patch("clip_tray.core.discord_bot.discord", create=True)
+    @patch("moment.core.discord_bot._DISCORD_AVAILABLE", True)
+    @patch("moment.core.discord_bot.discord", create=True)
     def test_send_webhook_success(self, mock_discord, bot):
         mock_webhook = MagicMock()
         mock_discord.SyncWebhook.from_url.return_value = mock_webhook
@@ -175,8 +175,8 @@ class TestWebhookDispatch:
         mock_discord.SyncWebhook.from_url.assert_called_once_with("https://discord.com/api/webhooks/1")
         mock_webhook.send.assert_called_once()
 
-    @patch("clip_tray.core.discord_bot._DISCORD_AVAILABLE", True)
-    @patch("clip_tray.core.discord_bot.discord", create=True)
+    @patch("moment.core.discord_bot._DISCORD_AVAILABLE", True)
+    @patch("moment.core.discord_bot.discord", create=True)
     def test_send_webhook_failure(self, mock_discord, bot):
         mock_discord.SyncWebhook.from_url.side_effect = RuntimeError("Network error")
 
@@ -193,7 +193,7 @@ class TestWebhookDispatch:
 class TestEmbed:
     def test_build_clip_embed_not_available(self):
         """When discord.py is not available, _build_clip_embed returns None."""
-        from clip_tray.core.discord_bot import _build_clip_embed
+        from moment.core.discord_bot import _build_clip_embed
         clip = Clip(id="x", stem="t", source_path=Path("/tmp/t.mkv"))
         result = _build_clip_embed(clip)
         # When discord.py is not installed, returns None
@@ -206,8 +206,8 @@ class TestEmbed:
 # ---------------------------------------------------------------------------
 
 class TestThreadSafety:
-    @patch("clip_tray.core.discord_bot._DISCORD_AVAILABLE", True)
-    @patch("clip_tray.core.discord_bot.threading.Thread")
+    @patch("moment.core.discord_bot._DISCORD_AVAILABLE", True)
+    @patch("moment.core.discord_bot.threading.Thread")
     def test_double_start_is_noop(self, mock_thread, bot):
         mock_thread_instance = MagicMock()
         mock_thread.return_value = mock_thread_instance

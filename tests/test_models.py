@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from clip_tray.core.models import (
+from moment.core.models import (
     Bookmark,
     Clip,
     ClipStatus,

@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 import pytest
 
-from clip_tray.core.models import Clip
-from clip_tray.core.thumbnail import MAX_CACHE_SIZE, THUMB_DIR, Thumbnailer
-from clip_tray.utils.ffmpeg import FFmpegError
+from moment.core.models import Clip
+from moment.core.thumbnail import MAX_CACHE_SIZE, Thumbnailer, get_thumb_dir
+from moment.utils.ffmpeg import FFmpegError
 
 
 @pytest.fixture
@@ -113,7 +113,7 @@ class TestExtractFrame:
     ) -> None:
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
         ):
             mock_run.return_value.returncode = 0
 
@@ -130,7 +130,7 @@ class TestExtractFrame:
     def test_extraction_failure(self, clip: Clip, thumbnailer: Thumbnailer, thumb_dir: str) -> None:
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
         ):
             mock_run.return_value.returncode = 1
             mock_run.return_value.stderr = "Decoding error"
@@ -146,7 +146,7 @@ class TestExtractFrame:
 
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
         ):
             mock_run.return_value.returncode = 0
             output = Path(thumb_dir) / f"{clip.stem}.jpg"
@@ -200,4 +200,4 @@ class TestCacheEviction:
 
 class TestDefaultDir:
     def test_default_thumb_dir_is_expanded(self) -> None:
-        assert THUMB_DIR.startswith("/")
+        assert get_thumb_dir().startswith("/")

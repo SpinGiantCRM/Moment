@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
 )
 
-from clip_tray.ui.widgets.transition_picker import TransitionPicker, _TRANSITIONS
+from moment.ui.widgets.transition_picker import TransitionPicker, _TRANSITIONS
 
 
 class TestTransitionPickerInit:

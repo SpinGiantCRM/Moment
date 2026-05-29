@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 import pytest
 
-from clip_tray.core.encoder import ENCODE_DIR, GPU_SEMAPHORE, Encoder, EncoderError
-from clip_tray.core.models import Clip, EditProfile, SegmentEdit
-from clip_tray.utils.system import is_nvidia_gpu
+from moment.core.encoder import GPU_SEMAPHORE, Encoder, EncoderError, get_encode_dir
+from moment.core.models import Clip, EditProfile, SegmentEdit
+from moment.utils.system import is_nvidia_gpu
 
 
 @pytest.fixture
@@ -66,14 +66,20 @@ class TestBuildCommand:
         encoder = Encoder(codec="h264")
         cmd = encoder.build_command(clip)
 
-        # Should select either nvenc or software encoder
-        assert any(enc in cmd for enc in ["h264_nvenc", "libx264"])
+        # Should select any valid H.264 encoder (hardware or software)
+        assert any(enc in cmd for enc in [
+            "h264_nvenc", "h264_vaapi", "h264_qsv", "libx264",
+        ])
 
     def test_h265_codec(self, clip: Clip) -> None:
         encoder = Encoder(codec="h265")
         cmd = encoder.build_command(clip)
 
-        assert any(enc in cmd for enc in ["h265_nvenc", "hevc_nvenc", "libx265"])
+        assert any(enc in cmd for enc in [
+            "h265_nvenc", "hevc_nvenc",
+            "hevc_vaapi", "hevc_qsv",
+            "libx265",
+        ])
 
     def test_trim_params(self, clip: Clip, profile: EditProfile) -> None:
         encoder = Encoder(codec="h264")
@@ -179,8 +185,8 @@ class TestEncode:
 
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.encoder.find_ffmpeg", return_value="ffmpeg"),
-            patch("clip_tray.core.encoder.ensure_dir"),
+            patch("moment.core.encoder.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.encoder.ensure_dir"),
         ):
             mock_run.return_value.returncode = 0
 
@@ -198,8 +204,8 @@ class TestEncode:
 
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.encoder.find_ffmpeg", return_value="ffmpeg"),
-            patch("clip_tray.core.encoder.ensure_dir"),
+            patch("moment.core.encoder.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.encoder.ensure_dir"),
         ):
             mock_run.return_value.returncode = 1
             mock_run.return_value.stderr = "Error: something went wrong"
@@ -212,8 +218,8 @@ class TestEncode:
 
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.encoder.find_ffmpeg", return_value="ffmpeg"),
-            patch("clip_tray.core.encoder.ensure_dir"),
+            patch("moment.core.encoder.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.encoder.ensure_dir"),
             patch("pathlib.Path.is_file", return_value=True),
             patch("pathlib.Path.stat") as mock_stat,
         ):

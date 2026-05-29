@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.hotkey_daemon import (
+from moment.core.hotkey_daemon import (
     DEBOUNCE_COOLDOWN,
     HotkeyAction,
     HotkeyDaemon,
@@ -64,7 +64,7 @@ class TestKdeBackend:
 
 class TestX11Backend:
     def test_lifecycle(self) -> None:
-        with patch("clip_tray.core.hotkey_daemon.logger"):
+        with patch("moment.core.hotkey_daemon.logger"):
             backend = _X11Backend({})
             backend._running = False  # don't actually start event loop
             backend.start()
@@ -91,11 +91,11 @@ class TestHotkeyDaemon:
         """With no KDE or X11 available, falls back to sigrtmin."""
         with (
             patch(
-                "clip_tray.core.hotkey_daemon._KdeBackend",
+                "moment.core.hotkey_daemon._KdeBackend",
                 side_effect=RuntimeError("no dbus"),
             ),
             patch(
-                "clip_tray.core.hotkey_daemon._X11Backend",
+                "moment.core.hotkey_daemon._X11Backend",
                 side_effect=RuntimeError("no xlib"),
             ),
         ):
@@ -108,11 +108,11 @@ class TestHotkeyDaemon:
     def test_stop(self, daemon: HotkeyDaemon) -> None:
         with (
             patch(
-                "clip_tray.core.hotkey_daemon._KdeBackend",
+                "moment.core.hotkey_daemon._KdeBackend",
                 side_effect=RuntimeError("no dbus"),
             ),
             patch(
-                "clip_tray.core.hotkey_daemon._X11Backend",
+                "moment.core.hotkey_daemon._X11Backend",
                 side_effect=RuntimeError("no xlib"),
             ),
         ):
@@ -140,11 +140,11 @@ class TestHotkeyTrigger:
         # Start with sigrtmin fallback
         with (
             patch(
-                "clip_tray.core.hotkey_daemon._KdeBackend",
+                "moment.core.hotkey_daemon._KdeBackend",
                 side_effect=RuntimeError("no dbus"),
             ),
             patch(
-                "clip_tray.core.hotkey_daemon._X11Backend",
+                "moment.core.hotkey_daemon._X11Backend",
                 side_effect=RuntimeError("no xlib"),
             ),
         ):
@@ -161,11 +161,11 @@ class TestHotkeyTrigger:
 
         with (
             patch(
-                "clip_tray.core.hotkey_daemon._KdeBackend",
+                "moment.core.hotkey_daemon._KdeBackend",
                 side_effect=RuntimeError("no dbus"),
             ),
             patch(
-                "clip_tray.core.hotkey_daemon._X11Backend",
+                "moment.core.hotkey_daemon._X11Backend",
                 side_effect=RuntimeError("no xlib"),
             ),
         ):
@@ -186,11 +186,11 @@ class TestHotkeyTrigger:
 
         with (
             patch(
-                "clip_tray.core.hotkey_daemon._KdeBackend",
+                "moment.core.hotkey_daemon._KdeBackend",
                 side_effect=RuntimeError("no dbus"),
             ),
             patch(
-                "clip_tray.core.hotkey_daemon._X11Backend",
+                "moment.core.hotkey_daemon._X11Backend",
                 side_effect=RuntimeError("no xlib"),
             ),
         ):
@@ -214,11 +214,11 @@ class TestHotkeyTrigger:
 
         with (
             patch(
-                "clip_tray.core.hotkey_daemon._KdeBackend",
+                "moment.core.hotkey_daemon._KdeBackend",
                 side_effect=RuntimeError("no dbus"),
             ),
             patch(
-                "clip_tray.core.hotkey_daemon._X11Backend",
+                "moment.core.hotkey_daemon._X11Backend",
                 side_effect=RuntimeError("no xlib"),
             ),
         ):
@@ -239,11 +239,11 @@ class TestHotkeyTrigger:
 
         with (
             patch(
-                "clip_tray.core.hotkey_daemon._KdeBackend",
+                "moment.core.hotkey_daemon._KdeBackend",
                 side_effect=RuntimeError("no dbus"),
             ),
             patch(
-                "clip_tray.core.hotkey_daemon._X11Backend",
+                "moment.core.hotkey_daemon._X11Backend",
                 side_effect=RuntimeError("no xlib"),
             ),
         ):

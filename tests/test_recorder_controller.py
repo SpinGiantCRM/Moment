@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.models import GameProfile
-from clip_tray.core.recorder_controller import (
+from moment.core.models import GameProfile
+from moment.core.recorder_controller import (
     DEFAULT_OUTPUT_DIR,
     RecorderController,
     RecorderError,

@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.screenshot import Screenshot, ScreenshotError
+from moment.core.screenshot import Screenshot, ScreenshotError
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ class TestInitialization:
         assert screenshot.output_dir.is_dir()
 
     def test_output_dir_default(self) -> None:
-        with patch("clip_tray.core.screenshot.ensure_dir") as mock_ensure:
+        with patch("moment.core.screenshot.ensure_dir") as mock_ensure:
             Screenshot()
             mock_ensure.assert_called_once()
 
@@ -51,9 +51,9 @@ class TestFallbackCapture:
 
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
             patch(
-                "clip_tray.core.screenshot.Screenshot._detect_resolution",
+                "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
             ),
         ):
@@ -75,9 +75,9 @@ class TestFallbackCapture:
     def test_capture_ffmpeg_fails(self, screenshot: Screenshot) -> None:
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
             patch(
-                "clip_tray.core.screenshot.Screenshot._detect_resolution",
+                "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
             ),
         ):
@@ -90,9 +90,9 @@ class TestFallbackCapture:
     def test_capture_empty_output(self, screenshot: Screenshot) -> None:
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
             patch(
-                "clip_tray.core.screenshot.Screenshot._detect_resolution",
+                "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
             ),
             patch("pathlib.Path.is_file", return_value=True),
@@ -120,9 +120,9 @@ class TestCallbacks:
 
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
             patch(
-                "clip_tray.core.screenshot.Screenshot._detect_resolution",
+                "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
             ),
             patch("pathlib.Path.is_file", return_value=True),
@@ -145,9 +145,9 @@ class TestCallbacks:
 
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
             patch(
-                "clip_tray.core.screenshot.Screenshot._detect_resolution",
+                "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
             ),
             patch("pathlib.Path.is_file", return_value=True),
@@ -172,7 +172,7 @@ class TestPostProcessing:
     ) -> None:
         with (
             patch("subprocess.run"),
-            patch("clip_tray.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
         ):
             result = screenshot.post_process(fake_screenshot)
             assert result == fake_screenshot
@@ -193,7 +193,7 @@ class TestPostProcessing:
 
         with (
             patch("subprocess.run", mock_run),
-            patch("clip_tray.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
         ):
             result = screenshot.post_process(fake_screenshot, crop=(10, 10, 800, 600))
 
@@ -210,7 +210,7 @@ class TestPostProcessing:
         """Verify thumbnail generation is called."""
         with (
             patch("subprocess.run") as mock_run,
-            patch("clip_tray.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
         ):
             mock_run.return_value.returncode = 0
             screenshot.post_process(fake_screenshot, generate_thumbnail=True)

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from clip_tray.ui.widgets.pip_window import PipWindow, _PIP_W, _PIP_H
+from moment.ui.widgets.pip_window import PipWindow, _PIP_W, _PIP_H
 
 
 class TestPipWindowInit:

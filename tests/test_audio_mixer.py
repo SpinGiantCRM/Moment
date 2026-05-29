@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from clip_tray.ui.widgets.audio_mixer import AudioMixer
+from moment.ui.widgets.audio_mixer import AudioMixer
 
 
 class TestAudioMixerInit:

@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for clip-tray tests."""
+"""Shared pytest fixtures for Moment tests."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from unittest.mock import patch
 
 import pytest
 
-from clip_tray.core.store import Store
+from moment.core.store import Store
 
 
 @pytest.fixture
 def db_path() -> str:
     """Return a path to a temporary SQLite database."""
-    fd, path = tempfile.mkstemp(suffix=".db", prefix="clip_tray_test_")
+    fd, path = tempfile.mkstemp(suffix=".db", prefix="moment_test_")
     os.close(fd)
     yield path
     # Cleanup

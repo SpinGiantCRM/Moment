@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.noise_suppression import (
+from moment.core.noise_suppression import (
     NoiseSuppressor,
     NoiseSuppressorError,
 )
@@ -68,7 +68,7 @@ class TestSkipConditions:
 
         with (
             patch("subprocess.run", return_value=probe_result),
-            patch("clip_tray.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
         ):
             result = suppressor.process(fake_mp4, has_mic_audio=True)
             assert result == fake_mp4
@@ -103,7 +103,7 @@ class TestSuccessfulProcessing:
 
         with (
             patch("subprocess.run", side_effect=[probe_result, _create_denoised_output()]),
-            patch("clip_tray.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
         ):
             result = suppressor.process(fake_mp4, has_mic_audio=True)
 
@@ -131,7 +131,7 @@ class TestSuccessfulProcessing:
 
         with (
             patch("subprocess.run", side_effect=[probe_result, _create_denoised_output()]),
-            patch("clip_tray.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
         ):
             result = suppressor.process(fake_mp4, has_mic_audio=True)
             assert result.suffix == ".mp4"
@@ -164,7 +164,7 @@ class TestErrorHandling:
             )
 
         with (
-            patch("clip_tray.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
         ):
             with patch("subprocess.run", side_effect=[probe_result, failing_rnnoise]):
                 # Wrap CalledProcessError since the run isn't called yet until
@@ -207,7 +207,7 @@ class TestCallbacks:
 
         with (
             patch("subprocess.run", side_effect=[probe_result, _create_denoised_output()]),
-            patch("clip_tray.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
         ):
             s.process(fake_mp4, has_mic_audio=True)
 
@@ -238,7 +238,7 @@ class TestCallbacks:
 
         with (
             patch("subprocess.run", side_effect=[probe_result, _create_denoised_output()]),
-            patch("clip_tray.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
         ):
             # Should not raise
             result = s.process(fake_mp4, has_mic_audio=True)

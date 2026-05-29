@@ -7,9 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from clip_tray.core.bookmarker import Bookmarker
-from clip_tray.core.models import Bookmark
-from clip_tray.core.store import Store
+from moment.core.bookmarker import Bookmarker
+from moment.core.models import Bookmark
+from moment.core.store import Store
 
 
 @pytest.fixture

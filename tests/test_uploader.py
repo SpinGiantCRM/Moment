@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from clip_tray.core.uploader import Uploader, UploaderError, _RETRY_DELAYS, _MAX_RETRIES
+from moment.core.uploader import Uploader, UploaderError, _RETRY_DELAYS, _MAX_RETRIES
 
 
 @pytest.fixture
@@ -47,8 +47,8 @@ class TestConfiguration:
 
     def test_env_override(self) -> None:
         with patch.dict("os.environ", {
-            "CLIP_TRAY_RCLONE_REMOTE": "prod-r2",
-            "CLIP_TRAY_RCLONE_BUCKET": "clips-prod",
+            "MOMENT_RCLONE_REMOTE": "prod-r2",
+            "MOMENT_RCLONE_BUCKET": "clips-prod",
         }):
             u = Uploader()
             assert u.remote == "prod-r2"
@@ -129,7 +129,7 @@ class TestUpload:
             patch.object(u, "_ensure_rclone"),
         ):
             url = u.upload(test_path)
-            assert url.startswith("r2://clips/")
+            assert url.startswith("r2:clips/")
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ class TestRcloneAvailability:
         ):
             # Should not raise about rclone
             result = u.upload(test_path)
-            assert result.startswith("r2://")
+            assert result.startswith("r2:clips/")
 
 
 # ---------------------------------------------------------------------------

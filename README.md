@@ -10,7 +10,7 @@ GPU-accelerated game clip manager for Linux. Capture, edit, and share your gamin
 
 - One-click clip capture via `gpu-screen-recorder`
 - Hardware-accelerated encoding (NVENC) with presets
-- Auto-upload to R2 (or any rclone remote)
+- Auto-upload to any storage provider (Backblaze B2, Cloudflare R2, AWS S3, Google Cloud, Wasabi, Dropbox, self-hosted, and 40+ more via rclone)
 - Built-in trim, split, speed, filters, overlays, merge
 - GIF export with palette optimization
 - Discord webhook integration
@@ -22,7 +22,7 @@ GPU-accelerated game clip manager for Linux. Capture, edit, and share your gamin
 - Python 3.11+
 - PyQt6
 - ffmpeg with NVENC (`h264_nvenc`, `hevc_nvenc` or `av1_nvenc`)
-- rclone with R2 remote configured
+- rclone with a remote configured (see [storage providers](docs/storage-providers.md))
 - gpu-screen-recorder *(optional, for capture)*
 - NVIDIA GPU *(optional, for NVENC — software fallback available)*
 
@@ -51,8 +51,7 @@ moment mcp              # Start MCP server for AI agent access
 ## Documentation
 
 - [Architecture Overview](docs/plan.md)
-- [Keyboard Shortcuts](#) <!-- TODO: link to wiki at v1.0 -->
-- [Configuration Guide](#) <!-- TODO: link to wiki at v1.0 -->
+- [Storage Providers](docs/storage-providers.md) — configure rclone for Backblaze B2, Cloudflare R2, AWS S3, and more
 
 ## Development
 

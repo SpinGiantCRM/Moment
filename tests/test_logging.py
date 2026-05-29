@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from clip_tray.utils.logging import setup_logging
+from moment.utils.logging import setup_logging
 
 
 class TestSetupLogging:

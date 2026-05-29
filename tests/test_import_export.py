@@ -11,13 +11,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.import_export import (
+from moment.core.import_export import (
     CLIPS_DIR,
     ImportError,
     ImportExport,
 )
-from clip_tray.core.models import Clip, ClipStatus, ClipType
-from clip_tray.utils.ffmpeg import parse_fps
+from moment.core.models import Clip, ClipStatus, ClipType
+from moment.utils.ffmpeg import parse_fps
 
 
 @pytest.fixture
@@ -67,10 +67,10 @@ class TestImport:
             except FileNotFoundError:
                 pass
 
-    @patch("clip_tray.core.import_export.ffprobe")
-    @patch("clip_tray.core.import_export.Thumbnailer")
-    @patch("clip_tray.core.import_export.shutil.copy2")
-    @patch("clip_tray.core.import_export.ensure_dir")
+    @patch("moment.core.import_export.ffprobe")
+    @patch("moment.core.import_export.Thumbnailer")
+    @patch("moment.core.import_export.shutil.copy2")
+    @patch("moment.core.import_export.ensure_dir")
     def test_import_basic(self, mock_ensure, mock_copy, mock_thumb_cls, mock_probe, ie):
         """Happy path: probe returns valid data, thumbnail succeeds, clip inserted."""
         mock_probe.return_value = {
@@ -113,9 +113,9 @@ class TestImport:
             except FileNotFoundError:
                 pass
 
-    @patch("clip_tray.core.import_export.ffprobe")
-    @patch("clip_tray.core.import_export.Thumbnailer")
-    @patch("clip_tray.core.import_export.ensure_dir")
+    @patch("moment.core.import_export.ffprobe")
+    @patch("moment.core.import_export.Thumbnailer")
+    @patch("moment.core.import_export.ensure_dir")
     def test_import_no_copy(self, mock_ensure, mock_thumb_cls, mock_probe, ie):
         """With copy=False, the source_path stays as the original file."""
         mock_probe.return_value = {
@@ -140,8 +140,8 @@ class TestImport:
             except FileNotFoundError:
                 pass
 
-    @patch("clip_tray.core.import_export.ffprobe")
-    @patch("clip_tray.core.import_export.ensure_dir")
+    @patch("moment.core.import_export.ffprobe")
+    @patch("moment.core.import_export.ensure_dir")
     def test_import_no_video_stream(self, mock_ensure, mock_probe, ie):
         """If no video stream is found, it should raise ImportError."""
         mock_probe.return_value = {
@@ -162,9 +162,9 @@ class TestImport:
             except FileNotFoundError:
                 pass
 
-    @patch("clip_tray.core.import_export.ffprobe")
-    @patch("clip_tray.core.import_export.Thumbnailer")
-    @patch("clip_tray.core.import_export.ensure_dir")
+    @patch("moment.core.import_export.ffprobe")
+    @patch("moment.core.import_export.Thumbnailer")
+    @patch("moment.core.import_export.ensure_dir")
     def test_import_with_game_and_tags(self, mock_ensure, mock_thumb_cls, mock_probe, ie):
         mock_probe.return_value = {
             "format": {"duration": "60.0"},
@@ -214,7 +214,7 @@ class TestExport:
         count = ie.export_clips(["no-enc"], Path("/tmp/export_test"))
         assert count == 0
 
-    @patch("clip_tray.core.import_export.shutil.copy2")
+    @patch("moment.core.import_export.shutil.copy2")
     def test_export_success(self, mock_copy, store, ie):
         encoded = Path("/tmp/fake-encoded.mp4")
         encoded.touch()

@@ -1,27 +1,26 @@
 [project]
-name = "clip-tray"
+name = "moment"
 version = "0.1.0"
-description = "GPU-accelerated clip management pipeline — encode, upload, share."
+description = "GPU-accelerated game clip manager for Linux. Capture, edit, and share your gaming moments."
 requires-python = ">=3.11"
 authors = [{ name = "chasem" }]
-license = { text = "MIT" }
+license = { text = "GPL-3.0" }
 
 dependencies = [
     "PyQt6",
     "PyQt6-Qt6",
     "PyQt6-sip",
-    "PyQt6-Svg",
 ]
 
 [project.optional-dependencies]
 bot = ["discord.py>=2.4"]
 mcp = ["fastmcp>=1.0"]
-all = ["clip-tray[bot,mcp]"]
+all = ["moment[bot,mcp]"]
 
 [project.scripts]
-clip-tray = "clip_tray.main:main"
-clip-tray-bot = "clip_tray.bot.main:run_bot"
-clip-tray-mcp = "clip_tray.mcp.main:run_mcp"
+moment = "moment.main:main"
+moment-bot = "moment.bot.main:run_bot"
+moment-mcp = "moment.mcp.main:run_mcp"
 
 [build-system]
 requires = ["setuptools>=75.0"]
@@ -29,7 +28,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["clip_tray*"]
+include = ["moment*"]
 
 [tool.ruff]
 target-version = "py311"
@@ -37,6 +36,12 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+
+[tool.ruff.format]
+line-ending = "lf"
+
+[tool.bandit]
+skips = ["B101", "B311", "B404", "B603"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

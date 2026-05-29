@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.game_monitor import SCAN_INTERVAL, GameMonitor
+from moment.core.game_monitor import SCAN_INTERVAL, GameMonitor
 
 
 @pytest.fixture

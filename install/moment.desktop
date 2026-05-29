@@ -1,22 +1,20 @@
 [Desktop Entry]
 Type=Application
 Name=Moment
-Comment=GPU-accelerated clip management pipeline — capture, encode, upload, share
-Exec=clip-tray
+Comment=GPU-accelerated game clip manager. Capture, edit, and share your gaming moments.
+Exec=moment
 Icon=moment
 Terminal=false
-Categories=Utility;AudioVideo;
+Categories=AudioVideo;
 StartupNotify=false
-X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-enabled=false
 
 Actions=open-encoded;settings;
 
 [Desktop Action open-encoded]
 Name=Open Encoded Folder
-Exec=clip-tray --open-encoded
-NoDisplay=true
+Exec=moment --open-encoded
 
 [Desktop Action settings]
 Name=Settings
-Exec=clip-tray --settings
-NoDisplay=true
+Exec=moment --settings

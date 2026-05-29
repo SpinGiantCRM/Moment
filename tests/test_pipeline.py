@@ -9,9 +9,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.config import Config
-from clip_tray.core.encoder import Encoder, EncoderError
-from clip_tray.core.models import (
+from moment.core.config import Config
+from moment.core.encoder import Encoder, EncoderError
+from moment.core.models import (
     Clip,
     ClipStatus,
     EditProfile,
@@ -19,11 +19,11 @@ from clip_tray.core.models import (
     TaskKind,
     TaskStatus,
 )
-from clip_tray.core.pipeline import Pipeline
-from clip_tray.core.store import Store
-from clip_tray.core.thumbnail import Thumbnailer
-from clip_tray.core.uploader import Uploader, UploaderError
-from clip_tray.utils.ffmpeg import parse_fps
+from moment.core.pipeline import Pipeline
+from moment.core.store import Store
+from moment.core.thumbnail import Thumbnailer
+from moment.core.uploader import Uploader, UploaderError
+from moment.utils.ffmpeg import parse_fps
 
 
 def _make_clip(store: Store, *, id: str, stem: str = "", source_path: str = "", **kwargs: object) -> Clip:
@@ -181,7 +181,7 @@ class TestProcessEncode:
 
         with (
             patch.object(encoder, "encode", return_value=Path("/tmp/enc_test_1.mp4")),
-            patch("clip_tray.core.pipeline.ffprobe", return_value={"format": {"duration": "10.0"}, "streams": []}),
+            patch("moment.core.pipeline.ffprobe", return_value={"format": {"duration": "10.0"}, "streams": []}),
         ):
             task = Task(
                 id="task-enc-1",
@@ -219,7 +219,7 @@ class TestProcessEncode:
 
         with (
             patch.object(encoder, "encode", side_effect=EncoderError("GPU error")),
-            patch("clip_tray.core.pipeline.ffprobe", return_value={"format": {"duration": "10.0"}, "streams": []}),
+            patch("moment.core.pipeline.ffprobe", return_value={"format": {"duration": "10.0"}, "streams": []}),
         ):
             task = Task(id="task-fail", type=TaskKind.ENCODE, payload={"clip_id": "enc-fail"})
             p._process_encode(task)

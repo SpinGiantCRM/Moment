@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.utils.ffmpeg import (
+from moment.utils.ffmpeg import (
     FFmpegError,
     encode,
     find_ffmpeg,
@@ -19,24 +19,24 @@ from clip_tray.utils.ffmpeg import (
 
 class TestFind:
     def test_find_ffmpeg_found(self) -> None:
-        with patch("clip_tray.utils.ffmpeg.shutil.which", return_value="/usr/bin/ffmpeg"):
+        with patch("moment.utils.ffmpeg.shutil.which", return_value="/usr/bin/ffmpeg"):
             assert find_ffmpeg() == "ffmpeg"
 
     def test_find_ffmpeg_not_found(self) -> None:
-        with patch("clip_tray.utils.ffmpeg.shutil.which", return_value=None):
+        with patch("moment.utils.ffmpeg.shutil.which", return_value=None):
             # Reset cache
-            import clip_tray.utils.ffmpeg as ffmpeg_mod
+            import moment.utils.ffmpeg as ffmpeg_mod
             ffmpeg_mod._ffmpeg_available = None
             with pytest.raises(FFmpegError, match="ffmpeg not found"):
                 find_ffmpeg()
 
     def test_find_ffprobe_found(self) -> None:
-        with patch("clip_tray.utils.ffmpeg.shutil.which", return_value="/usr/bin/ffprobe"):
+        with patch("moment.utils.ffmpeg.shutil.which", return_value="/usr/bin/ffprobe"):
             assert find_ffprobe() == "ffprobe"
 
     def test_find_ffprobe_not_found(self) -> None:
-        with patch("clip_tray.utils.ffmpeg.shutil.which", return_value=None):
-            import clip_tray.utils.ffmpeg as ffmpeg_mod
+        with patch("moment.utils.ffmpeg.shutil.which", return_value=None):
+            import moment.utils.ffmpeg as ffmpeg_mod
             ffmpeg_mod._ffprobe_available = None
             with pytest.raises(FFmpegError, match="ffprobe not found"):
                 find_ffprobe()
@@ -48,7 +48,7 @@ class TestProbe:
             args=[], returncode=0, stdout='{"format":{"filename":"test.mkv"}}', stderr=""
         )
         with (
-            patch("clip_tray.utils.ffmpeg.find_ffprobe", return_value="ffprobe"),
+            patch("moment.utils.ffmpeg.find_ffprobe", return_value="ffprobe"),
             patch("subprocess.run", return_value=mock_result) as mock_run,
         ):
             data = probe("test.mkv")
@@ -58,7 +58,7 @@ class TestProbe:
     def test_error(self) -> None:
         mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="Error")
         with (
-            patch("clip_tray.utils.ffmpeg.find_ffprobe", return_value="ffprobe"),
+            patch("moment.utils.ffmpeg.find_ffprobe", return_value="ffprobe"),
             patch("subprocess.run", return_value=mock_result),
         ):
             with pytest.raises(FFmpegError, match="ffprobe failed"):
@@ -67,7 +67,7 @@ class TestProbe:
     def test_invalid_json(self) -> None:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
         with (
-            patch("clip_tray.utils.ffmpeg.find_ffprobe", return_value="ffprobe"),
+            patch("moment.utils.ffmpeg.find_ffprobe", return_value="ffprobe"),
             patch("subprocess.run", return_value=mock_result),
         ):
             with pytest.raises(FFmpegError, match="invalid JSON"):
@@ -77,7 +77,7 @@ class TestProbe:
 class TestEncode:
     def test_returns_popen(self) -> None:
         with (
-            patch("clip_tray.utils.ffmpeg.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.utils.ffmpeg.find_ffmpeg", return_value="ffmpeg"),
             patch("subprocess.Popen") as mock_popen,
         ):
             mock_popen.return_value = MagicMock()
@@ -90,7 +90,7 @@ class TestThumbnail:
     def test_success(self) -> None:
         mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
         with (
-            patch("clip_tray.utils.ffmpeg.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.utils.ffmpeg.find_ffmpeg", return_value="ffmpeg"),
             patch("subprocess.run", return_value=mock_result) as mock_run,
         ):
             thumbnail("in.mkv", "out.jpg", time=5.0)
@@ -99,7 +99,7 @@ class TestThumbnail:
     def test_error(self) -> None:
         mock_result = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="Failed")
         with (
-            patch("clip_tray.utils.ffmpeg.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.utils.ffmpeg.find_ffmpeg", return_value="ffmpeg"),
             patch("subprocess.run", return_value=mock_result),
         ):
             with pytest.raises(FFmpegError, match="thumbnail generation failed"):

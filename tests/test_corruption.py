@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from clip_tray.core.corruption import (
+from moment.core.corruption import (
     CHECK_INTERVAL,
     DISK_CRITICAL_GB,
     DISK_WARNING_GB,
@@ -17,8 +17,8 @@ from clip_tray.core.corruption import (
     TEMP_MAX_AGE,
     CorruptionDetector,
 )
-from clip_tray.core.models import Clip, ClipStatus
-from clip_tray.core.store import Store
+from moment.core.models import Clip, ClipStatus
+from moment.core.store import Store
 
 
 @pytest.fixture
@@ -103,7 +103,7 @@ class TestHealthCheck:
 
     def test_disk_space_warning(self, detector: CorruptionDetector) -> None:
         with patch(
-            "clip_tray.core.corruption.disk_usage",
+            "moment.core.corruption.disk_usage",
             return_value=(500_000_000_000, 498_000_000_000, 2_000_000_000),  # 2GB free
         ):
             issues = detector.check()
@@ -111,7 +111,7 @@ class TestHealthCheck:
 
     def test_disk_space_critical(self, detector: CorruptionDetector) -> None:
         with patch(
-            "clip_tray.core.corruption.disk_usage",
+            "moment.core.corruption.disk_usage",
             return_value=(500_000_000_000, 499_500_000_000, 500_000_000),  # 0.5GB free
         ):
             issues = detector.check()
@@ -119,7 +119,7 @@ class TestHealthCheck:
 
     def test_disk_space_ok(self, detector: CorruptionDetector) -> None:
         with patch(
-            "clip_tray.core.corruption.disk_usage",
+            "moment.core.corruption.disk_usage",
             return_value=(1_000_000_000_000, 500_000_000_000, 500_000_000_000),  # 500GB free
         ):
             issues = detector.check()
@@ -137,7 +137,7 @@ class TestHealthCheck:
         old_time = time.time() - TEMP_MAX_AGE - 60
         os.utime(str(stale_file), (old_time, old_time))
 
-        with patch("clip_tray.core.corruption.TEMP_DIR", str(temp_dir)):
+        with patch("moment.core.corruption.get_temp_dir", return_value=str(temp_dir)):
             issues = detector.check()
             # File should be deleted
             assert not stale_file.exists()
@@ -163,7 +163,7 @@ class TestCallbacks:
         )
 
         with patch(
-            "clip_tray.core.corruption.disk_usage",
+            "moment.core.corruption.disk_usage",
             return_value=(500_000_000_000, 498_000_000_000, 2_000_000_000),
         ):
             d.check()
@@ -180,7 +180,7 @@ class TestCallbacks:
         )
 
         with patch(
-            "clip_tray.core.corruption.disk_usage",
+            "moment.core.corruption.disk_usage",
             return_value=(500_000_000_000, 499_500_000_000, 500_000_000),
         ):
             d.check()

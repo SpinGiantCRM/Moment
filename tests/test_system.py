@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from clip_tray.utils.system import (
+from moment.utils.system import (
     disk_usage,
     ensure_dir,
     find_binary,
@@ -86,13 +86,13 @@ class TestNvidiaGPU:
         ):
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
             # Reset cache
-            import clip_tray.utils.system as sys_mod
+            import moment.utils.system as sys_mod
             sys_mod._nvidia_check = None
             assert is_nvidia_gpu() is True
 
     def test_nvidia_smi_not_found(self) -> None:
         with patch("shutil.which", return_value=None):
-            import clip_tray.utils.system as sys_mod
+            import moment.utils.system as sys_mod
             sys_mod._nvidia_check = None
             assert is_nvidia_gpu() is False
 

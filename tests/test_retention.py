@@ -9,15 +9,15 @@ from unittest.mock import patch
 
 import pytest
 
-from clip_tray.core.models import Clip, ClipStatus
-from clip_tray.core.retention import (
+from moment.core.models import Clip, ClipStatus
+from moment.core.retention import (
     CLOUD_SIZE_LIMIT_BYTES,
     ENCODED_MAX_AGE_DAYS,
     SOURCE_MAX_AGE_DAYS,
     RetentionManager,
     _age_str,
 )
-from clip_tray.core.store import Store
+from moment.core.store import Store
 
 
 @pytest.fixture

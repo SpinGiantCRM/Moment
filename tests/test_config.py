@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from clip_tray.core.config import Config
+from moment.core.config import Config
 
 
 @pytest.fixture
@@ -85,10 +85,10 @@ class TestAutostart:
             autostart_dir = Path(tmp) / "autostart"
             autostart_dir.mkdir()
             monkeypatch.setattr(
-                "clip_tray.core.config.AUTOSTART_DIR", str(autostart_dir)
+                "moment.core.config.AUTOSTART_DIR", str(autostart_dir)
             )
             monkeypatch.setattr(
-                "clip_tray.core.config.AUTOSTART_FILE",
+                "moment.core.config.AUTOSTART_FILE",
                 str(autostart_dir / "Moment.desktop"),
             )
             assert config.is_autostart_enabled() is False

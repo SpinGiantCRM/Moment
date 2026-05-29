@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from clip_tray.core.game_profiles import (
+from moment.core.game_profiles import (
     GameProfileError,
     GameProfileManager,
 )
-from clip_tray.core.models import GameProfile, ReviewCardConfig
+from moment.core.models import GameProfile, ReviewCardConfig
 
 
 @pytest.fixture
