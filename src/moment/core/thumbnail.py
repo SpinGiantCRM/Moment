@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import threading
 from collections import OrderedDict
 from pathlib import Path
@@ -179,7 +179,7 @@ class Thumbnailer:
             str(output),
         ]
         logger.debug("Thumbnail: %s", cmd)
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603 — tokenized args, no shell=True
         if result.returncode != 0:
             raise FFmpegError(f"thumbnail failed (code={result.returncode}): {result.stderr.strip()[-200:]}")
         if not output.is_file() or output.stat().st_size == 0:

@@ -102,11 +102,16 @@ class TestSuccessfulProcessing:
             return result
 
         with (
-            patch("subprocess.run", side_effect=[probe_result, _create_denoised_output()]),
-            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+            patch(
+                "subprocess.run",
+                side_effect=[probe_result, _create_denoised_output()],
+            ),
+            patch(
+                "moment.core.noise_suppression.find_ffmpeg",
+                return_value="ffmpeg",
+            ),
         ):
-            result = suppressor.process(fake_mp4, has_mic_audio=True)
-
+            suppressor.process(fake_mp4, has_mic_audio=True)
             # Should have called ffmpeg twice (probe + rnnoise)
             assert subprocess.run.called
 
@@ -173,7 +178,12 @@ class TestErrorHandling:
 
             with patch(
                 "subprocess.run",
-                side_effect=[probe_result] + [subprocess.CalledProcessError(1, "ffmpeg", "RNNoise error")],
+                side_effect=[
+                    probe_result,
+                    subprocess.CalledProcessError(
+                        1, "ffmpeg", "RNNoise error"
+                    ),
+                ],
             ):
                 with pytest.raises(NoiseSuppressorError, match="RNNoise processing failed"):
                     suppressor.process(fake_mp4, has_mic_audio=True)
@@ -242,4 +252,104 @@ class TestCallbacks:
         ):
             # Should not raise
             result = s.process(fake_mp4, has_mic_audio=True)
+            assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# Model path validation
+# ---------------------------------------------------------------------------
+
+
+class TestModelPathValidation:
+    def test_valid_rnn_path_used(self, tmp_path: Path) -> None:
+        """A valid .rnn file path should be used in the filtergraph."""
+        model = tmp_path / "model.rnn"
+        model.write_bytes(b"fake rnn model data")
+
+        s = NoiseSuppressor(enabled=True, model_path=str(model))
+        suppressor = s  # alias for test readability
+
+        probe_result = MagicMock()
+        probe_result.returncode = 0
+        probe_result.stdout = (
+            '{"streams": ['
+            '{"codec_type": "audio", "index": 0, "codec_name": "aac"},'
+            '{"codec_type": "audio", "index": 1, "codec_name": "opus"}'
+            "]}"
+        )
+
+        def _create_denoised_output(*args, **kwargs):
+            output_path = tmp_path / "test_denoised.mp4"
+            output_path.write_bytes(b"denoised content")
+            result = MagicMock()
+            result.returncode = 0
+            return result
+
+        fake_mp4 = tmp_path / "test.mp4"
+        fake_mp4.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 200)
+
+        with (
+            patch("subprocess.run", side_effect=[probe_result, _create_denoised_output()]),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+        ):
+            result = suppressor.process(fake_mp4, has_mic_audio=True)
+            assert result is not None
+
+    def test_invalid_model_path_falls_back(
+        self, suppressor: NoiseSuppressor, fake_mp4: Path
+    ) -> None:
+        """A model path that doesn't match .rnn pattern should fall back to default."""
+        suppressor._model_path = "'; rm -rf /"
+
+        probe_result = MagicMock()
+        probe_result.returncode = 0
+        probe_result.stdout = (
+            '{"streams": ['
+            '{"codec_type": "audio", "index": 0, "codec_name": "aac"},'
+            '{"codec_type": "audio", "index": 1, "codec_name": "opus"}'
+            "]}"
+        )
+
+        def _create_denoised_output(*args, **kwargs):
+            output_path = fake_mp4.parent / f"{fake_mp4.stem}_denoised.mp4"
+            output_path.write_bytes(b"denoised content")
+            result = MagicMock()
+            result.returncode = 0
+            return result
+
+        with (
+            patch("subprocess.run", side_effect=[probe_result, _create_denoised_output()]),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+        ):
+            # Should NOT raise — falls back to arnndn without model
+            result = suppressor.process(fake_mp4, has_mic_audio=True)
+            assert result is not None
+
+    def test_nonexistent_rnn_file_falls_back(
+        self, suppressor: NoiseSuppressor, fake_mp4: Path
+    ) -> None:
+        """A valid .rnn pattern that points to a missing file should fall back."""
+        suppressor._model_path = "/nonexistent/model.rnn"
+
+        probe_result = MagicMock()
+        probe_result.returncode = 0
+        probe_result.stdout = (
+            '{"streams": ['
+            '{"codec_type": "audio", "index": 0, "codec_name": "aac"},'
+            '{"codec_type": "audio", "index": 1, "codec_name": "opus"}'
+            "]}"
+        )
+
+        def _create_denoised_output(*args, **kwargs):
+            output_path = fake_mp4.parent / f"{fake_mp4.stem}_denoised.mp4"
+            output_path.write_bytes(b"denoised content")
+            result = MagicMock()
+            result.returncode = 0
+            return result
+
+        with (
+            patch("subprocess.run", side_effect=[probe_result, _create_denoised_output()]),
+            patch("moment.core.noise_suppression.find_ffmpeg", return_value="ffmpeg"),
+        ):
+            result = suppressor.process(fake_mp4, has_mic_audio=True)
             assert result is not None

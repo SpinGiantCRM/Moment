@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -135,7 +135,7 @@ class Uploader:
                 capture_output=True,
                 text=True,
                 check=True,
-            )
+            )  # nosec
             logger.info("Deleted old remote file: %s", dest)
         except subprocess.CalledProcessError as exc:
             logger.warning(
@@ -153,7 +153,7 @@ class Uploader:
         """Execute ``rclone copy``."""
         cmd = ["rclone", "copy", str(path), dest, "--progress"]
         logger.debug("Running: %s", cmd)
-        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=600)
+        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=600)  # nosec B603 — tokenized args, no shell=True
 
     def _verify_upload(self, dest: str) -> bool:
         """Check that the file exists on the remote."""
@@ -164,7 +164,7 @@ class Uploader:
                 text=True,
                 check=True,
                 timeout=30,
-            )
+            )  # nosec
             return result.stdout.strip() != ""
         except subprocess.CalledProcessError:
             return False

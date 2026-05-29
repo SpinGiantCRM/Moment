@@ -6,7 +6,8 @@ Usage::
 
     moment bot              # foreground
     moment bot --daemon     # background (tray-managed)
-    moment bot --token ...  # override token
+
+Token is read from ``MOMENT_DISCORD_TOKEN`` env var or system keyring.
 """
 
 from __future__ import annotations

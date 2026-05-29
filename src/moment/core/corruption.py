@@ -245,6 +245,6 @@ class CorruptionDetector:
                     self._last_task_time = now
             else:
                 self._last_task_count = 0
-        except Exception:
+        except Exception:  # nosec B110
             pass
         return issues

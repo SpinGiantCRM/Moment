@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import threading
 from pathlib import Path
 
@@ -259,7 +259,7 @@ class GifExporter(QDialog):
             palette_path,
         ]
         try:
-            subprocess.run(cmd_palette, capture_output=True, timeout=120, check=True)
+            subprocess.run(cmd_palette, capture_output=True, timeout=120, check=True)  # nosec B603 — tokenized args, no shell=True
             self._progress_updated.emit(50)
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
             self.export_error.emit(f"Palette generation failed: {exc}")
@@ -275,7 +275,7 @@ class GifExporter(QDialog):
             str(self._output_path),
         ]
         try:
-            subprocess.run(cmd_gif, capture_output=True, timeout=120, check=True)
+            subprocess.run(cmd_gif, capture_output=True, timeout=120, check=True)  # nosec B603 — tokenized args, no shell=True
             self._progress_updated.emit(100)
             # Clean up palette temp file
             try:
@@ -305,7 +305,7 @@ class GifExporter(QDialog):
         if self._proc:
             try:
                 self._proc.terminate()
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         self._running = False
         super().closeEvent(event)

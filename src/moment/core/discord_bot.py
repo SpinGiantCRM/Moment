@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 from datetime import datetime, timezone
 
@@ -43,6 +44,42 @@ AUTO_START_AUTO_DELAYED = "auto-delayed"
 AUTO_START_MANUAL = "manual"
 
 _AUTO_START_DELAY_SECONDS = 30
+
+
+# ---------------------------------------------------------------------------
+# Token retrieval — env var → keyring fallback
+# ---------------------------------------------------------------------------
+
+
+def _get_discord_token() -> str:
+    """Return the Discord bot token from env var or system keyring.
+
+    Precedence:
+        1. ``MOMENT_DISCORD_TOKEN`` env var (headless / daemon mode)
+        2. ``keyring.get_password("moment", "discord_bot_token")``
+        3. Empty string — bot will not start
+
+    ``keyring`` is an optional dependency; import failure is logged and
+    skipped without crashing.
+    """
+    token = os.environ.get("MOMENT_DISCORD_TOKEN", "")
+    if token:
+        logger.debug("Discord token read from MOMENT_DISCORD_TOKEN env var")
+        return token
+
+    try:
+        import keyring
+
+        token = keyring.get_password("moment", "discord_bot_token") or ""
+        if token:
+            logger.debug("Discord token read from system keyring")
+        return token
+    except ImportError:
+        logger.debug("keyring not installed — skipping keychain lookup")
+        return ""
+    except Exception:
+        logger.warning("Failed to read Discord token from keyring", exc_info=True)
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -323,9 +360,13 @@ class DiscordBot:
             logger.warning("Discord bot already running")
             return
 
-        token = self._config.get("discord_bot_token", "")
+        token = _get_discord_token()
         if not token:
-            logger.warning("Cannot start Discord bot — no token configured")
+            logger.warning(
+                "Cannot start Discord bot — no token configured. "
+                "Set MOMENT_DISCORD_TOKEN env var or run "
+                "`keyring set moment discord_bot_token`"
+            )
             return
 
         self._running = True

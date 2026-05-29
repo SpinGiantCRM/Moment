@@ -15,6 +15,7 @@ import sys
 import time
 
 from moment.core.config import Config
+from moment.core.discord_bot import _get_discord_token
 from moment.core.store import Store, set_store_config
 
 logger = logging.getLogger(__name__)
@@ -45,16 +46,15 @@ def run_bot(argv: list[str] | None = None) -> int:
     set_store_config(config)
     store = Store()
 
-    # Token override
-    if args.token:
-        config.set("discord_bot_token", args.token.strip())
+    # Check token exists (env var or keyring — see discord_bot._get_discord_token)
+    token = _get_discord_token()
 
-    # Check token exists
-    token = config.get("discord_bot_token", "")
     if not token:
         print(
             "No bot token configured.\n"
-            "Set one in Settings → Bot tab, or pass --token TOKEN.",
+            "Set MOMENT_DISCORD_TOKEN env var, or run\n"
+            "    keyring set moment discord_bot_token\n"
+            "to store it in your system keychain.",
             file=sys.stderr,
         )
         return 1
@@ -103,12 +103,5 @@ def _build_parser() -> argparse.ArgumentParser:
         "--daemon",
         action="store_true",
         help="Start in background (for tray-managed lifecycle).",
-    )
-    parser.add_argument(
-        "--token",
-        type=str,
-        default=None,
-        metavar="TOKEN",
-        help="Discord bot token (overrides config DB).",
     )
     return parser

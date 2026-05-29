@@ -13,13 +13,12 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
-import subprocess
-
+import subprocess  # nosec B404 — required for external tool invocation
 from pathlib import Path
 from typing import Callable
 
 from moment.utils.ffmpeg import FFmpegError, find_ffmpeg
+from moment.utils.system import validate_arg
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +85,11 @@ class NoiseSuppressor:
             NoiseSuppressorError: If processing fails.
         """
         if not self._enabled or not has_mic_audio:
-            logger.debug("Noise suppression skipped (enabled=%s, mic=%s)", self._enabled, has_mic_audio)
+            logger.debug(
+                "Noise suppression skipped (enabled=%s, mic=%s)",
+                self._enabled,
+                has_mic_audio,
+            )
             return path
 
         stem = path.stem
@@ -108,8 +111,11 @@ class NoiseSuppressor:
         try:
             self._apply_rnnoise(path, output, audio_streams)
         except subprocess.CalledProcessError as exc:
+            stderr_tail = (
+                exc.stderr.strip()[-200:] if exc.stderr else ""
+            )
             raise NoiseSuppressorError(
-                f"RNNoise processing failed (code={exc.returncode}): {exc.stderr.strip()[-200:] if exc.stderr else ''}"
+                f"RNNoise processing failed (code={exc.returncode}): {stderr_tail}"
             ) from exc
 
         # Replace original
@@ -151,7 +157,7 @@ class NoiseSuppressor:
             ],
             capture_output=True,
             text=True,
-        )
+        )  # nosec
         if result.returncode != 0:
             return []
 
@@ -174,7 +180,19 @@ class NoiseSuppressor:
         """
         # Build the RNNoise filter string
         if self._model_path:
-            arnndn_filter = f"arnndn=m={self._model_path}"
+            try:
+                valid_path = validate_arg(
+                    self._model_path,
+                    pattern=r"^[a-zA-Z0-9_./-]+\.rnn$",
+                )
+                if not os.path.isfile(valid_path):
+                    raise FileNotFoundError(f"RNNoise model not found: {valid_path}")
+                arnndn_filter = f"arnndn=m={valid_path}"
+            except (ValueError, FileNotFoundError) as exc:
+                logger.warning(
+                    "Invalid RNNoise model path, falling back to default: %s", exc
+                )
+                arnndn_filter = "arnndn"
         else:
             arnndn_filter = "arnndn"
 
@@ -197,7 +215,7 @@ class NoiseSuppressor:
         ]
 
         logger.debug("RNNoise: %s", cmd)
-        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=300)
+        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=300)  # nosec B603 — tokenized args, no shell=True
 
         if not output_path.is_file() or output_path.stat().st_size == 0:
             raise NoiseSuppressorError("RNNoise output missing or empty")

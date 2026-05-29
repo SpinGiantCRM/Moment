@@ -830,7 +830,6 @@ class AboutDialog(QDialog):
         header = table.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSizable(False)
 
         # Style the header
         header.setStyleSheet(
@@ -937,7 +936,6 @@ class AboutDialog(QDialog):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSizable(False)
         header.setStyleSheet(
             "QHeaderView::section {"
             "  background-color: #2a2a2a;"

@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 if TYPE_CHECKING:

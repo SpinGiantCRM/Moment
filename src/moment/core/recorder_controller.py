@@ -15,13 +15,14 @@ from __future__ import annotations
 import logging
 import os
 import signal
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 from moment.core.models import GameProfile
+from moment.utils.system import validate_arg
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +242,7 @@ class RecorderController:
 
         logger.info("Starting recorder: %s", cmd)
         try:
-            self._proc = subprocess.Popen(
+            self._proc = subprocess.Popen(  # nosec B603 — tokenized args, no shell=True
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -381,10 +382,12 @@ class RecorderController:
 
         # Audio configuration
         if audio_config:
-            if audio_config.get("game_device"):
-                cmd.extend(["-a", audio_config["game_device"]])
-            if audio_config.get("mic_device"):
-                cmd.extend(["-q", audio_config["mic_device"]])
+            game_device = audio_config.get("game_device", "")
+            if game_device:
+                cmd.extend(["-a", validate_arg(game_device)])
+            mic_device = audio_config.get("mic_device", "")
+            if mic_device:
+                cmd.extend(["-q", validate_arg(mic_device)])
                 # Bitrate and codec for mic
                 cmd.extend([
                     "-k", audio_config.get("mic_codec", "opus"),

@@ -356,7 +356,7 @@ def _detect_backend(
         backend.start()
         logger.info("KDE backend active")
         return backend
-    except Exception:
+    except Exception:  # nosec
         logger.debug("KDE backend unavailable; trying X11")
 
     # 2. Try X11 (dispatch wired via constructor)
@@ -417,7 +417,7 @@ def _key_string_to_x11_keycode(display: Any, key: str) -> int | None:
             keysym = XK.string_to_keysym(f"{prefix}{key_name}")
             if keysym:
                 return display.keysym_to_keycode(keysym)
-        except Exception:
+        except Exception:  # nosec B110 — keysym lookup fallback is best-effort
             pass
 
     return None

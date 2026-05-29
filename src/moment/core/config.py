@@ -255,7 +255,7 @@ class Config:
         try:
             os.makedirs(AUTOSTART_DIR, exist_ok=True)
             Path(AUTOSTART_FILE).write_text(desktop_content)
-            os.chmod(AUTOSTART_FILE, 0o755)
+            os.chmod(AUTOSTART_FILE, 0o755)  # nosec B103 — intentional; desktop file permissions
             logger.info("Autostart enabled: %s", AUTOSTART_FILE)
             return True
         except OSError as exc:

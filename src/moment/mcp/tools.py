@@ -28,6 +28,7 @@ from typing import Any
 from moment.core.config import Config
 from moment.core.models import ClipStatus, GameProfile
 from moment.core.store import Store, set_store_config
+from moment.utils.system import validate_arg
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +230,14 @@ def save_game_profile(profile_json: str) -> dict[str, str]:
     if "game_name" not in data:
         return {"error": "Missing required field: game_name"}
 
+    # Validate audio device fields at the API boundary
+    audio_config = data.get("audio_config")
+    if audio_config and isinstance(audio_config, dict):
+        for key in ("game_device", "mic_device"):
+            val = audio_config.get(key)
+            if val:
+                validate_arg(str(val))
+
     profile = GameProfile(
         id=data.get("id") or str(_uuid.uuid4()),
         game_name=data["game_name"],
@@ -238,6 +247,7 @@ def save_game_profile(profile_json: str) -> dict[str, str]:
         pause_encode=data.get("pause_encode", True),
         pause_thumbnail=data.get("pause_thumbnail", True),
         auto_tag=data.get("auto_tag", True),
+        audio_config=audio_config,
     )
     store.save_game_profile(profile)
     return {"status": "saved", "game_name": profile.game_name}

@@ -200,4 +200,8 @@ class TestCacheEviction:
 
 class TestDefaultDir:
     def test_default_thumb_dir_is_expanded(self) -> None:
-        assert get_thumb_dir().startswith("/")
+        # Ensure no config leak from other tests
+        from moment.core import thumbnail
+        thumbnail._thumb_config = None
+        result = get_thumb_dir()
+        assert result.startswith("/"), f"Expected absolute path, got: {result!r}"

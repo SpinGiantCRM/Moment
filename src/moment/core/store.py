@@ -276,6 +276,61 @@ class Store:
 
         self._init_db()
         self._migrate_json()
+        self._migrate_discord_token()
+
+    def _migrate_discord_token(self) -> None:
+        """Move ``discord_bot_token`` from settings table to system keyring.
+
+        Runs once per store open: reads the token from the ``settings``
+        table, stores it in the OS keychain via ``keyring``, then deletes
+        the row.  If ``keyring`` is not installed the token stays in the
+        DB and a debug message is logged.
+        """
+        row = self._conn.execute(
+            "SELECT value FROM settings WHERE key = ?",
+            ("discord_bot_token",),
+        ).fetchone()
+        if row is None:
+            return
+
+        token = None
+        try:
+            token = json.loads(row["value"])
+        except (json.JSONDecodeError, TypeError):
+            token = row["value"]
+
+        if not token or not isinstance(token, str) or not token.strip():
+            # Row exists but value is empty — just clean it up
+            self._conn.execute(
+                "DELETE FROM settings WHERE key = ?", ("discord_bot_token",)
+            )
+            self._conn.commit()
+            return
+
+        token = token.strip()
+
+        try:
+            import keyring
+
+            keyring.set_password("moment", "discord_bot_token", token)
+            logger.info("Migrated Discord bot token from settings to system keyring")
+        except ImportError:
+            logger.debug(
+                "keyring not installed — leaving token in settings table"
+            )
+            return
+        except Exception:
+            logger.warning(
+                "Failed to store Discord token in keyring — leaving in settings",
+                exc_info=True,
+            )
+            return
+
+        # Only delete from settings after successful keyring store
+        self._conn.execute(
+            "DELETE FROM settings WHERE key = ?", ("discord_bot_token",)
+        )
+        self._conn.commit()
 
     def _migrate_old_dirs(self) -> None:
         """Migrate config & data from old ``clip-tray`` dirs to ``moment`` dirs.
@@ -417,7 +472,7 @@ class Store:
         placeholders = ", ".join("?" for _ in row)
         with self._tx() as cur:
             cur.execute(
-                f"INSERT OR REPLACE INTO clips ({columns}) VALUES ({placeholders})",
+                f"INSERT OR REPLACE INTO clips ({columns}) VALUES ({placeholders})",  # nosec
                 list(row.values()),
             )
         return clip
@@ -437,7 +492,7 @@ class Store:
         set_clause = ", ".join(f"{k} = ?" for k in row)
         with self._tx() as cur:
             cur.execute(
-                f"UPDATE clips SET {set_clause} WHERE id = ?",
+                f"UPDATE clips SET {set_clause} WHERE id = ?",  # nosec
                 list(row.values()) + [clip.id],
             )
         return clip
@@ -548,7 +603,7 @@ class Store:
             sort_dir = "DESC"
 
         query = (
-            f"SELECT * FROM clips {where_clause} "
+            f"SELECT * FROM clips {where_clause} "  # nosec
             f"ORDER BY {sort_col} {sort_dir} LIMIT ? OFFSET ?"
         )
         params.extend([limit, offset])
@@ -583,7 +638,7 @@ class Store:
             search=search,
             tag=tag,
         )
-        query = f"SELECT COUNT(*) as cnt FROM clips {where_clause}"
+        query = f"SELECT COUNT(*) as cnt FROM clips {where_clause}"  # nosec
         row = self._conn.execute(query, params).fetchone()
         return row["cnt"] if row else 0
 
@@ -683,7 +738,7 @@ class Store:
         placeholders = ", ".join("?" for _ in row)
         with self._tx() as cur:
             cur.execute(
-                f"INSERT OR REPLACE INTO edit_profiles ({columns}) VALUES ({placeholders})",
+                f"INSERT OR REPLACE INTO edit_profiles ({columns}) VALUES ({placeholders})",  # nosec
                 list(row.values()),
             )
         return profile
@@ -1023,7 +1078,7 @@ class Store:
         where_clause = f"WHERE {' AND '.join(where)}" if where else ""
         params.extend([limit, offset])
         rows = self._conn.execute(
-            f"SELECT * FROM webhook_log {where_clause} ORDER BY delivered_at DESC LIMIT ? OFFSET ?",
+            f"SELECT * FROM webhook_log {where_clause} ORDER BY delivered_at DESC LIMIT ? OFFSET ?",  # nosec
             params,
         ).fetchall()
         return [

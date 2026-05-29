@@ -71,7 +71,10 @@ class TestImport:
     @patch("moment.core.import_export.Thumbnailer")
     @patch("moment.core.import_export.shutil.copy2")
     @patch("moment.core.import_export.ensure_dir")
-    def test_import_basic(self, mock_ensure, mock_copy, mock_thumb_cls, mock_probe, ie):
+    @patch.object(ImportExport, "_check_mime_type", return_value=None)
+    def test_import_basic(
+        self, mock_mime, mock_ensure, mock_copy, mock_thumb_cls, mock_probe, ie
+    ):
         """Happy path: probe returns valid data, thumbnail succeeds, clip inserted."""
         mock_probe.return_value = {
             "format": {"duration": "25.5"},
@@ -116,7 +119,10 @@ class TestImport:
     @patch("moment.core.import_export.ffprobe")
     @patch("moment.core.import_export.Thumbnailer")
     @patch("moment.core.import_export.ensure_dir")
-    def test_import_no_copy(self, mock_ensure, mock_thumb_cls, mock_probe, ie):
+    @patch.object(ImportExport, "_check_mime_type", return_value=None)
+    def test_import_no_copy(
+        self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie
+    ):
         """With copy=False, the source_path stays as the original file."""
         mock_probe.return_value = {
             "format": {"duration": "10.0"},
@@ -142,7 +148,10 @@ class TestImport:
 
     @patch("moment.core.import_export.ffprobe")
     @patch("moment.core.import_export.ensure_dir")
-    def test_import_no_video_stream(self, mock_ensure, mock_probe, ie):
+    @patch.object(ImportExport, "_check_mime_type", return_value=None)
+    def test_import_no_video_stream(
+        self, mock_mime, mock_ensure, mock_probe, ie
+    ):
         """If no video stream is found, it should raise ImportError."""
         mock_probe.return_value = {
             "format": {"duration": "5.0"},
@@ -165,7 +174,10 @@ class TestImport:
     @patch("moment.core.import_export.ffprobe")
     @patch("moment.core.import_export.Thumbnailer")
     @patch("moment.core.import_export.ensure_dir")
-    def test_import_with_game_and_tags(self, mock_ensure, mock_thumb_cls, mock_probe, ie):
+    @patch.object(ImportExport, "_check_mime_type", return_value=None)
+    def test_import_with_game_and_tags(
+        self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie
+    ):
         mock_probe.return_value = {
             "format": {"duration": "60.0"},
             "streams": [

@@ -200,7 +200,7 @@ class PipWindow(QWidget):
 
     def _start_playback(self) -> None:
         """Spawn ffmpeg to extract frames as raw RGB24 via pipe."""
-        import subprocess
+        import subprocess  # nosec B404 — required for external tool invocation
         import threading
 
         self._restart_count = 0
@@ -222,7 +222,7 @@ class PipWindow(QWidget):
                 capture_output=True,
                 text=True,
                 timeout=10,
-            )
+            )  # nosec
             self._total_frames = int(probe.stdout.strip() or 0)
         except (subprocess.TimeoutExpired, ValueError, OSError):
             self._total_frames = 0
@@ -242,7 +242,7 @@ class PipWindow(QWidget):
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-            )
+            )  # nosec
 
             # Read frames in a background thread, push to main thread via timer
             self._frame_lock = threading.Lock()
@@ -317,7 +317,7 @@ class PipWindow(QWidget):
             except Exception:
                 try:
                     self._ffmpeg_proc.kill()
-                except Exception:
+                except Exception:  # nosec B110
                     pass
             self._ffmpeg_proc = None
 

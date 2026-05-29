@@ -13,7 +13,7 @@ import logging
 import os
 import shutil
 import signal
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import threading
 import time
 from pathlib import Path
@@ -244,7 +244,7 @@ class GSRController:
         logger.info("Starting GSR: %s", cmd)
 
         try:
-            self._proc = subprocess.Popen(
+            self._proc = subprocess.Popen(  # nosec B603 — tokenized args, no shell=True
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

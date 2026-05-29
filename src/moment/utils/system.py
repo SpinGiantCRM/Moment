@@ -6,9 +6,9 @@ Does not import any GUI modules.
 from __future__ import annotations
 
 import logging
-import os
+import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import time
 from pathlib import Path
 
@@ -85,7 +85,7 @@ def is_nvidia_gpu() -> bool:
         _nvidia_check = False
     else:
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603 — tokenized args, no shell=True
                 [nvidia_smi],
                 capture_output=True,
                 timeout=5,
@@ -96,6 +96,34 @@ def is_nvidia_gpu() -> bool:
 
     _nvidia_timestamp = now
     return _nvidia_check
+
+
+def validate_arg(value: str, pattern: str = r"^[a-zA-Z0-9_., /-]+$") -> str:
+    """Validate a user-supplied value against an allowlist regex pattern.
+
+    Used to guard values that are interpolated into subprocess command
+    arguments or filtergraph strings.  Empty strings are returned as-is
+    (callers treat them as "no override").
+
+    Args:
+        value: The user-supplied string to validate.
+        pattern: Regex pattern the value must fully match.
+            Default allows alphanumeric, underscores, dots, commas,
+            spaces, forward slashes, and hyphens.
+
+    Returns:
+        The validated string (passed through unchanged).
+
+    Raises:
+        ValueError: If *value* is non-empty and does not match *pattern*.
+    """
+    if not value:
+        return value
+    if not re.fullmatch(pattern, value):
+        raise ValueError(
+            f"Invalid value {value!r}: must match pattern {pattern!r}"
+        )
+    return value
 
 
 def sanitize_stem(stem: str) -> str:

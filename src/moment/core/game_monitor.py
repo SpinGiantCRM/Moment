@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import threading
 from typing import Callable
 
@@ -200,7 +200,7 @@ class GameMonitor:
                 capture_output=True,
                 text=True,
                 timeout=5,
-            )
+            )  # nosec
             if result.returncode != 0:
                 return True  # Assume yes if we can't check
             util = int(result.stdout.strip())

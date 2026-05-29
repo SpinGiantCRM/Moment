@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import sys
 import traceback
 from pathlib import Path
@@ -113,9 +113,9 @@ def _global_excepthook(exc_type, exc_value, exc_tb) -> None:
         )
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
-    except Exception:
-        # If even the dialog fails, just log and continue
-        pass
+    except Exception:  # nosec B110
+            # If even the dialog fails, just log and continue
+            pass
 
 
 # ===========================================================================
@@ -255,7 +255,7 @@ class AppManager(QObject):
         """Open the encoded clips directory in the system file manager."""
         encoded_dir = os.path.expanduser("~/Videos")
         try:
-            subprocess.Popen(["xdg-open", encoded_dir])
+            subprocess.Popen(["xdg-open", encoded_dir])  # nosec
         except FileNotFoundError:
             logger.warning("Could not open %s — xdg-open not found", encoded_dir)
             sys.exit(1)

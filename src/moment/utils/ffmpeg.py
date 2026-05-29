@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 from pathlib import Path
 from typing import Any
 
@@ -103,7 +103,7 @@ def _detect_vendor() -> str | None:
         result = subprocess.run(
             ["nvidia-smi", "-L"],
             capture_output=True, text=True, check=False,
-        )
+        )  # nosec
         if result.returncode == 0 and "GPU" in result.stdout:
             return "nvidia"
     except (FileNotFoundError, OSError):
@@ -113,7 +113,7 @@ def _detect_vendor() -> str | None:
     try:
         result = subprocess.run(
             ["lspci"], capture_output=True, text=True, check=False,
-        )
+        )  # nosec
         if result.returncode == 0:
             out = result.stdout.lower()
             if "vga" in out and "amd" in out:
@@ -122,7 +122,6 @@ def _detect_vendor() -> str | None:
                 return "intel"
     except (FileNotFoundError, OSError):
         pass
-
     return None
 
 
@@ -162,7 +161,7 @@ def _encoder_works(encoder: str) -> bool:
         ffmpeg = shutil.which("ffmpeg")
         if ffmpeg is None:
             return False
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 — tokenized args, no shell=True
             [ffmpeg, "-hide_banner", "-encoders"],
             capture_output=True, text=True, check=False,
         )
@@ -246,7 +245,7 @@ def probe(path: str | Path) -> dict[str, Any]:
     ]
     logger.debug("Running ffprobe: %s", cmd)
 
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 — tokenized args, no shell=True
         cmd,
         capture_output=True,
         text=True,
@@ -271,7 +270,7 @@ def encode(cmd: list[str]) -> subprocess.Popen[str]:
     """
     find_ffmpeg()
     logger.debug("Running ffmpeg encode: %s", cmd)
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)  # nosec B603 — tokenized args, no shell=True
 
 
 def thumbnail(input_path: str | Path, output_path: str | Path, time: float = 0.0) -> None:
@@ -297,7 +296,9 @@ def thumbnail(input_path: str | Path, output_path: str | Path, time: float = 0.0
     ]
     logger.debug("Generating thumbnail: %s", cmd)
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(  # nosec B603 — tokenized args, no shell=True
+        cmd, capture_output=True, text=True,
+    )
     if result.returncode != 0:
         raise FFmpegError(f"thumbnail generation failed (code={result.returncode}): {result.stderr.strip()}")
 

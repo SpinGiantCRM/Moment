@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
+import subprocess  # nosec B404 — required for external tool invocation
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -134,7 +134,7 @@ class Encoder:
         with GPU_SEMAPHORE:
             logger.info("Encoding %s → %s …", clip.stem, output_path.name)
             find_ffmpeg()
-            proc = subprocess.run(
+            proc = subprocess.run(  # nosec B603 — tokenized args, no shell=True
                 cmd,
                 capture_output=True,
                 text=True,

@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
-import time
+import re
+import subprocess  # nosec B404 — required for external tool invocation
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -85,7 +85,8 @@ class Screenshot:
         output = self._output_dir / f"{name}.{_DEFAULT_FORMAT}"
 
         # Detect display and resolution
-        display = os.environ.get("DISPLAY", ":0.0")
+        raw_display = os.environ.get("DISPLAY", ":0.0")
+        display = self._validate_display(raw_display)
         resolution = self._detect_resolution(display)
 
         try:
@@ -105,7 +106,7 @@ class Screenshot:
 
         logger.info("Fallback screenshot: %s", cmd)
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)  # nosec B603 — tokenized args, no shell=True
         except subprocess.TimeoutExpired as exc:
             raise ScreenshotError(f"Screenshot capture timed out: {exc}") from exc
         if result.returncode != 0:
@@ -161,6 +162,19 @@ class Screenshot:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _validate_display(value: str) -> str:
+        r"""Validate DISPLAY env var against ``^:[0-9]+(\.[0-9]+)?$``.
+
+        Falls back to ``":0.0"`` on invalid values.
+        """
+        if re.fullmatch(r"^:[0-9]+(\.[0-9]+)?$", value):
+            return value
+        logger.warning(
+            "Invalid DISPLAY value %r — falling back to :0.0", value
+        )
+        return ":0.0"
+
+    @staticmethod
     def _detect_resolution(display: str) -> str:
         """Detect screen resolution via xrandr or fallback to 1920x1080."""
         try:
@@ -170,7 +184,7 @@ class Screenshot:
                 capture_output=True,
                 text=True,
                 timeout=5,
-            )
+            )  # nosec
             if result.returncode == 0:
                 for line in result.stdout.splitlines():
                     if "dimensions:" in line:
@@ -188,7 +202,7 @@ class Screenshot:
                 capture_output=True,
                 text=True,
                 timeout=5,
-            )
+            )  # nosec
             if result.returncode == 0:
                 import re
                 for line in result.stdout.splitlines():
@@ -214,7 +228,7 @@ class Screenshot:
             "-vf", f"crop={w}:{h}:{x}:{y}",
             str(output),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603 — tokenized args, no shell=True
         if result.returncode != 0:
             logger.warning("Crop failed, returning original: %s", result.stderr.strip()[-200:])
             output.unlink(missing_ok=True)
@@ -237,7 +251,7 @@ class Screenshot:
                 "-q:v", "2",
                 str(output),
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)  # nosec B603 — tokenized args, no shell=True
             if result.returncode != 0:
                 logger.warning("Thumbnail generation failed: %s", result.stderr.strip()[-200:])
         except (FileNotFoundError, subprocess.TimeoutExpired, FFmpegError) as exc:

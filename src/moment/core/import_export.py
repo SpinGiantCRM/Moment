@@ -20,7 +20,8 @@ from moment.core.encoder import Encoder, EncoderError
 from moment.core.models import Clip, ClipStatus, ClipType
 from moment.core.store import Store
 from moment.core.thumbnail import Thumbnailer
-from moment.utils.ffmpeg import FFmpegError, parse_fps, probe as ffprobe
+from moment.utils.ffmpeg import FFmpegError, parse_fps
+from moment.utils.ffmpeg import probe as ffprobe
 from moment.utils.system import ensure_dir, sanitize_stem
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,9 @@ class ImportExport:
             raise ImportError(f"Source file not found: {src}")
         if src.stat().st_size == 0:
             raise ImportError(f"Source file is empty: {src}")
+
+        # MIME-type check — guard against non-media files being passed to ffprobe
+        self._check_mime_type(src)
 
         stem = sanitize_stem(src.stem)
         original_filename = src.name
@@ -274,4 +278,56 @@ class ImportExport:
     def list_presets() -> dict[str, dict[str, object]]:
         """Return the available import presets."""
         return dict(_PRESETS)
+
+    @staticmethod
+    def _check_mime_type(path: Path) -> None:
+        """Validate that *path* is a video or audio file via MIME type.
+
+        Uses ``python-magic`` if installed; falls back to ``file --mime-type``
+        subprocess call.  If neither is available the check is skipped with
+        a debug log (graceful degradation).
+
+        Raises:
+            ImportError: If the file is not a recognised video/audio container.
+        """
+        mime_type: str | None = None
+
+        # Try python-magic first
+        try:
+            import magic
+
+            mime_type = magic.from_file(str(path), mime=True)  # type: ignore[union-attr]
+        except ImportError:
+            logger.debug("python-magic not installed — trying file(1) fallback")
+        except Exception as exc:
+            logger.debug("python-magic MIME check failed: %s", exc)
+
+        # Fallback: subprocess call to file(1)
+        if mime_type is None:
+            try:
+                import subprocess  # nosec B404 — required for external tool invocation
+
+                result = subprocess.run(  # nosec
+                    ["file", "--mime-type", "-b", str(path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode == 0:
+                    mime_type = result.stdout.strip()
+            except Exception as exc:
+                logger.debug("file(1) MIME check failed: %s", exc)
+
+        if mime_type is None:
+            logger.debug("No MIME checker available — skipping MIME validation")
+            return
+
+        # Accept video/ and audio/ MIME types
+        if mime_type.startswith("video/") or mime_type.startswith("audio/"):
+            logger.debug("MIME check passed: %s → %s", path.name, mime_type)
+            return
+
+        raise ImportError(
+            f"Not a recognised video or audio file: {path.name} (MIME: {mime_type})"
+        )
 

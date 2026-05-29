@@ -98,14 +98,15 @@ class TestCheckClip:
 
 class TestHealthCheck:
     def test_check_returns_list(self, detector: CorruptionDetector) -> None:
-        issues = detector.check()
+        with patch.object(detector, "_check_pipeline_stuck", return_value=[]):
+            issues = detector.check()
         assert isinstance(issues, list)
 
     def test_disk_space_warning(self, detector: CorruptionDetector) -> None:
         with patch(
             "moment.core.corruption.disk_usage",
             return_value=(500_000_000_000, 498_000_000_000, 2_000_000_000),  # 2GB free
-        ):
+        ), patch.object(detector, "_check_pipeline_stuck", return_value=[]):
             issues = detector.check()
             assert any("WARNING" in i for i in issues)
 
@@ -113,7 +114,7 @@ class TestHealthCheck:
         with patch(
             "moment.core.corruption.disk_usage",
             return_value=(500_000_000_000, 499_500_000_000, 500_000_000),  # 0.5GB free
-        ):
+        ), patch.object(detector, "_check_pipeline_stuck", return_value=[]):
             issues = detector.check()
             assert any("CRITICAL" in i for i in issues)
 
@@ -121,7 +122,7 @@ class TestHealthCheck:
         with patch(
             "moment.core.corruption.disk_usage",
             return_value=(1_000_000_000_000, 500_000_000_000, 500_000_000_000),  # 500GB free
-        ):
+        ), patch.object(detector, "_check_pipeline_stuck", return_value=[]):
             issues = detector.check()
             assert not any("disk" in i.lower() for i in issues)
 
@@ -137,13 +138,15 @@ class TestHealthCheck:
         old_time = time.time() - TEMP_MAX_AGE - 60
         os.utime(str(stale_file), (old_time, old_time))
 
-        with patch("moment.core.corruption.get_temp_dir", return_value=str(temp_dir)):
+        with patch("moment.core.corruption.get_temp_dir", return_value=str(temp_dir)), \
+             patch.object(detector, "_check_pipeline_stuck", return_value=[]):
             issues = detector.check()
             # File should be deleted
             assert not stale_file.exists()
 
     def test_db_integrity_ok(self, detector: CorruptionDetector) -> None:
-        with patch.object(detector, "_check_db_integrity", return_value=[]):
+        with patch.object(detector, "_check_db_integrity", return_value=[]), \
+             patch.object(detector, "_check_pipeline_stuck", return_value=[]):
             issues = detector.check()
             assert not any("Database integrity check failed" in i for i in issues)
 
@@ -165,7 +168,7 @@ class TestCallbacks:
         with patch(
             "moment.core.corruption.disk_usage",
             return_value=(500_000_000_000, 498_000_000_000, 2_000_000_000),
-        ):
+        ), patch.object(d, "_check_pipeline_stuck", return_value=[]):
             d.check()
             assert len(warnings) > 0
         d.stop()
@@ -182,7 +185,7 @@ class TestCallbacks:
         with patch(
             "moment.core.corruption.disk_usage",
             return_value=(500_000_000_000, 499_500_000_000, 500_000_000),
-        ):
+        ), patch.object(d, "_check_pipeline_stuck", return_value=[]):
             d.check()
             assert any("CRITICAL" in c for c in criticals)
         d.stop()
@@ -201,7 +204,8 @@ class TestPipelineStuck:
         detector._last_task_count = 3
         detector._last_task_time = time.monotonic() - (PIPELINE_STUCK_MINUTES + 1) * 60
 
-        with patch.object(store, "get_pending_tasks", return_value=[MagicMock()] * 3):
+        with patch.object(store, "get_pending_tasks", return_value=[MagicMock()] * 3), \
+             patch.object(detector, "_check_db_integrity", return_value=[]):
             issues = detector.check()
             assert any("stuck" in i for i in issues)
 
@@ -213,7 +217,8 @@ class TestPipelineStuck:
 class TestStartStop:
     def test_start_stop_lifecycle(self, store: Store) -> None:
         d = CorruptionDetector(store, check_interval=999.0)
-        d.start()
+        with patch.object(d, "_check_pipeline_stuck", return_value=[]):
+            d.start()
         assert d.is_running
         d.stop()
         assert not d.is_running
