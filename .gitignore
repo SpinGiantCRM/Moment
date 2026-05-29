@@ -40,6 +40,11 @@ Thumbs.db
 # AI agent-facing files (stay local only)
 agents.md
 specs/
+SECURITY_AUDIT.md
+docs/
+
+# Coverage data (local only)
+.coverage
 
 # Virtual environment
 .venv/
