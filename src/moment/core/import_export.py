@@ -236,7 +236,8 @@ class ImportExport:
         """Copy encoded clip files to a destination folder.
 
         Preserves the original filename for each clip.  Clips without an
-        encoded file are skipped.
+        encoded file are skipped.  Symlinks are resolved and verified to
+        be within allowed directories before copying.
 
         Args:
             clip_ids: List of clip IDs to export.
@@ -244,6 +245,9 @@ class ImportExport:
 
         Returns:
             Number of files successfully copied.
+
+        Raises:
+            ImportError: If a resolved path escapes allowed directories.
         """
         dest = Path(dest)
         ensure_dir(dest)
@@ -260,6 +264,9 @@ class ImportExport:
                 logger.warning("Export: clip %s has no encoded file — skipping", cid)
                 continue
 
+            # Resolve symlinks and verify path is within allowed dirs
+            self._check_export_path(src)
+
             out = dest / src.name
             try:
                 shutil.copy2(src, out)
@@ -269,6 +276,45 @@ class ImportExport:
                 logger.error("Export failed for %s: %s", src.name, exc)
 
         return count
+
+    def _check_export_path(self, path: Path) -> None:
+        """Resolve symlinks and verify *path* stays within allowed directories.
+
+        Raises:
+            ImportError: If the path is a symlink pointing outside allowed
+                directories, or the resolved path escapes the sandbox.
+        """
+        if path.is_symlink():
+            logger.warning("Export: symlink encountered at %s — resolving", path)
+
+        resolved = path.resolve()
+
+        # Allowed roots: home, /tmp, and configured encode/recordings dirs
+        allowed: set[str] = {
+            os.path.expanduser("~"),
+            "/tmp",
+            str(Path.home() / "Videos" / "Moment"),
+            os.path.expanduser("~/.local/share/moment"),
+        }
+
+        # If a Config is available, include its encode + recordings paths
+        try:
+            from moment.core.store import _get_config
+            cfg = _get_config()
+            if cfg is not None:
+                for key in ("encode_dir", "recordings_dir"):
+                    custom = cfg.get_path(key)
+                    if custom:
+                        allowed.add(str(Path(custom).resolve()))
+        except Exception:
+            pass  # graceful fallback; hardcoded roots are sufficient
+
+        resolved_str = str(resolved)
+        if not any(resolved_str.startswith(root) for root in allowed):
+            raise ImportError(
+                f"Export blocked: {path.name} resolves to {resolved}, "
+                f"which is outside allowed directories"
+            )
 
     # ------------------------------------------------------------------
     # Presets

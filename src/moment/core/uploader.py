@@ -11,7 +11,10 @@ import logging
 import os
 import shutil
 import subprocess  # nosec B404 — required for external tool invocation
+import threading
 import time
+
+from moment.utils.subprocess import _sandbox_preexec
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +26,9 @@ logger = logging.getLogger(__name__)
 # Retry configuration
 _RETRY_DELAYS: list[float] = [5.0, 30.0, 300.0]  # seconds
 _MAX_RETRIES = len(_RETRY_DELAYS)
+_TOTAL_DEADLINE = 900  # 15 minutes total deadline per upload
+_CIRCUIT_BREAKER_FAILURES = 3  # consecutive failures to trip
+_CIRCUIT_BREAKER_BACKOFF = 300  # seconds to wait when tripped
 
 
 class UploaderError(RuntimeError):
@@ -31,6 +37,11 @@ class UploaderError(RuntimeError):
 
 class Uploader:
     """Uploads clips to any rclone-backed remote (S3, B2, R2, GCS, …)."""
+
+    # Circuit breaker — shared class-level state
+    _failure_lock = threading.Lock()
+    _consecutive_failures: int = 0
+    _circuit_open_until: float = 0.0  # monotonic timestamp
 
     def __init__(
         self,
@@ -76,7 +87,9 @@ class Uploader:
     def upload(self, path: Path, *, remote_path: str | None = None) -> str:
         """Upload *path* to the configured remote and return its public URL.
 
-        Retries up to 3 times with exponential backoff.
+        Retries up to 3 times with exponential backoff.  Subject to a
+        15-minute total deadline and a circuit breaker that backs off
+        for 5 minutes after 3 consecutive failures.
 
         Args:
             path: Local file to upload.
@@ -87,18 +100,46 @@ class Uploader:
             The public URL of the uploaded file.
 
         Raises:
-            UploaderError: If the upload fails after all retries.
+            UploaderError: If the upload fails after all retries, the
+                deadline is exceeded, or the circuit breaker is tripped.
         """
+        # Circuit breaker check (class-level, thread-safe)
+        with Uploader._failure_lock:
+            if Uploader._consecutive_failures >= _CIRCUIT_BREAKER_FAILURES:
+                wait_remaining = Uploader._circuit_open_until - time.monotonic()
+                if wait_remaining > 0:
+                    raise UploaderError(
+                        f"Circuit breaker open — back off for "
+                        f"{int(wait_remaining)}s after "
+                        f"{Uploader._consecutive_failures} consecutive failures"
+                    )
+                # Backoff period expired — reset and allow through
+                logger.info(
+                    "Circuit breaker backoff expired — resetting after %d failures",
+                    Uploader._consecutive_failures,
+                )
+                Uploader._consecutive_failures = 0
+                Uploader._circuit_open_until = 0.0
+
         dest = f"{self._remote}:{self._bucket}/{remote_path or path.name}"
         last_error: Exception | None = None
+        start_time = time.monotonic()
 
         for attempt in range(_MAX_RETRIES + 1):
+            # Total deadline check
+            if time.monotonic() - start_time > _TOTAL_DEADLINE:
+                raise UploaderError("Upload deadline exceeded")
+
             try:
                 self._ensure_rclone()
                 self._do_copy(path, dest)
                 if self._verify_upload(dest):
                     url = self._build_url(remote_path or path.name)
-                    logger.info("Uploaded %s → %s", path.name, url)
+                    logger.info("Upload success — clip uploaded as %s", path.name)
+                    # Reset circuit breaker on success
+                    with Uploader._failure_lock:
+                        Uploader._consecutive_failures = 0
+                        Uploader._circuit_open_until = 0.0
                     return url
                 msg = f"Upload verification failed for {dest} (attempt {attempt + 1})"
                 logger.warning(msg)
@@ -107,13 +148,27 @@ class Uploader:
                 last_error = exc
                 logger.warning(
                     "Upload attempt %d/%d failed: %s",
-                    attempt + 1, _MAX_RETRIES + 1, exc,
+                    attempt + 1, _MAX_RETRIES + 1, type(exc).__name__,
                 )
 
             if attempt < _MAX_RETRIES:
                 delay = _RETRY_DELAYS[attempt]
-                logger.info("Retrying upload in %.0fs …", delay)
+                logger.debug("Retrying upload in %.0fs …", delay)
                 time.sleep(delay)
+
+        # All retries exhausted — increment circuit breaker
+        with Uploader._failure_lock:
+            Uploader._consecutive_failures += 1
+            if Uploader._consecutive_failures >= _CIRCUIT_BREAKER_FAILURES:
+                Uploader._circuit_open_until = (
+                    time.monotonic() + _CIRCUIT_BREAKER_BACKOFF
+                )
+                logger.warning(
+                    "Circuit breaker tripped after %d consecutive failures "
+                    "— backing off for %ds",
+                    Uploader._consecutive_failures,
+                    _CIRCUIT_BREAKER_BACKOFF,
+                )
 
         raise UploaderError(f"Upload failed after {_MAX_RETRIES + 1} attempts") from last_error
 
@@ -130,17 +185,18 @@ class Uploader:
         self._ensure_rclone()
         dest = f"{self._remote}:{self._bucket}/{existing_remote_path}"
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B603
                 ["rclone", "delete", dest],
                 capture_output=True,
                 text=True,
                 check=True,
-            )  # nosec
-            logger.info("Deleted old remote file: %s", dest)
+                preexec_fn=_sandbox_preexec,
+            )
+            logger.debug("Deleted old remote file")
         except subprocess.CalledProcessError as exc:
-            logger.warning(
+            logger.debug(
                 "Could not delete old remote file (may not exist): %s",
-                exc.stderr.strip(),
+                exc.stderr.strip() if exc.stderr else "(no stderr)",
             )
 
         return self.upload(path, remote_path=existing_remote_path)
@@ -152,19 +208,27 @@ class Uploader:
     def _do_copy(self, path: Path, dest: str) -> None:
         """Execute ``rclone copy``."""
         cmd = ["rclone", "copy", str(path), dest, "--progress"]
-        logger.debug("Running: %s", cmd)
-        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=600)  # nosec B603 — tokenized args, no shell=True
+        logger.debug("Running rclone copy")
+        subprocess.run(  # nosec B603 — tokenized args, no shell=True
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=600,
+            preexec_fn=_sandbox_preexec,
+        )
 
     def _verify_upload(self, dest: str) -> bool:
         """Check that the file exists on the remote."""
         try:
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B603
                 ["rclone", "lsf", dest],
                 capture_output=True,
                 text=True,
                 check=True,
                 timeout=30,
-            )  # nosec
+                preexec_fn=_sandbox_preexec,
+            )
             return result.stdout.strip() != ""
         except subprocess.CalledProcessError:
             return False
@@ -174,7 +238,7 @@ class Uploader:
         if self._base_url:
             return f"{self._base_url}/{remote_path.lstrip('/')}"
         dest = f"{self._remote}:{self._bucket}/{remote_path}"
-        logger.info("No base_url set — returning rclone path %s", dest)
+        logger.debug("No base_url set — returning rclone path")
         return dest
 
     def _ensure_rclone(self) -> None:

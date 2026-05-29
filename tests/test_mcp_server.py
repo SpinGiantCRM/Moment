@@ -89,6 +89,33 @@ class TestCreateServer:
         mock_resolve.assert_called_once_with("my-token")
 
 
+class TestMutationRoutes:
+    """Verify _MUTATION_ROUTES uses exact paths (prevents substring bypass)."""
+
+    def test_known_routes_present(self):
+        from moment.mcp.server import _MUTATION_ROUTES
+        assert "/tools/enqueue_encode" in _MUTATION_ROUTES
+        assert "/tools/enqueue_upload" in _MUTATION_ROUTES
+        assert "/tools/save_game_profile" in _MUTATION_ROUTES
+        assert "/tools/test_webhook" in _MUTATION_ROUTES
+
+    def test_read_only_route_not_in_mutation_set(self):
+        from moment.mcp.server import _MUTATION_ROUTES
+        assert "/tools/list_clips" not in _MUTATION_ROUTES
+        assert "/tools/search_clips" not in _MUTATION_ROUTES
+        assert "/tools/get_clip" not in _MUTATION_ROUTES
+        assert "/tools/get_stats" not in _MUTATION_ROUTES
+        assert "/tools/list_game_profiles" not in _MUTATION_ROUTES
+        assert "/tools/list_webhooks" not in _MUTATION_ROUTES
+
+    def test_bypass_attempt_rejected(self):
+        """A crafted path like /tools/enqueue_encode_evil should NOT match."""
+        from moment.mcp.server import _MUTATION_ROUTES
+        assert "/tools/enqueue_encode_evil" not in _MUTATION_ROUTES
+        assert "/tools/enqueue_encodeextra" not in _MUTATION_ROUTES
+        assert "/tools/save_game_profile_hack" not in _MUTATION_ROUTES
+
+
 class TestAuthMiddleware:
     @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
     @patch("moment.mcp.server.FastMCP")

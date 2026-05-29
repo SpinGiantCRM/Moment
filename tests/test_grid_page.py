@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PyQt6.QtCore import QSize
 
 from moment.ui.pages.grid_page import ClipFilterProxyModel, GridPage
 
@@ -87,8 +88,15 @@ class TestGridPageRefresh:
         store = MagicMock()
         store.list_clips.return_value = [clip]
 
+        # Mock paint + sizeHint to avoid QListView::doItemsLayout segfault on
+        # offscreen platform — the delegate calls painful clip paths that crash
+        # when there is no real paint device.
         with patch("moment.ui.widgets.clip_delegate.ClipDelegate.build_item_data",
-                   return_value={"id": "grid-1", "title": "Test Clip"}):
+                   return_value={"id": "grid-1", "title": "Test Clip"}), \
+             patch("moment.ui.widgets.clip_delegate.ClipDelegate.paint",
+                   return_value=None), \
+             patch("moment.ui.widgets.clip_delegate.ClipDelegate.sizeHint",
+                   return_value=QSize(260, 190)):
             page = GridPage(store=store)
             page.refresh()
             assert page._empty_widget.isHidden()

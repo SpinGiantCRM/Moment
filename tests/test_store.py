@@ -13,6 +13,7 @@ from moment.core.models import (
     Bookmark,
     Clip,
     ClipStatus,
+    ClipVisibility,
     EditProfile,
     FilterConfig,
     Folder,
@@ -35,6 +36,7 @@ def _make_clip(store, **overrides) -> Clip:
         id=overrides.pop("id", str(uuid.uuid4())),
         stem=overrides.pop("stem", "2026-05-01_12-00-00"),
         source_path=Path("/tmp/test-clip.mkv"),
+        visibility=overrides.pop("visibility", ClipVisibility.PUBLIC),
         **overrides,
     )
     return store.insert_clip(clip)
@@ -230,11 +232,42 @@ class TestBookmarks:
 
 class TestWebhooks:
     def test_save_and_list(self, store) -> None:
-        wh = Webhook(id="wh1", url="https://discord.com/api/webhooks/1", name="Main")
+        wh = Webhook(id="wh1", url="https://discord.com/api/webhooks/1/token123", name="Main")
         store.save_webhook(wh)
         hooks = store.list_webhooks()
         assert len(hooks) >= 1
         assert hooks[0].name == "Main"
+        # URL should be redacted
+        assert "[REDACTED]" in hooks[0].url
+        assert "token123" not in hooks[0].url
+
+    def test_list_webhooks_redacted(self, store) -> None:
+        """Spec 16: list_webhooks() returns redacted URLs."""
+        wh = Webhook(
+            id="wh-redact",
+            url="https://discord.com/api/webhooks/123456/secret_token_abc",
+            name="Test",
+        )
+        store.save_webhook(wh)
+        hooks = store.list_webhooks()
+        wh_out = next(w for w in hooks if w.id == "wh-redact")
+        assert "secret_token_abc" not in wh_out.url
+        assert "[REDACTED]" in wh_out.url
+
+    def test_get_webhook_url_returns_real_url(self, store) -> None:
+        """Spec 16: get_webhook_url() decrypts and returns the real URL for dispatch."""
+        wh = Webhook(
+            id="wh-decrypt",
+            url="https://discord.com/api/webhooks/123456/real_token",
+            name="Dispatch",
+        )
+        store.save_webhook(wh)
+        real = store.get_webhook_url("wh-decrypt")
+        assert real == "https://discord.com/api/webhooks/123456/real_token"
+
+    def test_get_webhook_url_nonexistent(self, store) -> None:
+        """Spec 16: get_webhook_url() returns None for missing webhooks."""
+        assert store.get_webhook_url("nonexistent") is None
 
     def test_delete(self, store) -> None:
         wh = Webhook(id="wh-del", url="https://discord.com/api/webhooks/2")
@@ -596,3 +629,73 @@ class TestThreadSafety:
         for i in range(20):
             c = store.get_clip(f"thread-clip-{i}")
             assert c is not None, f"Clip thread-clip-{i} was not found"
+
+
+# ---------------------------------------------------------------------------
+# Visibility enforcement (Spec 24)
+# ---------------------------------------------------------------------------
+
+
+class TestVisibilityFiltering:
+    def test_guest_excludes_private(self, store) -> None:
+        """Guest (no owner_id) should exclude PRIVATE clips."""
+        from moment.core.models import ClipVisibility
+        _make_clip(store, id="pub-clip", visibility=ClipVisibility.PUBLIC, title="Public")
+        _make_clip(store, id="priv-clip", visibility=ClipVisibility.PRIVATE, title="Private")
+        _make_clip(store, id="unl-clip", visibility=ClipVisibility.UNLISTED, title="Unlisted")
+
+        clips = store.list_clips()  # default: no owner_id → exclude PRIVATE
+        ids = {c.id for c in clips}
+        assert "pub-clip" in ids
+        assert "unl-clip" in ids
+        assert "priv-clip" not in ids
+
+    def test_owner_sees_own_private(self, store) -> None:
+        """Owner sees PUBLIC + UNLISTED + their own PRIVATE clips."""
+        from moment.core.models import ClipVisibility
+        _make_clip(store, id="pub2", visibility=ClipVisibility.PUBLIC, title="Pub")
+        _make_clip(store, id="priv-mine", visibility=ClipVisibility.PRIVATE,
+                    discord_user_id="user123", title="Mine")
+        _make_clip(store, id="priv-other", visibility=ClipVisibility.PRIVATE,
+                    discord_user_id="other_user", title="Other")
+
+        clips = store.list_clips(owner_id="user123")
+        ids = {c.id for c in clips}
+        assert "pub2" in ids
+        assert "priv-mine" in ids
+        assert "priv-other" not in ids
+
+    def test_explicit_visibility_filter(self, store) -> None:
+        """Explicit visibility=X returns only that visibility."""
+        from moment.core.models import ClipVisibility
+        _make_clip(store, id="pub-only", visibility=ClipVisibility.PUBLIC, title="P")
+        _make_clip(store, id="priv-only", visibility=ClipVisibility.PRIVATE, title="X")
+
+        clips = store.list_clips(visibility=ClipVisibility.PUBLIC)
+        assert all(c.visibility == ClipVisibility.PUBLIC for c in clips)
+        assert any(c.id == "pub-only" for c in clips)
+        assert not any(c.id == "priv-only" for c in clips)
+
+    def test_discord_user_id_persists(self, store) -> None:
+        """discord_user_id is stored and retrieved."""
+        _make_clip(store, id="owner-clip", discord_user_id="user456")
+        clip = store.get_clip("owner-clip")
+        assert clip is not None
+        assert clip.discord_user_id == "user456"
+
+    def test_count_clips_respects_visibility(self, store) -> None:
+        """count_clips with no owner excludes PRIVATE."""
+        from moment.core.models import ClipVisibility
+        _make_clip(store, id="cnt-pub", visibility=ClipVisibility.PUBLIC)
+        _make_clip(store, id="cnt-priv", visibility=ClipVisibility.PRIVATE)
+
+        total = store.count_clips()
+        assert total == 1  # only public
+
+    def test_migration_adds_discord_user_id_column(self, store) -> None:
+        """_migrate_discord_user_id is idempotent and adds column if missing."""
+        # Running again should not crash
+        store._migrate_discord_user_id()
+        # Should be able to insert a clip with the field
+        _make_clip(store, id="post-mig", discord_user_id="u1")
+        assert store.get_clip("post-mig").discord_user_id == "u1"

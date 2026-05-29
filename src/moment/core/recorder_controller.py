@@ -18,6 +18,8 @@ import signal
 import subprocess  # nosec B404 — required for external tool invocation
 import threading
 import time
+
+from moment.utils.subprocess import Popen_sandboxed
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -242,11 +244,10 @@ class RecorderController:
 
         logger.info("Starting recorder: %s", cmd)
         try:
-            self._proc = subprocess.Popen(  # nosec B603 — tokenized args, no shell=True
+            self._proc = Popen_sandboxed(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
                 start_new_session=True,  # → os.setsid in child
             )
         except (OSError, FileNotFoundError) as exc:

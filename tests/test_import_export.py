@@ -245,6 +245,48 @@ class TestExport:
             except FileNotFoundError:
                 pass
 
+    def test_export_symlink_outside_allowed_raises(self, store, ie, tmp_path: Path):
+        """Spec 22: Export via symlink pointing outside allowed dirs is blocked."""
+        # Create a real file in tmp_path (allowed)
+        real_file = tmp_path / "safe.mp4"
+        real_file.write_bytes(b"x" * 100)
+
+        # Create a symlink inside tmp_path pointing to /etc/shadow (outside)
+        symlink = tmp_path / "evil_link.mp4"
+        symlink.symlink_to("/etc/shadow")
+
+        clip = Clip(
+            id="symlink-clip", stem="symlink",
+            source_path=real_file,
+            encoded_path=symlink,
+            status=ClipStatus.DONE,
+        )
+        store.insert_clip(clip)
+
+        with pytest.raises(ImportError, match="outside allowed"):
+            ie.export_clips(["symlink-clip"], tmp_path / "export_dest")
+
+    def test_export_symlink_within_allowed_succeeds(self, store, ie, tmp_path: Path):
+        """Spec 22: Symlink within allowed dirs resolves and exports fine."""
+        real_file = tmp_path / "real_clip.mp4"
+        real_file.write_bytes(b"x" * 100)
+
+        symlink = tmp_path / "link.mp4"
+        symlink.symlink_to(real_file)
+
+        clip = Clip(
+            id="symlink-safe", stem="symlink_safe",
+            source_path=real_file,
+            encoded_path=symlink,
+            status=ClipStatus.DONE,
+        )
+        store.insert_clip(clip)
+
+        dest = tmp_path / "export_out"
+        count = ie.export_clips(["symlink-safe"], dest)
+        assert count == 1
+        assert (dest / "link.mp4").exists()
+
 
 # ---------------------------------------------------------------------------
 # Presets

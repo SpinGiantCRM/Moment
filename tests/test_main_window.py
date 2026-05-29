@@ -160,13 +160,15 @@ class TestMainWindowRecordingHandlers:
         window = MainWindow()
         window._on_start_recording()
         # After start_recording, recording page should be in recording state
-        assert not window._recording_page.isHidden()
+        assert window._recording_page.is_recording()
 
     def test_stop_recording(self, qapp):
         window = MainWindow()
+        # Start first, then stop
+        window._on_start_recording()
         window._on_stop_recording()
         # After stop_recording, recording page should be in ready state
-        assert not window._recording_page.isHidden()
+        assert not window._recording_page.is_recording()
 
     def test_save_clip(self, qapp):
         window = MainWindow()

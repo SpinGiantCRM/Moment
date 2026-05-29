@@ -10,6 +10,8 @@ import logging
 import shutil
 import subprocess  # nosec B404 — required for external tool invocation
 from pathlib import Path
+
+from moment.utils.subprocess import Popen_sandboxed, run_sandboxed
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -245,11 +247,7 @@ def probe(path: str | Path) -> dict[str, Any]:
     ]
     logger.debug("Running ffprobe: %s", cmd)
 
-    result = subprocess.run(  # nosec B603 — tokenized args, no shell=True
-        cmd,
-        capture_output=True,
-        text=True,
-    )
+    result = run_sandboxed(cmd)
     if result.returncode != 0:
         raise FFmpegError(f"ffprobe failed (code={result.returncode}): {result.stderr.strip()}")
 
@@ -270,7 +268,7 @@ def encode(cmd: list[str]) -> subprocess.Popen[str]:
     """
     find_ffmpeg()
     logger.debug("Running ffmpeg encode: %s", cmd)
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)  # nosec B603 — tokenized args, no shell=True
+    return Popen_sandboxed(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def thumbnail(input_path: str | Path, output_path: str | Path, time: float = 0.0) -> None:
@@ -296,9 +294,7 @@ def thumbnail(input_path: str | Path, output_path: str | Path, time: float = 0.0
     ]
     logger.debug("Generating thumbnail: %s", cmd)
 
-    result = subprocess.run(  # nosec B603 — tokenized args, no shell=True
-        cmd, capture_output=True, text=True,
-    )
+    result = run_sandboxed(cmd)
     if result.returncode != 0:
         raise FFmpegError(f"thumbnail generation failed (code={result.returncode}): {result.stderr.strip()}")
 

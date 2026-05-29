@@ -4,6 +4,10 @@ Uses WAL mode for concurrent access.  Handles JSON serialisation of
 complex types (datetimes, Paths, lists, dicts) transparently.
 
 Database path: ``~/.config/moment/clips.db``
+
+When ``pysqlcipher3`` is installed, the clips database is encrypted at
+rest using a 256-bit key stored in the system keyring.  If the library
+or keyring is unavailable, the DB opens in plaintext mode with a warning.
 """
 
 from __future__ import annotations
@@ -45,6 +49,101 @@ if TYPE_CHECKING:
     from moment.core.config import Config
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Encrypted connection — pysqlcipher3 (optional)
+# ---------------------------------------------------------------------------
+
+_ENCRYPTION_WARNING_LOGGED = False
+
+
+def _get_or_create_db_key() -> bytes | None:
+    """Return the 256-bit DB encryption key from the system keyring.
+
+    Generates and stores a new key on first access.  Returns ``None``
+    if ``keyring`` is not installed or the keyring backend fails.
+    """
+    try:
+        import keyring  # type: ignore[import-untyped]
+    except ImportError:
+        return None
+
+    try:
+        key = keyring.get_password("moment", "db_encryption_key")
+        if key is not None:
+            return key.encode()
+    except Exception:
+        pass
+
+    # Generate a new 256-bit key and persist it
+    import secrets
+
+    new_key = secrets.token_hex(32)  # 256 bits → 64 hex chars
+    try:
+        keyring.set_password("moment", "db_encryption_key", new_key)
+        logger.info("Generated and stored new DB encryption key in keyring")
+        return new_key.encode()
+    except Exception as exc:
+        logger.warning("Could not store DB encryption key in keyring: %s", exc)
+        # Return the key anyway — but it won't survive restart
+        return new_key.encode()
+
+
+def _connect_encrypted(db_path: str) -> sqlite3.Connection:
+    """Open the database with encryption if pysqlcipher3 + keyring are available.
+
+    Falls back to plain ``sqlite3.connect()`` when:
+        - ``pysqlcipher3`` is not installed
+        - ``keyring`` is not installed or fails
+        - ``libsqlcipher`` is not on the system
+
+    Logs a single WARNING per process for the plaintext fallback.
+
+    Args:
+        db_path: Absolute path to the ``.db`` file.
+
+    Returns:
+        A ``sqlite3.Connection`` (plain or encrypted).
+    """
+    global _ENCRYPTION_WARNING_LOGGED
+
+    # 1. Try pysqlcipher3
+    try:
+        import pysqlcipher3.dbapi2 as sqlcipher  # type: ignore[import-untyped]
+    except ImportError:
+        if not _ENCRYPTION_WARNING_LOGGED:
+            logger.warning(
+                "pysqlcipher3 not installed — database will be PLAINTEXT. "
+                "Install 'moment[encrypted-db]' for at-rest encryption."
+            )
+            _ENCRYPTION_WARNING_LOGGED = True
+        return sqlite3.connect(db_path, check_same_thread=False)
+
+    # 2. Get encryption key from keyring
+    key = _get_or_create_db_key()
+    if key is None:
+        if not _ENCRYPTION_WARNING_LOGGED:
+            logger.warning(
+                "keyring not available — database will be PLAINTEXT"
+            )
+            _ENCRYPTION_WARNING_LOGGED = True
+        return sqlite3.connect(db_path, check_same_thread=False)
+
+    # 3. Open with encryption
+    try:
+        conn = sqlcipher.connect(db_path, check_same_thread=False)
+        conn.execute(f"PRAGMA key = \"x'{key.hex()}'\"")
+        # Verify the key works by running a simple query
+        conn.execute("SELECT count(*) FROM sqlite_master")
+        logger.info("Opened encrypted database with pysqlcipher3")
+        return conn
+    except Exception as exc:
+        if not _ENCRYPTION_WARNING_LOGGED:
+            logger.warning(
+                "pysqlcipher3 connection failed: %s — falling back to plaintext", exc
+            )
+            _ENCRYPTION_WARNING_LOGGED = True
+        return sqlite3.connect(db_path, check_same_thread=False)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -190,7 +289,7 @@ def _row_to_clip(row: sqlite3.Row, tags: list[str] | None = None) -> Clip:
         r2_url=row["r2_url"],
         r2_path=row["r2_path"],
         copy_count=row["copy_count"] or 0,
-        visibility=_parse_enum(row["visibility"], ClipVisibility, ClipVisibility.PRIVATE),
+        visibility=_parse_enum(row["visibility"], ClipVisibility, ClipVisibility.PUBLIC),
         created_at=_parse_datetime(row["created_at"]) or datetime.now(timezone.utc),
         deleted_at=_parse_datetime(row["deleted_at"]),
         protect_from_retention=bool(row["protect_from_retention"]),
@@ -200,6 +299,7 @@ def _row_to_clip(row: sqlite3.Row, tags: list[str] | None = None) -> Clip:
         updated_at=_parse_datetime(row["updated_at"]) or datetime.now(timezone.utc),
         watched_at=_parse_datetime(row["watched_at"]),
         watch_count=row["watch_count"] or 0,
+        discord_user_id=row["discord_user_id"] or "",
     )
 
 
@@ -238,6 +338,7 @@ def _clip_to_row(clip: Clip) -> dict[str, Any]:
         "updated_at": clip.updated_at.isoformat(),
         "watched_at": clip.watched_at.isoformat() if clip.watched_at else None,
         "watch_count": clip.watch_count,
+        "discord_user_id": clip.discord_user_id,
     }
 
 
@@ -261,7 +362,7 @@ class Store:
         self._db_path = db_path or os.path.join(get_db_dir(), "clips.db")
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
 
-        self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
+        self._conn = _connect_encrypted(self._db_path)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
@@ -275,6 +376,7 @@ class Store:
         self._migrate_old_dirs()
 
         self._init_db()
+        self._migrate_discord_user_id()
         self._migrate_json()
         self._migrate_discord_token()
 
@@ -331,6 +433,20 @@ class Store:
             "DELETE FROM settings WHERE key = ?", ("discord_bot_token",)
         )
         self._conn.commit()
+
+    def _migrate_discord_user_id(self) -> None:
+        """Add ``discord_user_id`` column if it doesn't exist (pre-v0.2 migration)."""
+        try:
+            rows = self._conn.execute("PRAGMA table_info(clips)").fetchall()
+            columns = {r["name"] for r in rows}
+            if "discord_user_id" not in columns:
+                self._conn.execute(
+                    "ALTER TABLE clips ADD COLUMN discord_user_id TEXT NOT NULL DEFAULT ''"
+                )
+                logger.info("Added discord_user_id column to clips table")
+            self._conn.commit()
+        except sqlite3.Error:
+            pass
 
     def _migrate_old_dirs(self) -> None:
         """Migrate config & data from old ``clip-tray`` dirs to ``moment`` dirs.
@@ -445,7 +561,7 @@ class Store:
                     folder=entry.get("folder"),
                     favorite=bool(entry.get("favorite", False)),
                     status=_parse_enum(entry.get("status"), ClipStatus, ClipStatus.DONE),
-                    visibility=_parse_enum(entry.get("visibility"), ClipVisibility, ClipVisibility.PRIVATE),
+                    visibility=_parse_enum(entry.get("visibility"), ClipVisibility, ClipVisibility.PUBLIC),
                     clip_type=ClipType.VIDEO,
                 )
                 self.insert_clip(clip)
@@ -521,6 +637,8 @@ class Store:
         clip_type: ClipType | None = None,
         search: str | None = None,
         tag: str | None = None,
+        visibility: ClipVisibility | None = None,
+        owner_id: str | None = None,
     ) -> tuple[str, list[Any]]:
         """Build a WHERE clause and parameter list for clip queries.
 
@@ -557,6 +675,28 @@ class Store:
             )
             params.append(tag)
 
+        # Visibility enforcement
+        if visibility is not None:
+            # Exact visibility filter (e.g. PUBLIC only for /recent)
+            where.append("visibility = ?")
+            params.append(visibility.value)
+        elif owner_id is not None:
+            # Owner sees: PUBLIC + UNLISTED + own PRIVATE clips
+            # Guest sees: PUBLIC + UNLISTED only
+            where.append(
+                "(visibility IN (?, ?) OR (visibility = ? AND discord_user_id = ?))"
+            )
+            params.extend([
+                ClipVisibility.PUBLIC.value,
+                ClipVisibility.UNLISTED.value,
+                ClipVisibility.PRIVATE.value,
+                owner_id,
+            ])
+        else:
+            # No owner context: exclude PRIVATE clips (default safe behavior)
+            where.append("visibility != ?")
+            params.append(ClipVisibility.PRIVATE.value)
+
         where_clause = f"WHERE {' AND '.join(where)}" if where else ""
         return where_clause, params
 
@@ -574,8 +714,17 @@ class Store:
         limit: int = 50,
         offset: int = 0,
         sort_by: str = "-recorded_at",
+        visibility: ClipVisibility | None = None,
+        owner_id: str | None = None,
     ) -> list[Clip]:
-        """Return a filtered, paged list of clips."""
+        """Return a filtered, paged list of clips.
+
+        Visibility filtering:
+            - ``visibility=X`` returns only clips with that exact visibility.
+            - ``owner_id=user`` returns PUBLIC + UNLISTED + PRIVATE clips
+              owned by *user*.
+            - Neither: excludes PRIVATE clips (safe guest default).
+        """
         where_clause, params = self._build_clip_where(
             status=status,
             game=game,
@@ -585,6 +734,8 @@ class Store:
             clip_type=clip_type,
             search=search,
             tag=tag,
+            visibility=visibility,
+            owner_id=owner_id,
         )
         # Parse sort_by: leading "-" means descending
         if sort_by.startswith("-"):
@@ -626,6 +777,8 @@ class Store:
         clip_type: ClipType | None = None,
         search: str | None = None,
         tag: str | None = None,
+        visibility: ClipVisibility | None = None,
+        owner_id: str | None = None,
     ) -> int:
         """Return the number of clips matching filters."""
         where_clause, params = self._build_clip_where(
@@ -637,6 +790,8 @@ class Store:
             clip_type=clip_type,
             search=search,
             tag=tag,
+            visibility=visibility,
+            owner_id=owner_id,
         )
         query = f"SELECT COUNT(*) as cnt FROM clips {where_clause}"  # nosec
         row = self._conn.execute(query, params).fetchone()
@@ -800,16 +955,81 @@ class Store:
     # Webhooks
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Webhook encryption key (Fernet)
+    # ------------------------------------------------------------------
+
+    _fernet_lock: "threading.Lock | None" = None
+    _fernet_cache: "Fernet | None" = None
+
+    @staticmethod
+    def _get_or_create_fernet() -> "Fernet":
+        """Return a Fernet instance, generating + persisting the key on first call.
+
+        Cache order:
+            1. In-memory cache (survives missing Config; shared across Store instances)
+            2. Config-backed persisted key (survives restarts)
+            3. Generate a new key (only when neither cache nor config exists)
+
+        Thread-safe: uses a class-level lock to prevent duplicate key generation.
+        """
+        import threading
+        from cryptography.fernet import Fernet
+
+        # Fast path: in-memory cache hit (no lock needed for reads of immutable refs)
+        if Store._fernet_cache is not None:
+            return Store._fernet_cache
+
+        # Slow path: take lock to prevent race on cache population
+        if Store._fernet_lock is None:
+            Store._fernet_lock = threading.Lock()
+
+        with Store._fernet_lock:
+            # Double-check after acquiring lock
+            if Store._fernet_cache is not None:
+                return Store._fernet_cache
+
+            cfg = _get_config()
+            if cfg is not None:
+                key_b64 = cfg.get("webhook_encryption_key", None)
+                if key_b64:
+                    fernet = Fernet(key_b64.encode())
+                    Store._fernet_cache = fernet
+                    return fernet
+
+            # Generate new key and persist it
+            key = Fernet.generate_key()
+            fernet = Fernet(key)
+            Store._fernet_cache = fernet
+            if cfg is not None:
+                cfg.set("webhook_encryption_key", key.decode())
+            return fernet
+
+    @classmethod
+    def reset_fernet_cache(cls) -> None:
+        """Clear the in-memory Fernet cache (for test isolation)."""
+        if cls._fernet_lock is not None:
+            with cls._fernet_lock:
+                cls._fernet_cache = None
+        else:
+            cls._fernet_cache = None
+
     def save_webhook(self, wh: Webhook) -> Webhook:
         if not _is_secure_url(wh.url):
             raise ValueError(f"Invalid webhook URL: must be HTTPS (got {wh.url[:30]})")
+        try:
+            fernet = self._get_or_create_fernet()
+            encrypted_url = fernet.encrypt(wh.url.encode()).decode()
+        except Exception:
+            logger.warning("Fernet encrypt failed — storing webhook URL as plaintext")
+            encrypted_url = wh.url
         with self._tx() as cur:
             cur.execute(
                 """INSERT OR REPLACE INTO webhooks
                    (id, url, name, enabled, notify_on, per_game_filter)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (
-                    wh.id, wh.url, wh.name,
+                    wh.id, encrypted_url, wh.name,
                     int(wh.enabled),
                     _json_dumps(wh.notify_on),
                     _json_dumps(wh.per_game_filter),
@@ -817,19 +1037,61 @@ class Store:
             )
         return wh
 
+    @staticmethod
+    def _redact_webhook_url(url: str) -> str:
+        """Return a webhook URL with the token portion replaced by '[REDACTED]'."""
+        import re
+        m = re.match(r"(https://discord\.com/api/webhooks/\d+/)(.*)", url)
+        if m:
+            return m.group(1) + "[REDACTED]"
+        # Fallback: try to decrypt, if it fails just truncate
+        if len(url) > 60:
+            return url[:57] + "..."
+        return url
+
     def list_webhooks(self) -> list[Webhook]:
         rows = self._conn.execute("SELECT * FROM webhooks").fetchall()
-        return [
-            Webhook(
+        result: list[Webhook] = []
+        for r in rows:
+            stored = r["url"]
+            try:
+                from cryptography.fernet import Fernet, InvalidToken
+                fernet = self._get_or_create_fernet()
+                try:
+                    real_url = fernet.decrypt(stored.encode()).decode()
+                except InvalidToken:
+                    real_url = stored  # legacy plaintext
+            except ImportError:
+                real_url = stored
+            # Redact the token for display
+            redacted = self._redact_webhook_url(real_url)
+            result.append(Webhook(
                 id=r["id"],
-                url=r["url"],
+                url=redacted,
                 name=r["name"] or "",
                 enabled=bool(r["enabled"]),
                 notify_on=_json_loads(r["notify_on"]) or [],
                 per_game_filter=_json_loads(r["per_game_filter"]),
-            )
-            for r in rows
-        ]
+            ))
+        return result
+
+    def get_webhook_url(self, webhook_id: str) -> str | None:
+        """Return the decrypted (real) URL for a webhook, for dispatch use only."""
+        row = self._conn.execute(
+            "SELECT url FROM webhooks WHERE id = ?", (webhook_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        stored = row["url"]
+        try:
+            from cryptography.fernet import Fernet, InvalidToken
+            fernet = self._get_or_create_fernet()
+            try:
+                return fernet.decrypt(stored.encode()).decode()
+            except InvalidToken:
+                return stored  # legacy plaintext
+        except ImportError:
+            return stored
 
     def delete_webhook(self, webhook_id: str) -> None:
         with self._tx() as cur:
@@ -1239,7 +1501,7 @@ CREATE TABLE IF NOT EXISTS clips (
     r2_url          TEXT,
     r2_path         TEXT,
     copy_count      INTEGER NOT NULL DEFAULT 0,
-    visibility      TEXT NOT NULL DEFAULT 'private',
+    visibility      TEXT NOT NULL DEFAULT 'public',
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     deleted_at      TEXT,
     protect_from_retention INTEGER NOT NULL DEFAULT 0,
@@ -1248,7 +1510,8 @@ CREATE TABLE IF NOT EXISTS clips (
     original_filename TEXT,
     updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
     watched_at      TEXT,
-    watch_count     INTEGER NOT NULL DEFAULT 0
+    watch_count     INTEGER NOT NULL DEFAULT 0,
+    discord_user_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_clips_stem ON clips(stem);

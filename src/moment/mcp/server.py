@@ -39,12 +39,12 @@ def check_available() -> bool:
     return _FASTMCP_AVAILABLE
 
 
-# Set of mutation tool names — these require auth
-_MUTATION_TOOLS = frozenset({
-    "enqueue_encode",
-    "enqueue_upload",
-    "save_game_profile",
-    "test_webhook",
+# Exact route paths for mutation tools — used for precise auth matching
+_MUTATION_ROUTES = frozenset({
+    "/tools/enqueue_encode",
+    "/tools/enqueue_upload",
+    "/tools/save_game_profile",
+    "/tools/test_webhook",
 })
 
 
@@ -132,8 +132,8 @@ def _add_auth_middleware(server: "FastMCP", token: str) -> None:
     @app.middleware("http")
     async def _mcp_auth_middleware(request, call_next):
         path = request.url.path
-        # Check if this request targets a mutation tool
-        is_mutation = any(tool in path for tool in _MUTATION_TOOLS)
+        # Exact path match — prevents bypass via crafted paths (e.g. /tools/enqueue_encode_evil)
+        is_mutation = path in _MUTATION_ROUTES
         if is_mutation:
             auth_header = request.headers.get("Authorization", "")
             expected = f"Bearer {token}"
@@ -152,4 +152,4 @@ def _add_auth_middleware(server: "FastMCP", token: str) -> None:
         response = await call_next(request)
         return response
 
-    logger.debug("Auth middleware registered for %d mutation tools", len(_MUTATION_TOOLS))
+    logger.debug("Auth middleware registered for %d mutation routes", len(_MUTATION_ROUTES))

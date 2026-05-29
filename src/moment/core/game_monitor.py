@@ -69,6 +69,7 @@ class GameMonitor:
         self._lock = threading.Lock()
         self._timer: threading.Timer | None = None
         self._running = False
+        self._proc_warned: bool = False  # tracks whether we've already warned about restricted /proc
 
     # ------------------------------------------------------------------
     # Public API
@@ -128,6 +129,7 @@ class GameMonitor:
 
     def _scan(self) -> None:
         """Scan /proc for known game processes."""
+        self._check_proc_accessible()
         detected = self._find_game_process()
 
         with self._lock:
@@ -187,6 +189,22 @@ class GameMonitor:
             pass
 
         return None
+
+    def _check_proc_accessible(self) -> None:
+        """Log a warning (once) if /proc is restricted (e.g. hidepid=2).
+
+        Game detection depends on being able to read ``/proc/*/comm``.
+        On hardened systems this may be denied — warn the user so they
+        understand why game detection is silent.
+        """
+        if self._proc_warned:
+            return
+        self._proc_warned = True
+        if not os.access("/proc/1/comm", os.R_OK):
+            logger.warning(
+                "Game detection disabled — /proc is restricted (hidepid=2). "
+                "Run without `hidepid=2` mount option for game detection."
+            )
 
     @staticmethod
     def _check_gpu_utilization() -> bool:

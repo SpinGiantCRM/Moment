@@ -1,8 +1,15 @@
 """Retention manager — age-based and disk-space retention policies.
 
-- Source files (MKV): delete >90 days old
-- Encoded files (MP4): delete >3 years old
+- Source files (MKV): trash >90 days old
+- Encoded files (MP4): trash >3 years old
 - Cloud (R2): 8 GB rolling FIFO limit
+
+Files are moved to a trash directory (``~/.local/share/moment/trash/``)
+instead of being permanently deleted.  Trash is auto-purged after
+``retention_trash_days`` (default: 30).  Set to 0 to skip trash entirely.
+
+ERROR / CORRUPT clips are skipped by default — set
+``retention_remove_corrupt=true`` to override.
 
 Runs on startup and every 24 hours.
 """
@@ -11,15 +18,17 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
+from moment.core.config import Config
 from moment.core.models import Clip, ClipStatus
 from moment.core.store import Store
-from moment.utils.system import human_size
+from moment.utils.system import ensure_dir, human_size
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +37,12 @@ SOURCE_MAX_AGE_DAYS = 90
 ENCODED_MAX_AGE_DAYS = 3 * 365  # ~3 years
 CLOUD_SIZE_LIMIT_BYTES = 8 * 1024 * 1024 * 1024  # 8 GB
 RETENTION_INTERVAL = 24 * 3600  # 24 hours
+
+# ---------------------------------------------------------------------------
+# Trash paths
+# ---------------------------------------------------------------------------
+
+_DEFAULT_TRASH_DIR = os.path.expanduser("~/.local/share/moment/trash")
 
 
 class RetentionManager:
@@ -45,21 +60,40 @@ class RetentionManager:
         encoded_max_age_days: int = ENCODED_MAX_AGE_DAYS,
         cloud_size_limit_bytes: int = CLOUD_SIZE_LIMIT_BYTES,
         on_purged: Callable[[int, int], None] | None = None,
+        config: Config | None = None,
+        trash_dir: str | None = None,
     ) -> None:
         """Args:
             store: The application store.
-            source_max_age_days: Delete source MKVs older than this.
-            encoded_max_age_days: Delete encoded MP4s older than this.
+            source_max_age_days: Trash source MKVs older than this.
+            encoded_max_age_days: Trash encoded MP4s older than this.
             cloud_size_limit_bytes: Cloud storage limit (FIFO eviction).
             on_purged: Called as ``on_purged(count, freed_bytes)`` after purge.
+            config: Optional Config for reading ``retention_trash_days``
+                and ``retention_remove_corrupt`` settings.
+            trash_dir: Override trash directory (useful for testing).
         """
         self._store = store
         self._source_max_age = source_max_age_days
         self._encoded_max_age = encoded_max_age_days
         self._cloud_limit = cloud_size_limit_bytes
         self._on_purged = on_purged
+        self._config = config
+        self._trash_dir = trash_dir or _DEFAULT_TRASH_DIR
         self._timer: threading.Timer | None = None
         self._running = False
+
+        # Cache config values at init time (avoid repeated SQLite reads)
+        self._trash_days: int = (
+            config.get("retention_trash_days", 30) if config else 30
+        )
+        self._remove_corrupt: bool = (
+            config.get("retention_remove_corrupt", False) if config else False
+        )
+
+        # Ensure trash dir exists once (idempotent)
+        if self._trash_days > 0:
+            ensure_dir(self._trash_dir)
 
     # ------------------------------------------------------------------
     # Public API
@@ -140,7 +174,7 @@ class RetentionManager:
             self._schedule()
 
     def _enforce_source_age(self) -> tuple[int, int]:
-        """Delete source MKV files older than the threshold."""
+        """Trash source MKV files older than the threshold."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=self._source_max_age)
         purged = 0
         freed = 0
@@ -154,23 +188,24 @@ class RetentionManager:
         for clip in clips:
             if clip.protect_from_retention:
                 continue
+            if self._skip_error_corrupt(clip):
+                continue
             if clip.recorded_at >= cutoff:
                 continue
-            # Check if the file still exists
             if clip.source_path.is_file():
                 try:
                     size = clip.source_path.stat().st_size
-                    clip.source_path.unlink()
+                    self._trash_file(clip.source_path, clip.stem)
                     freed += size
                     purged += 1
-                    logger.debug("Retention: deleted source %s (%s old)", clip.stem, _age_str(clip.recorded_at))
+                    logger.debug("Retention: trashed source %s (%s old)", clip.stem, _age_str(clip.recorded_at))
                 except OSError:
                     pass
 
         return purged, freed
 
     def _enforce_encoded_age(self) -> tuple[int, int]:
-        """Delete encoded MP4 files older than the threshold."""
+        """Trash encoded MP4 files older than the threshold."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=self._encoded_max_age)
         purged = 0
         freed = 0
@@ -184,6 +219,8 @@ class RetentionManager:
         for clip in clips:
             if clip.protect_from_retention:
                 continue
+            if self._skip_error_corrupt(clip):
+                continue
             if clip.encoded_path is None:
                 continue
             if clip.recorded_at >= cutoff:
@@ -191,14 +228,41 @@ class RetentionManager:
             if clip.encoded_path.is_file():
                 try:
                     size = clip.encoded_path.stat().st_size
-                    clip.encoded_path.unlink()
+                    self._trash_file(clip.encoded_path, clip.stem)
                     freed += size
                     purged += 1
-                    logger.debug("Retention: deleted encoded %s (%s old)", clip.stem, _age_str(clip.recorded_at))
+                    logger.debug("Retention: trashed encoded %s (%s old)", clip.stem, _age_str(clip.recorded_at))
                 except OSError:
                     pass
 
         return purged, freed
+
+    def _skip_error_corrupt(self, clip: Clip) -> bool:
+        """Return ``True`` if this clip should be skipped (ERROR/CORRUPT).
+
+        By default, clips with status ``ERROR`` or ``CORRUPT`` are NOT
+        retention-purged.  Set config ``retention_remove_corrupt=true``
+        to override.
+        """
+        if clip.status in (ClipStatus.ERROR, ClipStatus.CORRUPT):
+            return not self._remove_corrupt
+        return False
+
+    def _trash_file(self, path: Path, stem: str) -> None:
+        """Move *path* to the trash directory with a timestamp + microsecond suffix.
+
+        When ``retention_trash_days=0``, the file is permanently deleted
+        instead of moved to trash.
+        """
+        if self._trash_days == 0:
+            path.unlink()
+            logger.debug("Retention: permanently deleted %s (trash_days=0)", path)
+            return
+
+        ts = datetime.now().strftime("%Y%m%dT%H%M%S_%f")
+        dest = Path(self._trash_dir) / f"{stem}_{ts}{path.suffix}"
+        shutil.move(str(path), str(dest))
+        logger.debug("Retention: trashed %s → %s", path.name, dest)
 
     def _enforce_cloud_limit(self) -> tuple[int, int]:
         """FIFO eviction from cloud storage when total exceeds the limit."""

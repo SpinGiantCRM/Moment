@@ -148,11 +148,13 @@ class ClipDelegate(QStyledItemDelegate):
         thumb_y = option.rect.y() + PADDING
         thumb_rect = QRectF(thumb_x, thumb_y, THUMB_W, THUMB_H)
 
-        # Clip thumbnail to rounded rect
+        # Clip thumbnail to rounded rect — only if painter has a valid device
+        # (offscreen/headless tests may have a null paint device → skip clip)
         painter.save()
-        clip_path = QPainterPath()
-        clip_path.addRoundedRect(thumb_rect, THUMB_RADIUS, THUMB_RADIUS)
-        painter.setClipPath(clip_path)
+        if painter.isActive():
+            clip_path = QPainterPath()
+            clip_path.addRoundedRect(thumb_rect, THUMB_RADIUS, THUMB_RADIUS)
+            painter.setClipPath(clip_path)
 
         # Draw thumbnail or placeholder
         pixmap = self._get_thumbnail(clip_id, thumb_path)

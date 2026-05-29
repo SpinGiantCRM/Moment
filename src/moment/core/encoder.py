@@ -11,6 +11,8 @@ import logging
 import os
 import subprocess  # nosec B404 — required for external tool invocation
 import threading
+
+from moment.utils.subprocess import run_sandboxed
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -134,11 +136,7 @@ class Encoder:
         with GPU_SEMAPHORE:
             logger.info("Encoding %s → %s …", clip.stem, output_path.name)
             find_ffmpeg()
-            proc = subprocess.run(  # nosec B603 — tokenized args, no shell=True
-                cmd,
-                capture_output=True,
-                text=True,
-            )
+            proc = run_sandboxed(cmd)
             if proc.returncode != 0:
                 msg = f"ffmpeg encode failed (code={proc.returncode}): {proc.stderr.strip()[-300:]}"
                 logger.error(msg)

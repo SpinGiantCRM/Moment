@@ -13,6 +13,8 @@ import os
 import re
 import subprocess  # nosec B404 — required for external tool invocation
 from datetime import datetime, timezone
+
+from moment.utils.subprocess import run_sandboxed
 from pathlib import Path
 from typing import Callable
 
@@ -106,7 +108,7 @@ class Screenshot:
 
         logger.info("Fallback screenshot: %s", cmd)
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)  # nosec B603 — tokenized args, no shell=True
+            result = run_sandboxed(cmd, timeout=10)
         except subprocess.TimeoutExpired as exc:
             raise ScreenshotError(f"Screenshot capture timed out: {exc}") from exc
         if result.returncode != 0:
@@ -228,7 +230,7 @@ class Screenshot:
             "-vf", f"crop={w}:{h}:{x}:{y}",
             str(output),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603 — tokenized args, no shell=True
+        result = run_sandboxed(cmd)
         if result.returncode != 0:
             logger.warning("Crop failed, returning original: %s", result.stderr.strip()[-200:])
             output.unlink(missing_ok=True)
@@ -251,7 +253,7 @@ class Screenshot:
                 "-q:v", "2",
                 str(output),
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)  # nosec B603 — tokenized args, no shell=True
+            result = run_sandboxed(cmd, timeout=10)
             if result.returncode != 0:
                 logger.warning("Thumbnail generation failed: %s", result.stderr.strip()[-200:])
         except (FileNotFoundError, subprocess.TimeoutExpired, FFmpegError) as exc:

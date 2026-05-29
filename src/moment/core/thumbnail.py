@@ -10,6 +10,8 @@ import logging
 import os
 import subprocess  # nosec B404 — required for external tool invocation
 import threading
+
+from moment.utils.subprocess import run_sandboxed
 from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
@@ -179,7 +181,7 @@ class Thumbnailer:
             str(output),
         ]
         logger.debug("Thumbnail: %s", cmd)
-        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603 — tokenized args, no shell=True
+        result = run_sandboxed(cmd)
         if result.returncode != 0:
             raise FFmpegError(f"thumbnail failed (code={result.returncode}): {result.stderr.strip()[-200:]}")
         if not output.is_file() or output.stat().st_size == 0:

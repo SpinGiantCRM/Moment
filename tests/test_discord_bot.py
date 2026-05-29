@@ -178,3 +178,150 @@ class TestDiscordBotSendWebhook:
         webhook.enabled = False
         result = bot.send_webhook(clip, webhook)
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Role-based auth (Spec 14)
+# ---------------------------------------------------------------------------
+
+
+class TestRoleAuth:
+    """Tests for _require_role and _get_allowed_roles helpers."""
+
+    def test_allowed_roles_default(self):
+        """Default role should be 'Moment User'."""
+        import os
+        import tempfile
+        from pathlib import Path
+
+        from moment.core.store import Store, set_store_config
+        from moment.core.config import Config
+
+        # Use temp DB
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            cfg = Config(db_path=db_path)
+            cfg.set("discord_allowed_roles", "Moment User")
+
+            from moment.core.discord_bot import _get_allowed_roles
+            store = Store(db_path=db_path)
+            roles = _get_allowed_roles(store)
+            assert "Moment User" in roles
+        finally:
+            for sfx in ("", "-wal", "-shm"):
+                try:
+                    os.unlink(db_path + sfx)
+                except FileNotFoundError:
+                    pass
+
+    def test_allowed_roles_custom(self):
+        """Custom comma-separated roles work."""
+        import os
+        import tempfile
+
+        from moment.core.store import Store
+        from moment.core.config import Config
+
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            cfg = Config(db_path=db_path)
+            cfg.set("discord_allowed_roles", "VIP,  Editor , Admin")
+
+            from moment.core.discord_bot import _get_allowed_roles
+            store = Store(db_path=db_path)
+            roles = _get_allowed_roles(store)
+            assert roles == {"VIP", "Editor", "Admin"}
+        finally:
+            for sfx in ("", "-wal", "-shm"):
+                try:
+                    os.unlink(db_path + sfx)
+                except FileNotFoundError:
+                    pass
+
+
+# ---------------------------------------------------------------------------
+# Visibility enforcement in Discord (Spec 24)
+# ---------------------------------------------------------------------------
+
+
+class TestDiscordVisibility:
+    """Tests for visibility enforcement in Discord slash commands."""
+
+    def test_get_caller_id_returns_user_id_str(self):
+        """_get_caller_id should return the user's ID as a string."""
+        from moment.core.discord_bot import _get_caller_id
+        interaction = MagicMock()
+        interaction.user.id = 123456789
+        assert _get_caller_id(interaction) == "123456789"
+
+    def test_build_clip_embed_strips_r2_by_default(self):
+        """_build_clip_embed should NOT include R2 URL unless include_url=True."""
+        with patch("moment.core.discord_bot._DISCORD_AVAILABLE", True):
+            import discord as _discord
+            from moment.core.discord_bot import _build_clip_embed
+
+            clip = Clip(
+                id="emb",
+                stem="emb",
+                source_path="/tmp/emb.mkv",
+                duration=10.0,
+                file_size=1000000,
+                title="Test",
+                status=ClipStatus.DONE,
+                clip_type=ClipType.VIDEO,
+                r2_url="https://cdn.example.com/test.mp4",
+            )
+            embed = _build_clip_embed(clip, include_url=False)
+            # Check that the URL field says to use --include-url
+            url_field = next(
+                (f for f in embed.fields if f.name == "URL"), None
+            )
+            assert url_field is not None
+            assert "include-url" in url_field.value
+
+    def test_build_clip_embed_includes_url_when_flagged(self):
+        """_build_clip_embed should include R2 URL when include_url=True."""
+        with patch("moment.core.discord_bot._DISCORD_AVAILABLE", True):
+            from moment.core.discord_bot import _build_clip_embed
+
+            clip = Clip(
+                id="emb2",
+                stem="emb2",
+                source_path="/tmp/emb2.mkv",
+                duration=10.0,
+                file_size=1000000,
+                title="Test",
+                status=ClipStatus.DONE,
+                clip_type=ClipType.VIDEO,
+                r2_url="https://cdn.example.com/test2.mp4",
+            )
+            embed = _build_clip_embed(clip, include_url=True)
+            url_field = next(
+                (f for f in embed.fields if f.name == "URL"), None
+            )
+            assert url_field is not None
+            assert "test2.mp4" in url_field.value
+
+    def test_build_clip_embed_no_url_when_no_r2(self):
+        """_build_clip_embed should not add URL field if no r2_url."""
+        with patch("moment.core.discord_bot._DISCORD_AVAILABLE", True):
+            from moment.core.discord_bot import _build_clip_embed
+
+            clip = Clip(
+                id="emb3",
+                stem="emb3",
+                source_path="/tmp/emb3.mkv",
+                duration=10.0,
+                file_size=1000000,
+                title="Test",
+                status=ClipStatus.DONE,
+                clip_type=ClipType.VIDEO,
+                r2_url=None,
+            )
+            embed = _build_clip_embed(clip, include_url=True)
+            url_field = next(
+                (f for f in embed.fields if f.name == "URL"), None
+            )
+            assert url_field is None

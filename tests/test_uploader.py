@@ -198,6 +198,60 @@ class TestRcloneAvailability:
 
 
 # ---------------------------------------------------------------------------
+# Log sanitization
+# ---------------------------------------------------------------------------
+
+class TestLogSanitization:
+    """Verify that remote/bucket names are not leaked in info-level logs."""
+
+    def test_upload_success_log_sanitized(self, test_path: Path, uploader: Uploader) -> None:
+        """Upload success message should show filename only, not remote:bucket/path."""
+        with (
+            patch.object(uploader, "_do_copy"),
+            patch.object(uploader, "_verify_upload", return_value=True),
+            patch.object(uploader, "_ensure_rclone"),
+            patch("moment.core.uploader.logger") as mock_logger,
+        ):
+            uploader.upload(test_path)
+            # Find the info-level log calls
+            info_calls = [
+                c for c in mock_logger.info.call_args_list
+                if c[0] and isinstance(c[0][0], str)
+            ]
+            for call in info_calls:
+                msg = call[0][0] % call[0][1:] if len(call[0]) > 1 else call[0][0]
+                # Should not contain the remote:bucket prefix
+                assert "test-remote:test-bucket" not in str(msg), f"Leaked remote info: {msg}"
+
+    def test_build_url_uses_debug_not_info(self, uploader: Uploader) -> None:
+        """_build_url without base_url should log at debug level, not info."""
+        with patch("moment.core.uploader.logger") as mock_logger:
+            result = uploader._build_url("foo.mp4")
+            # Should not call info
+            info_calls = [
+                c for c in mock_logger.info.call_args_list
+                if c[0] and "rclone path" in str(c[0])
+            ]
+            assert len(info_calls) == 0
+
+    def test_do_copy_logs_sanitized(self, uploader: Uploader) -> None:
+        """_do_copy should not leak the full rclone command in info/warning/error logs."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("moment.core.uploader.logger") as mock_logger,
+        ):
+            mock_run.return_value.returncode = 0
+            uploader._do_copy(Path("/tmp/test.mp4"), "test-remote:test-bucket/foo.mp4")
+            info_calls = [
+                c for c in mock_logger.info.call_args_list
+                if c[0]
+            ]
+            for call in info_calls:
+                msg = call[0][0] if call[0] else ""
+                assert "test-remote:test-bucket" not in str(msg)
+
+
+# ---------------------------------------------------------------------------
 # Retry config
 # ---------------------------------------------------------------------------
 
@@ -210,3 +264,150 @@ class TestRetryConfig:
     def test_retry_delays_are_increasing(self) -> None:
         for i in range(1, len(_RETRY_DELAYS)):
             assert _RETRY_DELAYS[i] > _RETRY_DELAYS[i - 1]
+
+
+# ---------------------------------------------------------------------------
+# Total deadline (Spec 20)
+# ---------------------------------------------------------------------------
+
+class TestDeadline:
+    def test_deadline_not_exceeded_for_quick_upload(self, test_path: Path, uploader: Uploader) -> None:
+        """Quick uploads should not trigger the deadline."""
+        with (
+            patch.object(uploader, "_do_copy"),
+            patch.object(uploader, "_verify_upload", return_value=True),
+            patch.object(uploader, "_ensure_rclone"),
+        ):
+            url = uploader.upload(test_path)
+            assert url.startswith("https://")
+
+    def test_deadline_exceeded_raises(self, test_path: Path) -> None:
+        """Upload that exceeds deadline should raise UploaderError."""
+        from moment.core.uploader import _TOTAL_DEADLINE
+
+        u = Uploader(remote="test", bucket="test")
+        with (
+            patch.object(u, "_ensure_rclone"),
+            patch.object(u, "_do_copy"),
+            patch.object(u, "_verify_upload", return_value=True),
+            patch("time.monotonic") as mock_mono,
+            patch("time.sleep"),
+        ):
+            # First call returns 0 (start), second returns > deadline
+            mock_mono.side_effect = [0.0, _TOTAL_DEADLINE + 1.0]
+
+            with pytest.raises(UploaderError, match="deadline exceeded"):
+                u.upload(test_path)
+
+    def test_deadline_checked_each_attempt(self, test_path: Path) -> None:
+        """Deadline is checked before each retry, not just at start."""
+        from moment.core.uploader import _TOTAL_DEADLINE
+
+        u = Uploader(remote="test", bucket="test")
+        with (
+            patch.object(u, "_ensure_rclone"),
+            patch.object(u, "_do_copy") as mock_copy,
+            patch.object(u, "_verify_upload", return_value=False),
+            patch("time.monotonic") as mock_mono,
+            patch("time.sleep"),
+        ):
+            # Attempt 0: time=0, Attempt 1: time > deadline
+            mock_copy.side_effect = subprocess.CalledProcessError(1, "rclone")
+            mock_mono.side_effect = [0.0, _TOTAL_DEADLINE + 1.0]
+
+            with pytest.raises(UploaderError, match="deadline exceeded"):
+                u.upload(test_path)
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker (Spec 20)
+# ---------------------------------------------------------------------------
+
+class TestCircuitBreaker:
+    def setup_method(self):
+        """Reset circuit breaker state before each test."""
+        import moment.core.uploader as up_mod
+        with up_mod.Uploader._failure_lock:
+            up_mod.Uploader._consecutive_failures = 0
+            up_mod.Uploader._circuit_open_until = 0.0
+
+    def test_circuit_breaker_opens_after_consecutive_failures(self, test_path: Path) -> None:
+        """After 3 consecutive failures, the 4th attempt is blocked."""
+        from moment.core.uploader import _CIRCUIT_BREAKER_FAILURES, _CIRCUIT_BREAKER_BACKOFF
+
+        u = Uploader(remote="test", bucket="test")
+
+        # First, cause 3 failures to trip the circuit breaker
+        for _ in range(_CIRCUIT_BREAKER_FAILURES):
+            with (
+                patch.object(u, "_ensure_rclone"),
+                patch.object(u, "_do_copy", side_effect=subprocess.CalledProcessError(1, "rclone")),
+                patch("time.sleep"),
+            ):
+                with pytest.raises(UploaderError, match="failed after"):
+                    u.upload(test_path)
+
+        # Now the 4th attempt should be blocked by circuit breaker
+        with (
+            patch.object(u, "_ensure_rclone"),
+        ):
+            with pytest.raises(UploaderError, match="Circuit breaker open"):
+                u.upload(test_path)
+
+    def test_circuit_breaker_resets_after_success(self, test_path: Path) -> None:
+        """One successful upload resets the circuit breaker."""
+        from moment.core.uploader import _CIRCUIT_BREAKER_FAILURES
+
+        u = Uploader(remote="test", bucket="test")
+
+        # Cause 2 failures (not enough to trip)
+        for _ in range(2):
+            with (
+                patch.object(u, "_ensure_rclone"),
+                patch.object(u, "_do_copy", side_effect=subprocess.CalledProcessError(1, "rclone")),
+                patch("time.sleep"),
+            ):
+                with pytest.raises(UploaderError, match="failed after"):
+                    u.upload(test_path)
+
+        # Now a successful upload should reset the counter
+        with (
+            patch.object(u, "_do_copy"),
+            patch.object(u, "_verify_upload", return_value=True),
+            patch.object(u, "_ensure_rclone"),
+        ):
+            url = u.upload(test_path)
+            assert url.startswith("test:test/")
+
+        # Failures should be reset to 0
+        from moment.core.uploader import Uploader as Up
+        assert Up._consecutive_failures == 0
+
+    def test_circuit_breaker_is_thread_safe(self, test_path: Path) -> None:
+        """Circuit breaker state updates are thread-safe."""
+        import concurrent.futures
+        import moment.core.uploader as up_mod
+
+        with up_mod.Uploader._failure_lock:
+            up_mod.Uploader._consecutive_failures = 0
+            up_mod.Uploader._circuit_open_until = 0.0
+
+        def cause_failure() -> None:
+            u = Uploader(remote="test", bucket="test")
+            with (
+                patch.object(u, "_ensure_rclone"),
+                patch.object(u, "_do_copy", side_effect=subprocess.CalledProcessError(1, "rclone")),
+                patch("time.sleep"),
+            ):
+                try:
+                    u.upload(test_path)
+                except UploaderError:
+                    pass
+
+        # Run 3 failures in parallel — should increment correctly
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+            list(ex.map(lambda _: cause_failure(), range(3)))
+
+        # After exactly 3 failures, circuit breaker should be open
+        with up_mod.Uploader._failure_lock:
+            assert up_mod.Uploader._consecutive_failures >= 3

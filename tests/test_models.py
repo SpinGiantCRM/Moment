@@ -71,7 +71,7 @@ class TestClip:
         assert clip.watch_count == 0
         assert clip.protect_from_retention is False
         assert clip.favorite is False
-        assert clip.visibility == ClipVisibility.PRIVATE
+        assert clip.visibility == ClipVisibility.PUBLIC
         assert clip.clip_type == ClipType.VIDEO
 
     def test_clip_full_fields(self) -> None:

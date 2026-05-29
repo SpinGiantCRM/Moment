@@ -1,14 +1,22 @@
-"""Tests for core/retention.py — age-based and disk-space retention policies."""
+"""Tests for core/retention.py — age-based and disk-space retention policies.
+
+Files are now trashed (moved to ~/.local/share/moment/trash/) instead of
+permanently deleted.  ERROR/CORRUPT clips are skipped by default unless
+``retention_remove_corrupt=true``.  ``retention_trash_days=0`` skips
+trash entirely.
+"""
 
 from __future__ import annotations
 
-import uuid
+import os
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from moment.core.config import Config
 from moment.core.models import Clip, ClipStatus
 from moment.core.retention import (
     CLOUD_SIZE_LIMIT_BYTES,
@@ -21,12 +29,19 @@ from moment.core.store import Store
 
 
 @pytest.fixture
-def manager(store: Store) -> RetentionManager:
+def trash_dir(tmp_path: Path) -> str:
+    """Use a temporary directory as the trash dir."""
+    return str(tmp_path / "trash")
+
+
+@pytest.fixture
+def manager(store: Store, trash_dir: str) -> RetentionManager:
     m = RetentionManager(
         store,
         source_max_age_days=90,
         encoded_max_age_days=1095,
         cloud_size_limit_bytes=CLOUD_SIZE_LIMIT_BYTES,
+        trash_dir=trash_dir,
     )
     yield m
     m.stop()
@@ -71,8 +86,8 @@ class TestAgeString:
 # ---------------------------------------------------------------------------
 
 class TestSourceAge:
-    def test_old_source_deleted(self, manager: RetentionManager, store: Store) -> None:
-        clip = _make_clip(
+    def test_old_source_trashed(self, manager: RetentionManager, store: Store, trash_dir: str) -> None:
+        _make_clip(
             store,
             id="old-source",
             source_path="/tmp/old_source.mkv",
@@ -82,16 +97,19 @@ class TestSourceAge:
 
         with (
             patch("pathlib.Path.is_file", return_value=True),
-            patch("pathlib.Path.unlink"),
             patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move") as mock_move,
         ):
             mock_stat.return_value.st_size = 10_000_000
             purged, freed = manager._enforce_source_age()
             assert purged >= 1
             assert freed > 0
+            mock_move.assert_called_once()
+            dest = mock_move.call_args[0][1]
+            assert dest.startswith(trash_dir)
 
     def test_recent_source_kept(self, manager: RetentionManager, store: Store) -> None:
-        clip = _make_clip(
+        _make_clip(
             store,
             id="recent-source",
             source_path="/tmp/recent_source.mkv",
@@ -102,7 +120,7 @@ class TestSourceAge:
         purged, _ = manager._enforce_source_age()
         assert purged == 0
 
-    def test_protected_clip_not_deleted(self, manager: RetentionManager, store: Store) -> None:
+    def test_protected_clip_not_trashed(self, manager: RetentionManager, store: Store) -> None:
         _make_clip(
             store,
             id="protected",
@@ -121,7 +139,7 @@ class TestSourceAge:
 # ---------------------------------------------------------------------------
 
 class TestEncodedAge:
-    def test_old_encoded_deleted(self, manager: RetentionManager, store: Store) -> None:
+    def test_old_encoded_trashed(self, manager: RetentionManager, store: Store, trash_dir: str) -> None:
         _make_clip(
             store,
             id="old-encoded",
@@ -133,14 +151,17 @@ class TestEncodedAge:
         )
 
         with (
-            patch("pathlib.Path.is_file", return_value=True),
-            patch("pathlib.Path.unlink"),
+            patch("pathlib.Path.is_file", side_effect=lambda: True),
             patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move") as mock_move,
         ):
             mock_stat.return_value.st_size = 5_000_000
             purged, freed = manager._enforce_encoded_age()
             assert purged >= 1
             assert freed > 0
+            mock_move.assert_called_once()
+            dest = mock_move.call_args[0][1]
+            assert dest.startswith(trash_dir)
 
     def test_recent_encoded_kept(self, manager: RetentionManager, store: Store) -> None:
         _make_clip(
@@ -158,7 +179,121 @@ class TestEncodedAge:
 
 
 # ---------------------------------------------------------------------------
-# Cloud FIFO enforcement
+# Error / Corrupt clips are skipped by default
+# ---------------------------------------------------------------------------
+
+class TestErrorCorruptSkipping:
+    def test_error_clip_not_trashed(self, manager: RetentionManager, store: Store) -> None:
+        _make_clip(
+            store,
+            id="error-clip",
+            source_path="/tmp/error_clip.mkv",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=200),
+            status=ClipStatus.ERROR,
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("shutil.move") as mock_move,
+        ):
+            purged, _ = manager._enforce_source_age()
+            assert purged == 0
+            mock_move.assert_not_called()
+
+    def test_corrupt_clip_not_trashed(self, manager: RetentionManager, store: Store) -> None:
+        _make_clip(
+            store,
+            id="corrupt-clip",
+            source_path="/tmp/corrupt_clip.mkv",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=200),
+            status=ClipStatus.CORRUPT,
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("shutil.move") as mock_move,
+        ):
+            purged, _ = manager._enforce_source_age()
+            assert purged == 0
+            mock_move.assert_not_called()
+
+    def test_error_clip_trashed_when_remove_corrupt_enabled(
+        self, store: Store, trash_dir: str,
+    ) -> None:
+        """When retention_remove_corrupt=true, ERROR clips ARE purged."""
+        config = Config(store._db_path)
+        config.set("retention_remove_corrupt", True)
+        m = RetentionManager(
+            store,
+            source_max_age_days=0,
+            trash_dir=trash_dir,
+            config=config,
+        )
+
+        _make_clip(
+            store,
+            id="error-rm",
+            source_path="/tmp/error_rm.mkv",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=100),
+            status=ClipStatus.ERROR,
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move") as mock_move,
+        ):
+            mock_stat.return_value.st_size = 1_000_000
+            purged, _ = m._enforce_source_age()
+            assert purged >= 1
+            mock_move.assert_called_once()
+
+        m.stop()
+
+
+# ---------------------------------------------------------------------------
+# Trash days = 0 (permanent delete)
+# ---------------------------------------------------------------------------
+
+class TestTrashDaysZero:
+    def test_trash_days_zero_permanently_deletes(
+        self, store: Store, trash_dir: str,
+    ) -> None:
+        """When retention_trash_days=0, files are unlinked instead of moved."""
+        config = Config(store._db_path)
+        config.set("retention_trash_days", 0)
+        m = RetentionManager(
+            store,
+            source_max_age_days=0,
+            trash_dir=trash_dir,
+            config=config,
+        )
+
+        _make_clip(
+            store,
+            id="perm-del",
+            source_path="/tmp/perm_del.mkv",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=100),
+            status=ClipStatus.DONE,
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("pathlib.Path.unlink") as mock_unlink,
+            patch("shutil.move") as mock_move,
+        ):
+            mock_stat.return_value.st_size = 1_000_000
+            purged, _ = m._enforce_source_age()
+            assert purged >= 1
+            mock_unlink.assert_called_once()
+            mock_move.assert_not_called()
+
+        m.stop()
+
+
+# ---------------------------------------------------------------------------
+# Cloud FIFO enforcement (unchanged — soft-deletes, no file ops)
 # ---------------------------------------------------------------------------
 
 class TestCloudFIFO:
@@ -176,7 +311,6 @@ class TestCloudFIFO:
         assert purged == 0
 
     def test_over_limit_purges_oldest(self, manager: RetentionManager, store: Store) -> None:
-        # Use a small limit for testing
         manager._cloud_limit = 2_000_000  # 2MB
 
         _make_clip(
@@ -243,13 +377,14 @@ class TestEnforce:
 # ---------------------------------------------------------------------------
 
 class TestCallbacks:
-    def test_on_purged_callback(self, store: Store) -> None:
+    def test_on_purged_callback(self, store: Store, trash_dir: str) -> None:
         purged_data: list[tuple[int, int]] = []
 
         m = RetentionManager(
             store,
             source_max_age_days=0,  # all old
             on_purged=lambda count, freed: purged_data.append((count, freed)),
+            trash_dir=trash_dir,
         )
 
         _make_clip(
@@ -261,8 +396,8 @@ class TestCallbacks:
 
         with (
             patch("pathlib.Path.is_file", return_value=True),
-            patch("pathlib.Path.unlink"),
             patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move"),
         ):
             mock_stat.return_value.st_size = 10_000_000
             m.enforce()
@@ -270,12 +405,13 @@ class TestCallbacks:
         assert len(purged_data) > 0
         m.stop()
 
-    def test_callback_with_no_purge(self, store: Store) -> None:
+    def test_callback_with_no_purge(self, store: Store, trash_dir: str) -> None:
         purged_data: list[tuple[int, int]] = []
 
         m = RetentionManager(
             store,
             on_purged=lambda count, freed: purged_data.append((count, freed)),
+            trash_dir=trash_dir,
         )
 
         m.enforce()
@@ -288,8 +424,8 @@ class TestCallbacks:
 # ---------------------------------------------------------------------------
 
 class TestStartStop:
-    def test_start_stop_lifecycle(self, store: Store) -> None:
-        m = RetentionManager(store)
+    def test_start_stop_lifecycle(self, store: Store, trash_dir: str) -> None:
+        m = RetentionManager(store, trash_dir=trash_dir)
         m.start()
         assert m.is_running
         m.stop()

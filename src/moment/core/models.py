@@ -101,7 +101,7 @@ class Clip:
     r2_url: str | None = None
     r2_path: str | None = None
     copy_count: int = 0
-    visibility: ClipVisibility = ClipVisibility.PRIVATE
+    visibility: ClipVisibility = ClipVisibility.PUBLIC
 
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     deleted_at: datetime | None = None
@@ -114,6 +114,8 @@ class Clip:
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     watched_at: datetime | None = None
     watch_count: int = 0
+
+    discord_user_id: str = ""
 
 
 # ---------------------------------------------------------------------------

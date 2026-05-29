@@ -5,6 +5,7 @@ Also manages the XDG autostart ``.desktop`` file for system launch.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -13,6 +14,67 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _caller_frame() -> str:
+    """Return 'file:line:function' of the first non-moment caller for audit logs."""
+    for frame_info in inspect.stack():
+        if "/moment/" not in frame_info.filename:
+            return (
+                f"{frame_info.filename}:{frame_info.lineno}:"
+                f"{frame_info.function}"
+            )
+    return "<unknown>"
+
+
+# Allowed config keys — set() rejects any key not listed here.
+# Prefix patterns (path_*, gsr_*) are handled via prefix check.
+_ALLOWED_KEYS: frozenset[str] = frozenset({
+    # General
+    "autostart",
+    "minimize_to_tray",
+    "encode_timing",
+    # Encoding
+    "preferred_codec",
+    "preset",
+    "cq",
+    "bitrate_mbps",
+    "audio_codec",
+    "noise_suppression",
+    # Notifications
+    "toast_success",
+    "toast_info",
+    "toast_warning",
+    "toast_error",
+    "review_cards",
+    "sounds",
+    # Game detection
+    "auto_detect_games",
+    "game_processes",
+    "game_scan_interval",
+    "pause_encode_during_game",
+    "pause_thumbnail_during_game",
+    "minimize_during_game",
+    "game_exit_behavior",
+    # MCP / security
+    "mcp_api_token",
+    "webhook_encryption_key",
+    # Discord bot
+    "discord_bot_auto_start",
+    "discord_allowed_roles",
+    # Retention
+    "retention_trash_days",
+    "retention_remove_corrupt",
+})
+
+# Allowed key prefixes — set() checks these for path_* and gsr_* keys.
+_ALLOWED_PREFIXES: frozenset[str] = frozenset({"path_", "gsr_"})
+
+# Directories that path_* keys are allowed to resolve into.
+_ALLOWED_PATH_ROOTS: frozenset[str] = frozenset({
+    os.path.expanduser("~"),
+    "/tmp",
+})
 
 CONFIG_DIR = os.path.expanduser("~/.config/moment")
 AUTOSTART_DIR = os.path.expanduser("~/.config/autostart")
@@ -110,7 +172,13 @@ class Config:
             conn.close()
 
     def set(self, key: str, value: Any) -> None:
-        """Persist *value* as a JSON-encoded string under *key*."""
+        """Persist *value* as a JSON-encoded string under *key*.
+
+        Raises:
+            ValueError: If *key* is not in the whitelist or if a
+                ``path_*`` value resolves outside allowed directories.
+        """
+        self._validate_key(key, value)
         serialised = json.dumps(value)
         conn = self._connect()
         try:
@@ -121,6 +189,35 @@ class Config:
             conn.commit()
         finally:
             conn.close()
+
+    def _validate_key(self, key: str, value: Any) -> None:
+        """Raise ``ValueError`` for unknown keys or unsafe path values."""
+        # Check exact match or prefix match
+        allowed = key in _ALLOWED_KEYS or any(
+            key.startswith(prefix) for prefix in _ALLOWED_PREFIXES
+        )
+        if not allowed:
+            caller = _caller_frame()
+            logger.warning(
+                "Rejected config write for unknown key '%s' (caller: %s)",
+                key, caller,
+            )
+            raise ValueError(f"Unknown config key: {key!r}")
+
+        # Path validation for path_* keys
+        if key.startswith("path_") and isinstance(value, str) and value.strip():
+            resolved = Path(os.path.expanduser(value)).resolve()
+            if not any(
+                str(resolved).startswith(root) for root in _ALLOWED_PATH_ROOTS
+            ):
+                caller = _caller_frame()
+                logger.warning(
+                    "Rejected config write for '%s': path %s outside allowed roots (caller: %s)",
+                    key, resolved, caller,
+                )
+                raise ValueError(
+                    f"Path for {key!r} must be within $HOME or /tmp, got: {resolved}"
+                )
 
     def get_all(self) -> dict[str, Any]:
         """Return the entire settings table as a dictionary."""

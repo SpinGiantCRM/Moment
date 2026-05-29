@@ -6,7 +6,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from moment.core.models import Clip, ClipStatus, ClipType, GameProfile
+from moment.core.models import Clip, ClipStatus, ClipType, GameProfile, Webhook
 
 
 # We test the module-level functions, so we need to mock _get_store
@@ -18,12 +18,13 @@ def mock_store():
 
 class TestListClips:
     @patch("moment.mcp.tools._get_store")
-    def test_returns_clip_list(self, mock_get_store, mock_store):
+    def test_list_clips_no_paths(self, mock_get_store, mock_store):
+        """list_clips must not include _path fields."""
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="test-id",
             stem="test_clip",
-            source_path="/tmp/test.mp4",
+            source_path="/home/user/Videos/Moment/test.mp4",
             duration=10.0,
             file_size=1024000,
             title="Test Clip",
@@ -36,9 +37,10 @@ class TestListClips:
         from moment.mcp.tools import list_clips
         result = list_clips()
         assert len(result) == 1
-        assert result[0]["id"] == "test-id"
-        assert result[0]["stem"] == "test_clip"
-        assert result[0]["status"] == "DONE"
+        # Path fields must NOT be present
+        assert "source_path" not in result[0]
+        assert "encoded_path" not in result[0]
+        assert "thumb_path" not in result[0]
 
     @patch("moment.mcp.tools._get_store")
     def test_with_status_filter(self, mock_get_store, mock_store):
@@ -76,12 +78,13 @@ class TestListClips:
 
 class TestSearchClips:
     @patch("moment.mcp.tools._get_store")
-    def test_search_clips(self, mock_get_store, mock_store):
+    def test_search_clips_no_paths(self, mock_get_store, mock_store):
+        """search_clips must not include _path fields."""
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="search-id",
             stem="found",
-            source_path="/tmp/found.mp4",
+            source_path="/home/user/Videos/Moment/found.mp4",
             duration=5.0,
             file_size=500000,
             title="Found Clip",
@@ -92,23 +95,25 @@ class TestSearchClips:
         mock_store.list_clips.return_value = [clip]
 
         from moment.mcp.tools import search_clips
-        result = search_clips("found", game="Game", tag="cool", limit=5)
+        result = search_clips("found")
         assert len(result) == 1
         assert result[0]["title"] == "Found Clip"
-        call_kwargs = mock_store.list_clips.call_args.kwargs
-        assert call_kwargs["search"] == "found"
-        assert call_kwargs["game"] == "Game"
-        assert call_kwargs["tag"] == "cool"
+        # Path fields must NOT be present
+        assert "source_path" not in result[0]
+        assert "encoded_path" not in result[0]
+        assert "thumb_path" not in result[0]
 
 
 class TestGetClip:
     @patch("moment.mcp.tools._get_store")
     def test_get_clip_found(self, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
+        import os
+        home = os.path.expanduser("~")
         clip = Clip(
             id="full-id",
             stem="full",
-            source_path="/tmp/full.mp4",
+            source_path=f"{home}/Videos/Moment/full.mkv",
             duration=30.0,
             file_size=2000000,
             title="Full Clip",
@@ -137,6 +142,51 @@ class TestGetClip:
         assert result["has_mic_audio"] is True
         assert result["tags"] == ["cool", "highlight"]
         assert result["watch_count"] == 5
+        # Paths should be redacted by default (home-relative paths → ~)
+        assert result["source_path"] == "~/Videos/Moment/full.mkv"
+
+    @patch("moment.mcp.tools._get_store")
+    def test_get_clip_show_paths(self, mock_get_store, mock_store):
+        mock_get_store.return_value = mock_store
+        clip = Clip(
+            id="full-id",
+            stem="full",
+            source_path="/home/user/Videos/Moment/full.mkv",
+            encoded_path="/home/user/.local/share/moment/encoded/full.mp4",
+            thumb_path="/home/user/.local/share/moment/thumbnails/full.webp",
+            duration=30.0,
+            file_size=2000000,
+            status=ClipStatus.DONE,
+            clip_type=ClipType.VIDEO,
+        )
+        mock_store.get_clip.return_value = clip
+
+        from moment.mcp.tools import get_clip
+        result = get_clip("full-id", show_paths=True)
+        assert result is not None
+        assert result["source_path"] == "/home/user/Videos/Moment/full.mkv"
+        assert result["encoded_path"] == "/home/user/.local/share/moment/encoded/full.mp4"
+        assert result["thumb_path"] == "/home/user/.local/share/moment/thumbnails/full.webp"
+
+    @patch("moment.mcp.tools._get_store")
+    def test_get_clip_redacted_falls_back_to_filename(self, mock_get_store, mock_store):
+        """Paths outside HOME should show just the filename."""
+        mock_get_store.return_value = mock_store
+        clip = Clip(
+            id="ext-id",
+            stem="ext",
+            source_path="/media/external/clip.mkv",
+            duration=5.0,
+            file_size=500000,
+            status=ClipStatus.DONE,
+            clip_type=ClipType.VIDEO,
+        )
+        mock_store.get_clip.return_value = clip
+
+        from moment.mcp.tools import get_clip
+        result = get_clip("ext-id")
+        assert result is not None
+        assert result["source_path"] == "clip.mkv"
 
     @patch("moment.mcp.tools._get_store")
     def test_get_clip_not_found(self, mock_get_store, mock_store):
@@ -294,6 +344,66 @@ class TestSaveGameProfile:
         assert "game_name" in result["error"]
 
 
+class TestWebhookRateLimit:
+    """Tests for per-webhook rate limiting in test_webhook()."""
+
+    def test_rate_limit_error_on_rapid_calls(self):
+        from moment.mcp.tools import test_webhook, _check_webhook_rate_limit
+        from moment.mcp.tools import _webhook_rate_limits
+
+        # Clear state
+        _webhook_rate_limits.clear()
+
+        # First call should pass
+        error = _check_webhook_rate_limit("hash1")
+        assert error is None
+
+        # Immediate second call should be rate-limited
+        error = _check_webhook_rate_limit("hash1")
+        assert error is not None
+        assert "wait" in error.lower() or "seconds" in error.lower()
+
+    def test_different_webhooks_independent(self):
+        from moment.mcp.tools import _check_webhook_rate_limit
+        from moment.mcp.tools import _webhook_rate_limits
+
+        _webhook_rate_limits.clear()
+
+        # Call webhook A
+        assert _check_webhook_rate_limit("hash-a") is None
+        # Webhook B should not be rate-limited
+        assert _check_webhook_rate_limit("hash-b") is None
+
+    @patch("moment.mcp.tools._check_webhook_rate_limit")
+    @patch("moment.mcp.tools._get_store")
+    def test_webhook_rate_limit_error_propagated(self, mock_get_store, mock_rate_check, mock_store):
+        mock_get_store.return_value = mock_store
+        mock_rate_check.return_value = "Please wait 58 seconds before testing this webhook again"
+
+        from moment.core.models import Webhook
+        mock_store.list_webhooks.return_value = [
+            Webhook(id="wh1", name="test", url="https://discord.com/api/webhooks/123/abc", enabled=True)
+        ]
+
+        from moment.mcp.tools import test_webhook
+        result = test_webhook("wh1")
+        assert "error" in result
+        assert "wait" in result["error"]
+
+    @patch.dict("os.environ", {"MOMENT_BYPASS_WEBHOOK_RATE_LIMIT": "1"})
+    def test_bypass_env_var(self):
+        from moment.mcp.tools import _check_webhook_rate_limit
+        from moment.mcp.tools import _webhook_rate_limits
+
+        _webhook_rate_limits.clear()
+
+        # First call sets the timestamp
+        _check_webhook_rate_limit("hash-by")
+        # Second call should be bypassed due to env var
+        error = _check_webhook_rate_limit("hash-by")
+        assert error is None
+
+
 class TestRegisterTools:
     def test_register_read_tools(self):
         mock_server = MagicMock()
@@ -308,3 +418,100 @@ class TestRegisterTools:
         register_all_tools(mock_server, allow_mutations=True)
         # 6 read + 4 mutation = 10
         assert mock_server.tool.call_count == 10
+
+
+# ---------------------------------------------------------------------------
+# Visibility enforcement in MCP (Spec 24)
+# ---------------------------------------------------------------------------
+
+
+class TestMCPVisibility:
+    @patch("moment.mcp.tools._get_store")
+    def test_list_clips_excludes_private_for_guest(self, mock_get_store, mock_store):
+        """Guest list_clips (no owner_id) excludes PRIVATE clips."""
+        mock_get_store.return_value = mock_store
+        mock_store.list_clips.return_value = []
+
+        from moment.mcp.tools import list_clips
+        list_clips()
+        call_kwargs = mock_store.list_clips.call_args.kwargs
+        assert call_kwargs["owner_id"] is None
+        assert call_kwargs["visibility"] is None
+
+    @patch("moment.mcp.tools._get_store")
+    def test_list_clips_owner_sees_private(self, mock_get_store, mock_store):
+        """Owner list_clips passes owner_id through."""
+        mock_get_store.return_value = mock_store
+        mock_store.list_clips.return_value = []
+
+        from moment.mcp.tools import list_clips
+        list_clips(owner_id="user123")
+        call_kwargs = mock_store.list_clips.call_args.kwargs
+        assert call_kwargs["owner_id"] == "user123"
+
+    @patch("moment.mcp.tools._get_store")
+    def test_list_clips_visibility_filter(self, mock_get_store, mock_store):
+        """Explicit visibility filter is passed through."""
+        from moment.core.models import ClipVisibility
+        mock_get_store.return_value = mock_store
+        mock_store.list_clips.return_value = []
+
+        from moment.mcp.tools import list_clips
+        list_clips(visibility="public")
+        call_kwargs = mock_store.list_clips.call_args.kwargs
+        assert call_kwargs["visibility"] == ClipVisibility.PUBLIC
+
+    @patch("moment.mcp.tools._get_store")
+    def test_search_clips_owner_passthrough(self, mock_get_store, mock_store):
+        """search_clips passes owner_id through for visibility."""
+        mock_get_store.return_value = mock_store
+        mock_store.list_clips.return_value = []
+
+        from moment.mcp.tools import search_clips
+        search_clips("test", owner_id="user456")
+        call_kwargs = mock_store.list_clips.call_args.kwargs
+        assert call_kwargs["owner_id"] == "user456"
+
+    @patch("moment.mcp.tools._get_store")
+    def test_list_clips_response_includes_visibility(self, mock_get_store, mock_store):
+        """list_clips response includes visibility field."""
+        from moment.core.models import ClipVisibility
+        mock_get_store.return_value = mock_store
+        clip = Clip(
+            id="vis-clip",
+            stem="vis",
+            source_path="/tmp/vis.mp4",
+            duration=10.0,
+            file_size=1000000,
+            status=ClipStatus.DONE,
+            clip_type=ClipType.VIDEO,
+            visibility=ClipVisibility.PUBLIC,
+        )
+        mock_store.list_clips.return_value = [clip]
+
+        from moment.mcp.tools import list_clips
+        result = list_clips()
+        assert len(result) == 1
+        assert result[0]["visibility"] == "public"
+
+    @patch("moment.mcp.tools._get_store")
+    def test_search_clips_response_includes_visibility(self, mock_get_store, mock_store):
+        """search_clips response includes visibility field."""
+        from moment.core.models import ClipVisibility
+        mock_get_store.return_value = mock_store
+        clip = Clip(
+            id="srch-vis",
+            stem="sv",
+            source_path="/tmp/sv.mp4",
+            duration=5.0,
+            file_size=500000,
+            status=ClipStatus.DONE,
+            clip_type=ClipType.VIDEO,
+            visibility=ClipVisibility.UNLISTED,
+        )
+        mock_store.list_clips.return_value = [clip]
+
+        from moment.mcp.tools import search_clips
+        result = search_clips("sv")
+        assert len(result) == 1
+        assert result[0]["visibility"] == "unlisted"

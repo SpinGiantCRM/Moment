@@ -3,7 +3,6 @@
 Uses :mod:`discord.py` as an **optional dependency**.  If the package is
 not installed the module still imports cleanly — all public methods become
 no-ops that log a warning.
-
 The bot runs in its own thread so it never blocks the Qt event loop.
 
 Absolutely **no GUI imports** allowed in this module.
@@ -18,7 +17,7 @@ import threading
 from datetime import datetime, timezone
 
 from moment.core.config import Config
-from moment.core.models import Clip, ClipStatus, Webhook
+from moment.core.models import Clip, ClipStatus, ClipVisibility, Webhook
 from moment.core.store import Store
 
 logger = logging.getLogger(__name__)
@@ -117,6 +116,56 @@ def _fmt_size(n_bytes: int) -> str:
 
 if _DISCORD_AVAILABLE:
 
+    # -- Auth helpers ---------------------------------------------------------
+
+    def _get_allowed_roles(store: Store) -> set[str]:
+        """Return the set of role names allowed to use slash commands.
+
+        Reads ``discord_allowed_roles`` from config (default ``"Moment User"``).
+        """
+        from moment.core.config import Config
+
+        config = Config(db_path=store._db_path)
+        raw = config.get("discord_allowed_roles", "Moment User")
+        if isinstance(raw, str):
+            return {r.strip() for r in raw.split(",") if r.strip()}
+        return {"Moment User"}
+
+    def _require_role(store: Store):
+        """Decorator that checks the invoking user has an allowed role.
+
+        Returns an ephemeral error if the user lacks permission.
+        """
+
+        def decorator(func):
+            from functools import wraps
+
+            @wraps(func)
+            async def wrapper(interaction: discord.Interaction, *args, **kwargs):
+                allowed = _get_allowed_roles(store)
+                if not allowed:
+                    # No roles configured → allow all (backward compat)
+                    return await func(interaction, *args, **kwargs)
+
+                user_roles = {
+                    r.name for r in getattr(interaction.user, "roles", [])
+                }
+                if not allowed & user_roles:
+                    await interaction.response.send_message(
+                        "❌ You don't have permission to use this command.",
+                        ephemeral=True,
+                    )
+                    return
+                return await func(interaction, *args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    def _get_caller_id(interaction: discord.Interaction) -> str:
+        """Return the calling user's ID as a string for ownership checks."""
+        return str(interaction.user.id) if interaction.user else ""
+
     class _ClipBotClient(discord.Client):
         """discord.py Client subclass with slash commands for clip queries."""
 
@@ -152,10 +201,15 @@ if _DISCORD_AVAILABLE:
 
     def _recent_command(store: Store) -> app_commands.Command:
         @app_commands.describe(limit="Number of clips to show (1-25)")
+        @_require_role(store)
         async def recent(interaction: discord.Interaction, limit: int = 5) -> None:
-            """Show your most recent clips."""
+            """Show recent PUBLIC clips."""
             limit = max(1, min(25, limit))
-            clips = store.list_clips(limit=limit, sort_by="-created_at")
+            clips = store.list_clips(
+                limit=limit,
+                sort_by="-created_at",
+                visibility=ClipVisibility.PUBLIC,
+            )
             if not clips:
                 await interaction.response.send_message(
                     "📭 No clips yet!", ephemeral=True
@@ -166,22 +220,23 @@ if _DISCORD_AVAILABLE:
             for i, clip in enumerate(clips, 1):
                 si = _status_emoji(clip)
                 name = clip.title or clip.stem
-                url_part = f"  —  [🔗]({clip.r2_url})" if clip.r2_url else ""
                 lines.append(
                     f"{i}. {si} **{name}**  ·  {_fmt_duration(clip.duration)}"
-                    f"  ·  {clip.game or '—'}{url_part}"
+                    f"  ·  {clip.game or '—'}"
                 )
             await interaction.response.send_message("\n".join(lines))
 
         return app_commands.Command(
             name="recent",
-            description="Show your most recent clips",
+            description="Show recent public clips",
             callback=recent,
         )
 
     def _stats_command(store: Store) -> app_commands.Command:
+        @_require_role(store)
         async def stats(interaction: discord.Interaction) -> None:
-            """Show your clip library statistics."""
+            """Show clip library statistics."""
+            owner_id = _get_caller_id(interaction)
             total = store.count_clips()
             uploaded = store.count_clips(status=ClipStatus.UPLOADED)
             encoding = store.count_clips(status=ClipStatus.ENCODING)
@@ -193,8 +248,8 @@ if _DISCORD_AVAILABLE:
                 f"Currently encoding: **{encoding}**",
             ]
 
-            # Total storage used by clips
-            all_clips = store.list_clips(limit=1000)
+            # Total storage used by clips (owner-scoped)
+            all_clips = store.list_clips(limit=1000, owner_id=owner_id)
             total_bytes = sum(c.file_size for c in all_clips)
             lines.append(f"Storage used: **{_fmt_size(total_bytes)}**")
 
@@ -212,14 +267,19 @@ if _DISCORD_AVAILABLE:
             game="Filter by game name",
             tag="Filter by tag",
         )
+        @_require_role(store)
         async def search(
             interaction: discord.Interaction,
             query: str | None = None,
             game: str | None = None,
             tag: str | None = None,
         ) -> None:
-            """Search for clips by title, game, or tag."""
-            clips = store.list_clips(search=query, game=game, tag=tag, limit=10)
+            """Search for PUBLIC + UNLISTED clips by title, game, or tag."""
+            owner_id = _get_caller_id(interaction)
+            clips = store.list_clips(
+                search=query, game=game, tag=tag, limit=10,
+                owner_id=owner_id,
+            )
             if not clips:
                 await interaction.response.send_message(
                     "🔍 No clips found.", ephemeral=True
@@ -228,11 +288,10 @@ if _DISCORD_AVAILABLE:
 
             lines = [f"**🔍 Found {len(clips)} clip(s):**"]
             for i, clip in enumerate(clips, 1):
-                url_part = f"  —  [🔗]({clip.r2_url})" if clip.r2_url else ""
                 lines.append(
                     f"{i}. **{clip.title or clip.stem}**  ·  "
                     f"{_fmt_duration(clip.duration)}  ·  "
-                    f"{clip.game or '—'}{url_part}"
+                    f"{clip.game or '—'}"
                 )
             await interaction.response.send_message("\n".join(lines))
 
@@ -243,19 +302,22 @@ if _DISCORD_AVAILABLE:
         )
 
     def _clip_command(store: Store) -> app_commands.Command:
-        @app_commands.describe(clip_id="The clip ID (or first few characters)")
+        @app_commands.describe(
+            clip_id="The clip ID (exact match only)",
+            include_url="Include the R2/cloud URL in the response",
+        )
+        @_require_role(store)
         async def clip_detail(
-            interaction: discord.Interaction, clip_id: str
+            interaction: discord.Interaction,
+            clip_id: str,
+            include_url: bool = False,
         ) -> None:
-            """Get full details for a specific clip."""
+            """Get full details for a specific clip (exact ID match only).
+
+            Visibility enforcement: PRIVATE clips only shown to the owner.
+            """
+            owner_id = _get_caller_id(interaction)
             clip = store.get_clip(clip_id)
-            if clip is None:
-                # Try prefix match
-                clips = store.list_clips(limit=20)
-                for c in clips:
-                    if c.id.startswith(clip_id):
-                        clip = c
-                        break
 
             if clip is None:
                 await interaction.response.send_message(
@@ -263,7 +325,18 @@ if _DISCORD_AVAILABLE:
                 )
                 return
 
-            embed = _build_clip_embed(clip)
+            # Visibility enforcement
+            if (
+                clip.visibility == ClipVisibility.PRIVATE
+                and clip.discord_user_id
+                and clip.discord_user_id != owner_id
+            ):
+                await interaction.response.send_message(
+                    f"❌ Clip `{clip_id}` not found.", ephemeral=True
+                )
+                return
+
+            embed = _build_clip_embed(clip, include_url=include_url)
             await interaction.response.send_message(embed=embed)
 
         return app_commands.Command(
@@ -272,7 +345,7 @@ if _DISCORD_AVAILABLE:
             callback=clip_detail,
         )
 
-    def _build_clip_embed(clip: Clip) -> discord.Embed:
+    def _build_clip_embed(clip: Clip, *, include_url: bool = False) -> discord.Embed:
         embed = discord.Embed(
             title=clip.title or clip.stem,
             color=discord.Color.blurple(),
@@ -289,7 +362,14 @@ if _DISCORD_AVAILABLE:
         )
         embed.add_field(name="FPS", value=str(clip.fps), inline=True)
         if clip.r2_url:
-            embed.add_field(name="URL", value=clip.r2_url, inline=False)
+            if include_url:
+                embed.add_field(name="URL", value=clip.r2_url, inline=False)
+            else:
+                embed.add_field(
+                    name="URL",
+                    value='Use `/clip <id> --include-url` for URL',
+                    inline=False,
+                )
         if clip.tags:
             embed.set_footer(text="Tags: " + ", ".join(clip.tags))
         return embed
@@ -302,7 +382,7 @@ else:
     _search_command = None  # type: ignore[assignment]
     _clip_command = None  # type: ignore[assignment]
 
-    def _build_clip_embed(clip: Clip) -> None:
+    def _build_clip_embed(clip: Clip, *, include_url: bool = False) -> None:
         return None
 
 
@@ -426,6 +506,7 @@ class DiscordBot:
         """Post a clip notification to a Discord channel via webhook.
 
         Uses discord.py's ``SyncWebhook`` for richer embeds (not raw HTTP).
+        The real webhook URL is decrypted from the store at dispatch time.
 
         Args:
             clip: The clip to notify about.
@@ -442,8 +523,14 @@ class DiscordBot:
             logger.debug("Webhook %s disabled — skipping", webhook.name)
             return False
 
+        # Decrypt the real URL from the store (redacted URLs are for display only)
+        real_url = self._store.get_webhook_url(webhook.id)
+        if real_url is None:
+            logger.error("Webhook %s: failed to retrieve URL from store", webhook.name)
+            return False
+
         try:
-            sync_webhook = discord.SyncWebhook.from_url(webhook.url)
+            sync_webhook = discord.SyncWebhook.from_url(real_url)
 
             embed = discord.Embed(
                 title=clip.title or clip.stem,

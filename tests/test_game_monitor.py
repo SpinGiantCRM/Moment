@@ -202,6 +202,61 @@ class _MockFile:
 
 
 # ---------------------------------------------------------------------------
+# /proc accessibility warning
+# ---------------------------------------------------------------------------
+
+class TestProcAccessibility:
+    def test_warns_when_proc_restricted(self, monitor: GameMonitor) -> None:
+        """When /proc/1/comm is not readable, a WARNING is logged once."""
+        with (
+            patch("os.access", return_value=False),
+            patch("moment.core.game_monitor.logger") as mock_logger,
+        ):
+            monitor._check_proc_accessible()
+            monitor._check_proc_accessible()  # second call should not log again
+
+            warning_calls = [
+                c for c in mock_logger.warning.call_args_list
+                if c[0] and "hidepid" in str(c[0])
+            ]
+            assert len(warning_calls) == 1
+            msg = warning_calls[0][0][0]
+            assert "hidepid=2" in msg
+            assert "/proc" in msg
+
+    def test_no_warning_when_proc_accessible(self, monitor: GameMonitor) -> None:
+        """When /proc is readable, no warning is logged."""
+        with (
+            patch("os.access", return_value=True),
+            patch("moment.core.game_monitor.logger") as mock_logger,
+        ):
+            monitor._check_proc_accessible()
+            monitor._check_proc_accessible()
+
+            warning_calls = [
+                c for c in mock_logger.warning.call_args_list
+                if c[0] and "hidepid" in str(c[0])
+            ]
+            assert len(warning_calls) == 0
+
+    def test_scan_calls_proc_check(self, monitor: GameMonitor) -> None:
+        """_scan() should call _check_proc_accessible before scanning."""
+        with (
+            patch.object(monitor, "_check_proc_accessible") as mock_check,
+            patch.object(monitor, "_find_game_process", return_value=None),
+        ):
+            monitor._scan()
+            mock_check.assert_called_once()
+
+    def test_proc_warned_flag_prevents_repeat(self, monitor: GameMonitor) -> None:
+        """After first check, _proc_warned flag prevents re-checking."""
+        monitor._proc_warned = True
+        with patch("os.access") as mock_access:
+            monitor._check_proc_accessible()
+            mock_access.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Start / Stop
 # ---------------------------------------------------------------------------
 

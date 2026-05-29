@@ -34,11 +34,11 @@ class TestRunBot:
         assert result == 1
 
     @patch("moment.core.discord_bot._DISCORD_AVAILABLE", True)
+    @patch("moment.bot.main._get_discord_token")
     @patch("moment.bot.main.Config")
     @patch("moment.bot.main.set_store_config")
     @patch("moment.bot.main.Store")
-    @patch("moment.core.discord_bot._get_discord_token")
-    def test_returns_1_when_no_token(self, mock_token, mock_store_cls, mock_set, mock_config_cls):
+    def test_returns_1_when_no_token(self, mock_store_cls, mock_set, mock_config_cls, mock_token):
         mock_token.return_value = ""
         mock_config_cls.return_value = MagicMock()
         mock_store_cls.return_value = MagicMock()
@@ -48,7 +48,7 @@ class TestRunBot:
         assert result == 1
 
     @patch("moment.core.discord_bot.DiscordBot")
-    @patch("moment.core.discord_bot._get_discord_token")
+    @patch("moment.bot.main._get_discord_token")
     @patch("moment.bot.main.Store")
     @patch("moment.bot.main.set_store_config")
     @patch("moment.bot.main.Config")

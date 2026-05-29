@@ -20,9 +20,13 @@ They run in-process within the MCP server.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
+import time
 import uuid as _uuid
+from pathlib import Path
 from typing import Any
 
 from moment.core.config import Config
@@ -32,8 +36,14 @@ from moment.utils.system import validate_arg
 
 logger = logging.getLogger(__name__)
 
+_HOME = os.path.expanduser("~")
+
 # Lazy store singleton — created on first tool invocation
 _store: Store | None = None
+
+# In-memory rate limit tracker: URL hash → last-call epoch timestamp
+_webhook_rate_limits: dict[str, float] = {}
+_WEBHOOK_MIN_INTERVAL: float = 60.0  # seconds between test_webhook calls per URL
 
 
 def _get_store() -> Store:
@@ -57,8 +67,17 @@ def list_clips(
     folder: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    *,
+    visibility: str | None = None,
+    owner_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """List clips with optional filters and pagination."""
+    """List clips with optional filters and pagination.
+
+    Args:
+        visibility: Filter by exact visibility (``public``, ``unlisted``, ``private``).
+        owner_id: If set, returns PUBLIC + UNLISTED + PRIVATE clips owned by this user.
+            Guest callers (no owner_id) only see PUBLIC + UNLISTED.
+    """
     store = _get_store()
     clip_status = None
     if status:
@@ -67,12 +86,22 @@ def list_clips(
         except KeyError:
             clip_status = None
 
+    clip_visibility = None
+    if visibility:
+        try:
+            from moment.core.models import ClipVisibility
+            clip_visibility = ClipVisibility(visibility.lower())
+        except ValueError:
+            pass
+
     clips = store.list_clips(
         status=clip_status,
         game=game,
         folder=folder,
         limit=limit,
         offset=offset,
+        visibility=clip_visibility,
+        owner_id=owner_id,
     )
     return [
         {
@@ -88,6 +117,7 @@ def list_clips(
             "r2_url": c.r2_url,
             "resolution": list(c.resolution),
             "tags": c.tags,
+            "visibility": c.visibility.value,
         }
         for c in clips
     ]
@@ -98,14 +128,22 @@ def search_clips(
     game: str | None = None,
     tag: str | None = None,
     limit: int = 10,
+    *,
+    owner_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Full-text search for clips by title, optionally filtered by game/tag."""
+    """Full-text search for clips by title, optionally filtered by game/tag.
+
+    Args:
+        owner_id: If set, returns PUBLIC + UNLISTED + PRIVATE clips owned
+            by this user. Otherwise only PUBLIC + UNLISTED.
+    """
     store = _get_store()
     clips = store.list_clips(
         search=query,
         game=game,
         tag=tag,
         limit=limit,
+        owner_id=owner_id,
     )
     return [
         {
@@ -118,24 +156,41 @@ def search_clips(
             "status": c.status.name,
             "r2_url": c.r2_url,
             "tags": c.tags,
+            "visibility": c.visibility.value,
         }
         for c in clips
     ]
 
 
-def get_clip(clip_id: str) -> dict[str, Any] | None:
-    """Get full details for a single clip by ID."""
+def _redact_path(path_str: str) -> str:
+    """Replace absolute path with ``~``-relative or just the filename.
+
+    If the path starts with ``$HOME``, replace with ``~``.
+    Otherwise return only the filename.
+    """
+    if path_str.startswith(_HOME):
+        return "~" + path_str[len(_HOME):]
+    return Path(path_str).name
+
+
+def get_clip(clip_id: str, *, show_paths: bool = False) -> dict[str, Any] | None:
+    """Get full details for a single clip by ID.
+
+    Args:
+        clip_id: The clip's UUID.
+        show_paths: If ``True``, return absolute filesystem paths.
+            Default ``False`` — paths are redacted to ``~``-relative
+            or filename-only for privacy.
+    """
     store = _get_store()
     clip = store.get_clip(clip_id)
     if clip is None:
         return None
-    return {
+
+    result: dict[str, Any] = {
         "id": clip.id,
         "stem": clip.stem,
         "title": clip.title,
-        "source_path": str(clip.source_path),
-        "encoded_path": str(clip.encoded_path) if clip.encoded_path else None,
-        "thumb_path": str(clip.thumb_path) if clip.thumb_path else None,
         "game": clip.game,
         "duration": clip.duration,
         "file_size": clip.file_size,
@@ -156,6 +211,17 @@ def get_clip(clip_id: str) -> dict[str, Any] | None:
         "watch_count": clip.watch_count,
         "clip_type": clip.clip_type.name,
     }
+
+    if show_paths:
+        result["source_path"] = str(clip.source_path)
+        result["encoded_path"] = str(clip.encoded_path) if clip.encoded_path else None
+        result["thumb_path"] = str(clip.thumb_path) if clip.thumb_path else None
+    else:
+        result["source_path"] = _redact_path(str(clip.source_path))
+        result["encoded_path"] = _redact_path(str(clip.encoded_path)) if clip.encoded_path else None
+        result["thumb_path"] = _redact_path(str(clip.thumb_path)) if clip.thumb_path else None
+
+    return result
 
 
 def get_stats() -> dict[str, Any]:
@@ -253,13 +319,43 @@ def save_game_profile(profile_json: str) -> dict[str, str]:
     return {"status": "saved", "game_name": profile.game_name}
 
 
-def test_webhook(webhook_id: str) -> dict[str, str]:
-    """Test-fire a configured webhook."""
+def _check_webhook_rate_limit(url_hash: str) -> str | None:
+    """Return an error message if rate-limited, or None if the call is allowed.
+
+    Bypassed when ``MOMENT_BYPASS_WEBHOOK_RATE_LIMIT=1``.
+    """
+    if os.environ.get("MOMENT_BYPASS_WEBHOOK_RATE_LIMIT") == "1":
+        return None
+
+    now = time.time()
+    last = _webhook_rate_limits.get(url_hash)
+    if last is not None:
+        elapsed = now - last
+        if elapsed < _WEBHOOK_MIN_INTERVAL:
+            wait = int(_WEBHOOK_MIN_INTERVAL - elapsed + 1)
+            return f"Please wait {wait} seconds before testing this webhook again"
+
+    _webhook_rate_limits[url_hash] = now
+    return None
+
+
+def test_webhook(webhook_id: str, *, _url_hash: str | None = None) -> dict[str, str]:
+    """Test-fire a configured webhook.
+
+    Rate-limited to once per 60 seconds per webhook URL (bypassable
+    via ``MOMENT_BYPASS_WEBHOOK_RATE_LIMIT=1``).
+    """
     store = _get_store()
     webhooks = store.list_webhooks()
     wh = next((w for w in webhooks if w.id == webhook_id), None)
     if wh is None:
         return {"error": f"Webhook {webhook_id} not found"}
+
+    # Rate limit check — hash the webhook URL for the rate-limit key
+    url_hash = _url_hash or hashlib.sha256(wh.url.encode()).hexdigest()[:12]
+    rate_error = _check_webhook_rate_limit(url_hash)
+    if rate_error is not None:
+        return {"error": rate_error}
 
     try:
         from moment.core.discord_bot import DiscordBot
