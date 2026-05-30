@@ -10,9 +10,9 @@ import logging
 import shutil
 import subprocess  # nosec B404 — required for external tool invocation
 from pathlib import Path
+from typing import Any
 
 from moment.utils.subprocess import Popen_sandboxed, run_sandboxed
-from typing import Any
 
 logger = logging.getLogger(__name__)
 

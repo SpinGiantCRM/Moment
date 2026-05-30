@@ -50,8 +50,15 @@ moment mcp              # Start MCP server for AI agent access
 
 ## Documentation
 
-- [Architecture Overview](docs/plan.md)
+- [AI Agent Briefing](AGENTS.md) — what you need to know before coding
+- [Architecture Overview](ARCHITECTURE.md) — system architecture, request flows, thread model
+- [Security Model](SECURITY.md) — encryption, credentials, authentication
+- [Contributing](CONTRIBUTING.md) — how to contribute
+- [Getting Started](docs/guides/getting-started.md) — quick start guide
 - [Storage Providers](docs/storage-providers.md) — configure rclone for Backblaze B2, Cloudflare R2, AWS S3, and more
+- [Database Schema](docs/database/schema.md) — full table reference
+- [Request Flows](docs/architecture/request-flow.md) — detailed request flow diagrams
+- [Truth](TRUTH.md) — complete feature inventory and aspirational state
 
 ## Development
 

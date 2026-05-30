@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestSearchBarInit:
     """Tests for SearchBar construction and defaults."""
 
     def test_create(self, qtbot) -> None:
         """SearchBar can be created."""
-        from moment.ui.widgets.search_bar import SearchBar, _SEARCH_WIDTH
+        from moment.ui.widgets.search_bar import _SEARCH_WIDTH, SearchBar
 
         bar = SearchBar()
         qtbot.addWidget(bar)

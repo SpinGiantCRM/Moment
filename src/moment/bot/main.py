@@ -52,7 +52,7 @@ def run_bot(argv: list[str] | None = None) -> int:
     if not token:
         print(
             "No bot token configured.\n"
-            "Set MOMENT_DISCORD_TOKEN env var, or run\n"
+            "Run\n"
             "    keyring set moment discord_bot_token\n"
             "to store it in your system keychain.",
             file=sys.stderr,

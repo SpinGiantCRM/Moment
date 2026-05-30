@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import signal
 import subprocess
 import time
@@ -13,7 +12,6 @@ import pytest
 
 from moment.core.models import GameProfile
 from moment.core.recorder_controller import (
-    DEFAULT_OUTPUT_DIR,
     RecorderController,
     RecorderError,
     replay_signal_for_duration,

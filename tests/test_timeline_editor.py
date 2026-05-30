@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
-from PyQt6.QtCore import Qt, QPointF
-from PyQt6.QtGui import QMouseEvent
-
 from moment.ui.widgets.timeline_editor import TimelineEditor, _fmt
 
 

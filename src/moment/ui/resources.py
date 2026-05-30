@@ -10,11 +10,8 @@ be reused throughout the stylesheet and in inline widget styling.
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
 from pathlib import Path
-from typing import ClassVar
 
-from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QFont, QIcon
 
 try:

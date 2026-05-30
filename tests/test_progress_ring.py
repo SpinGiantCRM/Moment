@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from moment.ui.widgets.progress_ring import ProgressRing, _SIZE
+from moment.ui.widgets.progress_ring import _SIZE, ProgressRing
 
 
 class TestProgressRingInit:

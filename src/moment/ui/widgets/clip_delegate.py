@@ -10,18 +10,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from PyQt6.QtCore import QModelIndex, QRect, QRectF, QSize, Qt
+from PyQt6.QtCore import QModelIndex, QRectF, QSize, Qt
 from PyQt6.QtGui import (
-    QBrush,
     QColor,
     QFont,
-    QIcon,
     QPainter,
     QPainterPath,
     QPen,
     QPixmap,
 )
-from PyQt6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem
+from PyQt6.QtWidgets import QStyle, QStyledItemDelegate, QStyleOptionViewItem
 
 # ---------------------------------------------------------------------------
 # Layout constants

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
-from pathlib import Path
-
 import pytest
 
 from moment.core.game_profiles import (

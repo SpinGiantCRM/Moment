@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from moment.ui.dialogs.settings_dialog import SettingsDialog, _VIDEO_ENCODER_OPTIONS
+from moment.ui.dialogs.settings_dialog import _VIDEO_ENCODER_OPTIONS, SettingsDialog
 
 
 class TestVideoEncoderOptions:

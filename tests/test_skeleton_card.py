@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from PyQt6.QtGui import QColor
 
-from moment.ui.widgets.skeleton_card import SkeletonCard, _CARD_W, _CARD_H
+from moment.ui.widgets.skeleton_card import _CARD_H, _CARD_W, SkeletonCard
 
 
 class TestSkeletonCardInit:

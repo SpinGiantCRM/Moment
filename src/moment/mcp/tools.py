@@ -24,7 +24,6 @@ import hashlib
 import json
 import logging
 import os
-import time
 import uuid as _uuid
 from pathlib import Path
 from typing import Any
@@ -41,8 +40,6 @@ _HOME = os.path.expanduser("~")
 # Lazy store singleton — created on first tool invocation
 _store: Store | None = None
 
-# In-memory rate limit tracker: URL hash → last-call epoch timestamp
-_webhook_rate_limits: dict[str, float] = {}
 _WEBHOOK_MIN_INTERVAL: float = 60.0  # seconds between test_webhook calls per URL
 
 
@@ -69,14 +66,18 @@ def list_clips(
     offset: int = 0,
     *,
     visibility: str | None = None,
-    owner_id: str | None = None,
+    include_urls: bool = False,
 ) -> list[dict[str, Any]]:
     """List clips with optional filters and pagination.
 
+    Visibility is enforced server-side from the auth context:
+        - Unauthenticated / read-only → PUBLIC + UNLISTED only.
+        - Mutation-scoped → all clips including PRIVATE.
+
     Args:
         visibility: Filter by exact visibility (``public``, ``unlisted``, ``private``).
-        owner_id: If set, returns PUBLIC + UNLISTED + PRIVATE clips owned by this user.
-            Guest callers (no owner_id) only see PUBLIC + UNLISTED.
+        include_urls: If ``True``, include ``r2_url`` in each clip dict.
+            Default ``False`` — R2 URLs are opt-in for privacy.
     """
     store = _get_store()
     clip_status = None
@@ -93,6 +94,9 @@ def list_clips(
             clip_visibility = ClipVisibility(visibility.lower())
         except ValueError:
             pass
+
+    # Derive owner context from auth scope (never from caller input)
+    owner_id = _owner_id_from_auth()
 
     clips = store.list_clips(
         status=clip_status,
@@ -114,7 +118,7 @@ def list_clips(
             "status": c.status.name,
             "favorite": c.favorite,
             "created_at": c.created_at.isoformat(),
-            "r2_url": c.r2_url,
+            "r2_url": c.r2_url if include_urls else None,
             "resolution": list(c.resolution),
             "tags": c.tags,
             "visibility": c.visibility.value,
@@ -129,15 +133,14 @@ def search_clips(
     tag: str | None = None,
     limit: int = 10,
     *,
-    owner_id: str | None = None,
+    include_urls: bool = False,
 ) -> list[dict[str, Any]]:
     """Full-text search for clips by title, optionally filtered by game/tag.
 
-    Args:
-        owner_id: If set, returns PUBLIC + UNLISTED + PRIVATE clips owned
-            by this user. Otherwise only PUBLIC + UNLISTED.
+    Visibility is enforced server-side from the auth context.
     """
     store = _get_store()
+    owner_id = _owner_id_from_auth()
     clips = store.list_clips(
         search=query,
         game=game,
@@ -154,7 +157,7 @@ def search_clips(
             "duration": c.duration,
             "file_size": c.file_size,
             "status": c.status.name,
-            "r2_url": c.r2_url,
+            "r2_url": c.r2_url if include_urls else None,
             "tags": c.tags,
             "visibility": c.visibility.value,
         }
@@ -173,18 +176,30 @@ def _redact_path(path_str: str) -> str:
     return Path(path_str).name
 
 
-def get_clip(clip_id: str, *, show_paths: bool = False) -> dict[str, Any] | None:
+def get_clip(clip_id: str, *, show_paths: bool = False, include_urls: bool = False) -> dict[str, Any] | None:
     """Get full details for a single clip by ID.
+
+    Visibility enforced: PRIVATE clips are only visible to mutation-scoped
+    callers.  Unauthenticated/read-only callers get a ``None`` response
+    for PRIVATE clips (same as "not found").
 
     Args:
         clip_id: The clip's UUID.
         show_paths: If ``True``, return absolute filesystem paths.
             Default ``False`` — paths are redacted to ``~``-relative
             or filename-only for privacy.
+        include_urls: If ``True``, include ``r2_url`` and ``r2_path``.
+            Default ``False``.
     """
+    from moment.core.models import ClipVisibility
+
     store = _get_store()
     clip = store.get_clip(clip_id)
     if clip is None:
+        return None
+
+    # Visibility enforcement: PRIVATE clips hidden from unauthenticated
+    if clip.visibility == ClipVisibility.PRIVATE and _owner_id_from_auth() is None:
         return None
 
     result: dict[str, Any] = {
@@ -206,8 +221,8 @@ def get_clip(clip_id: str, *, show_paths: bool = False) -> dict[str, Any] | None
         "visibility": clip.visibility.value,
         "created_at": clip.created_at.isoformat(),
         "uploaded_at": clip.uploaded_at.isoformat() if clip.uploaded_at else None,
-        "r2_url": clip.r2_url,
-        "r2_path": clip.r2_path,
+        "r2_url": clip.r2_url if include_urls else None,
+        "r2_path": clip.r2_path if include_urls else None,
         "watch_count": clip.watch_count,
         "clip_type": clip.clip_type.name,
     }
@@ -258,13 +273,18 @@ def list_webhooks() -> list[dict[str, Any]]:
             "name": w.name,
             "enabled": w.enabled,
             "notify_on": w.notify_on,
+            "include_clip_url": w.include_clip_url,
         }
         for w in webhooks
     ]
 
 
 def enqueue_encode(clip_id: str) -> dict[str, str]:
-    """Re-encode a specific clip."""
+    """Re-encode a specific clip.  Requires mutation-scoped token."""
+    scope_error = _check_mutation_allowed()
+    if scope_error is not None:
+        return {"error": scope_error}
+
     store = _get_store()
     clip = store.get_clip(clip_id)
     if clip is None:
@@ -274,7 +294,11 @@ def enqueue_encode(clip_id: str) -> dict[str, str]:
 
 
 def enqueue_upload(clip_id: str) -> dict[str, str]:
-    """Re-upload a specific clip to cloud storage."""
+    """Re-upload a specific clip to cloud storage.  Requires mutation-scoped token."""
+    scope_error = _check_mutation_allowed()
+    if scope_error is not None:
+        return {"error": scope_error}
+
     store = _get_store()
     clip = store.get_clip(clip_id)
     if clip is None:
@@ -286,7 +310,14 @@ def enqueue_upload(clip_id: str) -> dict[str, str]:
 
 
 def save_game_profile(profile_json: str) -> dict[str, str]:
-    """Create or update a game recording profile from JSON."""
+    """Create or update a game recording profile from JSON.
+
+    Requires mutation-scoped token.
+    """
+    scope_error = _check_mutation_allowed()
+    if scope_error is not None:
+        return {"error": scope_error}
+
     store = _get_store()
     try:
         data = json.loads(profile_json)
@@ -319,32 +350,54 @@ def save_game_profile(profile_json: str) -> dict[str, str]:
     return {"status": "saved", "game_name": profile.game_name}
 
 
-def _check_webhook_rate_limit(url_hash: str) -> str | None:
-    """Return an error message if rate-limited, or None if the call is allowed.
+def _owner_id_from_auth() -> str | None:
+    """Return the owner_id derived from the auth context, or ``None``.
 
-    Bypassed when ``MOMENT_BYPASS_WEBHOOK_RATE_LIMIT=1``.
+    Mutation-scoped tokens → ``"*"`` (wildcard — sees all clips including PRIVATE).
+    Read-only / unauthenticated → ``None`` (PUBLIC + UNLISTED only).
     """
-    if os.environ.get("MOMENT_BYPASS_WEBHOOK_RATE_LIMIT") == "1":
-        return None
-
-    now = time.time()
-    last = _webhook_rate_limits.get(url_hash)
-    if last is not None:
-        elapsed = now - last
-        if elapsed < _WEBHOOK_MIN_INTERVAL:
-            wait = int(_WEBHOOK_MIN_INTERVAL - elapsed + 1)
-            return f"Please wait {wait} seconds before testing this webhook again"
-
-    _webhook_rate_limits[url_hash] = now
+    try:
+        from moment.mcp.server import get_auth_scope
+        scope = get_auth_scope()
+        if scope == "mutation":
+            return "*"
+    except Exception:
+        pass
     return None
+
+
+def _check_mutation_allowed() -> str | None:
+    """Return an error message if the caller lacks mutation scope, or ``None``."""
+    try:
+        from moment.mcp.server import get_auth_scope
+        if get_auth_scope() != "mutation":
+            return "Forbidden: mutation-scoped token required for this operation"
+    except Exception:
+        pass
+    return None
+
+
+def _check_webhook_rate_limit(url_hash: str) -> str | None:
+    """Return an error message if rate-limited, or ``None`` if allowed.
+
+    Uses persistent SQLite-based rate limiting via the Store.
+    Thread-safe via the store's internal lock.
+    """
+    store = _get_store()
+    return store.check_persistent_rate(f"webhook_test:{url_hash}", _WEBHOOK_MIN_INTERVAL)
 
 
 def test_webhook(webhook_id: str, *, _url_hash: str | None = None) -> dict[str, str]:
     """Test-fire a configured webhook.
 
-    Rate-limited to once per 60 seconds per webhook URL (bypassable
-    via ``MOMENT_BYPASS_WEBHOOK_RATE_LIMIT=1``).
+    Rate-limited to once per 60 seconds per webhook URL (persisted across restarts).
+    Requires mutation-scoped token.
     """
+    # Scope check — mutation token required
+    scope_error = _check_mutation_allowed()
+    if scope_error is not None:
+        return {"error": scope_error}
+
     store = _get_store()
     webhooks = store.list_webhooks()
     wh = next((w for w in webhooks if w.id == webhook_id), None)

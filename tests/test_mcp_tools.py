@@ -6,7 +6,8 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from moment.core.models import Clip, ClipStatus, ClipType, GameProfile, Webhook
+
+from moment.core.models import Clip, ClipStatus, ClipType, GameProfile
 
 
 # We test the module-level functions, so we need to mock _get_store
@@ -41,6 +42,46 @@ class TestListClips:
         assert "source_path" not in result[0]
         assert "encoded_path" not in result[0]
         assert "thumb_path" not in result[0]
+
+    @patch("moment.mcp.tools._get_store")
+    def test_r2_url_excluded_by_default(self, mock_get_store, mock_store):
+        """list_clips excludes r2_url when include_urls=False (default)."""
+        mock_get_store.return_value = mock_store
+        clip = Clip(
+            id="url-clip",
+            stem="url",
+            source_path="/tmp/u.mp4",
+            duration=10.0,
+            file_size=1000,
+            status=ClipStatus.DONE,
+            clip_type=ClipType.VIDEO,
+            r2_url="https://cdn.example.com/clip.mp4",
+        )
+        mock_store.list_clips.return_value = [clip]
+
+        from moment.mcp.tools import list_clips
+        result = list_clips()
+        assert result[0]["r2_url"] is None
+
+    @patch("moment.mcp.tools._get_store")
+    def test_r2_url_included_when_opt_in(self, mock_get_store, mock_store):
+        """list_clips includes r2_url when include_urls=True."""
+        mock_get_store.return_value = mock_store
+        clip = Clip(
+            id="url-clip2",
+            stem="url2",
+            source_path="/tmp/u2.mp4",
+            duration=10.0,
+            file_size=1000,
+            status=ClipStatus.DONE,
+            clip_type=ClipType.VIDEO,
+            r2_url="https://cdn.example.com/clip2.mp4",
+        )
+        mock_store.list_clips.return_value = [clip]
+
+        from moment.mcp.tools import list_clips
+        result = list_clips(include_urls=True)
+        assert result[0]["r2_url"] == "https://cdn.example.com/clip2.mp4"
 
     @patch("moment.mcp.tools._get_store")
     def test_with_status_filter(self, mock_get_store, mock_store):
@@ -233,7 +274,8 @@ class TestListGameProfiles:
 
 class TestEnqueueEncode:
     @patch("moment.mcp.tools._get_store")
-    def test_enqueue_encode_found(self, mock_get_store, mock_store):
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_enqueue_encode_found(self, mock_check, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="enc-id",
@@ -252,7 +294,8 @@ class TestEnqueueEncode:
         assert result["clip_id"] == "enc-id"
 
     @patch("moment.mcp.tools._get_store")
-    def test_enqueue_encode_not_found(self, mock_get_store, mock_store):
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_enqueue_encode_not_found(self, mock_check, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
         mock_store.get_clip.return_value = None
 
@@ -263,7 +306,8 @@ class TestEnqueueEncode:
 
 class TestEnqueueUpload:
     @patch("moment.mcp.tools._get_store")
-    def test_enqueue_upload_found(self, mock_get_store, mock_store):
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_enqueue_upload_found(self, mock_check, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="up-id",
@@ -282,7 +326,8 @@ class TestEnqueueUpload:
         assert result["status"] == "queued"
 
     @patch("moment.mcp.tools._get_store")
-    def test_enqueue_upload_no_encoded_path(self, mock_get_store, mock_store):
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_enqueue_upload_no_encoded_path(self, mock_check, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="up-id",
@@ -302,7 +347,8 @@ class TestEnqueueUpload:
         assert "encoded" in result["error"].lower()
 
     @patch("moment.mcp.tools._get_store")
-    def test_enqueue_upload_not_found(self, mock_get_store, mock_store):
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_enqueue_upload_not_found(self, mock_check, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
         mock_store.get_clip.return_value = None
 
@@ -313,7 +359,8 @@ class TestEnqueueUpload:
 
 class TestSaveGameProfile:
     @patch("moment.mcp.tools._get_store")
-    def test_save_new_profile(self, mock_get_store, mock_store):
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_save_new_profile(self, mock_check, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
 
         from moment.mcp.tools import save_game_profile
@@ -327,7 +374,8 @@ class TestSaveGameProfile:
         mock_store.save_game_profile.assert_called_once()
 
     @patch("moment.mcp.tools._get_store")
-    def test_save_profile_invalid_json(self, mock_get_store, mock_store):
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_save_profile_invalid_json(self, mock_check, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
 
         from moment.mcp.tools import save_game_profile
@@ -335,7 +383,8 @@ class TestSaveGameProfile:
         assert "error" in result
 
     @patch("moment.mcp.tools._get_store")
-    def test_save_profile_missing_game_name(self, mock_get_store, mock_store):
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_save_profile_missing_game_name(self, mock_check, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
 
         from moment.mcp.tools import save_game_profile
@@ -345,63 +394,32 @@ class TestSaveGameProfile:
 
 
 class TestWebhookRateLimit:
-    """Tests for per-webhook rate limiting in test_webhook()."""
-
-    def test_rate_limit_error_on_rapid_calls(self):
-        from moment.mcp.tools import test_webhook, _check_webhook_rate_limit
-        from moment.mcp.tools import _webhook_rate_limits
-
-        # Clear state
-        _webhook_rate_limits.clear()
-
-        # First call should pass
-        error = _check_webhook_rate_limit("hash1")
-        assert error is None
-
-        # Immediate second call should be rate-limited
-        error = _check_webhook_rate_limit("hash1")
-        assert error is not None
-        assert "wait" in error.lower() or "seconds" in error.lower()
-
-    def test_different_webhooks_independent(self):
-        from moment.mcp.tools import _check_webhook_rate_limit
-        from moment.mcp.tools import _webhook_rate_limits
-
-        _webhook_rate_limits.clear()
-
-        # Call webhook A
-        assert _check_webhook_rate_limit("hash-a") is None
-        # Webhook B should not be rate-limited
-        assert _check_webhook_rate_limit("hash-b") is None
-
-    @patch("moment.mcp.tools._check_webhook_rate_limit")
     @patch("moment.mcp.tools._get_store")
-    def test_webhook_rate_limit_error_propagated(self, mock_get_store, mock_rate_check, mock_store):
+    def test_rate_limit_blocks_second_call(self, mock_get_store):
+        """A second test_webhook call within the interval should be blocked."""
+        mock_store = MagicMock()
         mock_get_store.return_value = mock_store
-        mock_rate_check.return_value = "Please wait 58 seconds before testing this webhook again"
-
-        from moment.core.models import Webhook
-        mock_store.list_webhooks.return_value = [
-            Webhook(id="wh1", name="test", url="https://discord.com/api/webhooks/123/abc", enabled=True)
-        ]
-
-        from moment.mcp.tools import test_webhook
-        result = test_webhook("wh1")
-        assert "error" in result
-        assert "wait" in result["error"]
-
-    @patch.dict("os.environ", {"MOMENT_BYPASS_WEBHOOK_RATE_LIMIT": "1"})
-    def test_bypass_env_var(self):
+        # First call allowed, second blocked
+        mock_store.check_persistent_rate.side_effect = [None, "Please wait 59 seconds"]
         from moment.mcp.tools import _check_webhook_rate_limit
-        from moment.mcp.tools import _webhook_rate_limits
+        hash_key = "test-hash-123"
+        result1 = _check_webhook_rate_limit(hash_key)
+        assert result1 is None
+        result2 = _check_webhook_rate_limit(hash_key)
+        assert result2 is not None
+        assert "wait" in result2.lower()
 
-        _webhook_rate_limits.clear()
-
-        # First call sets the timestamp
-        _check_webhook_rate_limit("hash-by")
-        # Second call should be bypassed due to env var
-        error = _check_webhook_rate_limit("hash-by")
-        assert error is None
+    @patch("moment.mcp.tools._get_store")
+    def test_rate_limit_differs_per_url(self, mock_get_store):
+        """Different webhook hashes get independent rate limits."""
+        mock_store = MagicMock()
+        mock_get_store.return_value = mock_store
+        mock_store.check_persistent_rate.side_effect = [None, None, "Please wait 55 seconds"]
+        from moment.mcp.tools import _check_webhook_rate_limit
+        assert _check_webhook_rate_limit("hash-a") is None
+        assert _check_webhook_rate_limit("hash-b") is None
+        result = _check_webhook_rate_limit("hash-a")
+        assert result is not None
 
 
 class TestRegisterTools:
@@ -427,8 +445,9 @@ class TestRegisterTools:
 
 class TestMCPVisibility:
     @patch("moment.mcp.tools._get_store")
-    def test_list_clips_excludes_private_for_guest(self, mock_get_store, mock_store):
-        """Guest list_clips (no owner_id) excludes PRIVATE clips."""
+    @patch("moment.mcp.tools._owner_id_from_auth", return_value=None)
+    def test_list_clips_excludes_private_for_guest(self, mock_auth, mock_get_store, mock_store):
+        """Guest list_clips (no auth) derives owner_id=None from auth context."""
         mock_get_store.return_value = mock_store
         mock_store.list_clips.return_value = []
 
@@ -439,15 +458,16 @@ class TestMCPVisibility:
         assert call_kwargs["visibility"] is None
 
     @patch("moment.mcp.tools._get_store")
-    def test_list_clips_owner_sees_private(self, mock_get_store, mock_store):
-        """Owner list_clips passes owner_id through."""
+    @patch("moment.mcp.tools._owner_id_from_auth", return_value="*")
+    def test_list_clips_auth_sees_private(self, mock_auth, mock_get_store, mock_store):
+        """Authenticated list_clips passes wildcard owner_id."""
         mock_get_store.return_value = mock_store
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import list_clips
-        list_clips(owner_id="user123")
+        list_clips()
         call_kwargs = mock_store.list_clips.call_args.kwargs
-        assert call_kwargs["owner_id"] == "user123"
+        assert call_kwargs["owner_id"] == "*"
 
     @patch("moment.mcp.tools._get_store")
     def test_list_clips_visibility_filter(self, mock_get_store, mock_store):
@@ -462,15 +482,16 @@ class TestMCPVisibility:
         assert call_kwargs["visibility"] == ClipVisibility.PUBLIC
 
     @patch("moment.mcp.tools._get_store")
-    def test_search_clips_owner_passthrough(self, mock_get_store, mock_store):
-        """search_clips passes owner_id through for visibility."""
+    @patch("moment.mcp.tools._owner_id_from_auth", return_value="*")
+    def test_search_clips_auth_passthrough(self, mock_auth, mock_get_store, mock_store):
+        """search_clips derives owner_id from auth context."""
         mock_get_store.return_value = mock_store
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import search_clips
-        search_clips("test", owner_id="user456")
+        search_clips("test")
         call_kwargs = mock_store.list_clips.call_args.kwargs
-        assert call_kwargs["owner_id"] == "user456"
+        assert call_kwargs["owner_id"] == "*"
 
     @patch("moment.mcp.tools._get_store")
     def test_list_clips_response_includes_visibility(self, mock_get_store, mock_store):
@@ -515,3 +536,61 @@ class TestMCPVisibility:
         result = search_clips("sv")
         assert len(result) == 1
         assert result[0]["visibility"] == "unlisted"
+
+
+class TestMCPScopedTokens:
+    """Tests for scoped token enforcement."""
+
+    @patch("moment.mcp.tools._get_store")
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value="Forbidden: mutation-scoped token required")
+    def test_enqueue_encode_rejected_for_readonly(self, mock_check, mock_get_store, mock_store):
+        """enqueue_encode rejects read-only tokens."""
+        from moment.mcp.tools import enqueue_encode
+        result = enqueue_encode("some-id")
+        assert "error" in result
+        assert "mutation" in result["error"].lower()
+
+    @patch("moment.mcp.tools._get_store")
+    @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
+    def test_enqueue_encode_allowed_for_mutation(self, mock_check, mock_get_store, mock_store):
+        """enqueue_encode allows mutation-scoped tokens."""
+        clip = Clip(
+            id="enc-id",
+            stem="enc",
+            source_path="/tmp/e.mp4",
+            duration=10.0,
+            file_size=1000,
+            status=ClipStatus.DONE,
+            clip_type=ClipType.VIDEO,
+        )
+        mock_get_store.return_value = mock_store
+        mock_store.get_clip.return_value = clip
+
+        from moment.mcp.tools import enqueue_encode
+        result = enqueue_encode("enc-id")
+        assert result["status"] == "queued"
+
+
+class TestPersistentRateLimit:
+    """Tests for persistent SQLite-based rate limiting."""
+
+    @patch("moment.mcp.tools._get_store")
+    def test_rate_limit_uses_store(self, mock_get_store, mock_store):
+        """_check_webhook_rate_limit delegates to store.check_persistent_rate."""
+        mock_get_store.return_value = mock_store
+        mock_store.check_persistent_rate.return_value = None
+
+        from moment.mcp.tools import _check_webhook_rate_limit
+        result = _check_webhook_rate_limit("test-hash")
+        assert result is None
+        mock_store.check_persistent_rate.assert_called_once_with("webhook_test:test-hash", 60.0)
+
+    @patch("moment.mcp.tools._get_store")
+    def test_rate_limit_blocks(self, mock_get_store, mock_store):
+        """Rate limit returns error when store blocks."""
+        mock_get_store.return_value = mock_store
+        mock_store.check_persistent_rate.return_value = "Please wait 55 seconds"
+
+        from moment.mcp.tools import _check_webhook_rate_limit
+        result = _check_webhook_rate_limit("blocked")
+        assert "wait" in result.lower()

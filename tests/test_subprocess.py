@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from moment.utils.subprocess import (
-    Popen_sandboxed,
     _FD_CLOSE_MAX,
+    Popen_sandboxed,
     _sandbox_preexec,
     _try_qprocess,
     run_sandboxed,
@@ -136,7 +135,6 @@ class TestTryQProcess:
 
     def test_returns_none_no_qapp(self) -> None:
         """_try_qprocess returns None when no QCoreApplication exists."""
-        import sys
         try:
             from PyQt6 import QtCore
         except ImportError:

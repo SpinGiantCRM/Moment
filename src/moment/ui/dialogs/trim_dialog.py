@@ -168,7 +168,6 @@ class TrimDialog(QDialog):
 
     def keyPressEvent(self, event) -> None:
         """Handle keyboard shortcuts."""
-        from PyQt6.QtGui import QKeyEvent
 
         key = event.key()
         if key == Qt.Key.Key_I:

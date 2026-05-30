@@ -18,7 +18,7 @@ import subprocess  # nosec B404 — required for external tool invocation
 import threading
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,

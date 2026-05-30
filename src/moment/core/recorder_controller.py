@@ -18,12 +18,11 @@ import signal
 import subprocess  # nosec B404 — required for external tool invocation
 import threading
 import time
-
-from moment.utils.subprocess import Popen_sandboxed
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 from moment.core.models import GameProfile
+from moment.utils.subprocess import Popen_sandboxed
 from moment.utils.system import validate_arg
 
 logger = logging.getLogger(__name__)

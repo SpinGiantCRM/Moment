@@ -5,11 +5,10 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from moment.core.watcher import MIN_FILE_AGE, SCAN_INTERVAL, WATCH_DIR, Watcher
+from moment.core.watcher import SCAN_INTERVAL, WATCH_DIR, Watcher
 
 
 @pytest.fixture

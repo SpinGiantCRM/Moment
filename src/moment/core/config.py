@@ -58,7 +58,6 @@ _ALLOWED_KEYS: frozenset[str] = frozenset({
     "game_exit_behavior",
     # MCP / security
     "mcp_api_token",
-    "webhook_encryption_key",
     # Discord bot
     "discord_bot_auto_start",
     "discord_allowed_roles",

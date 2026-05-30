@@ -198,7 +198,7 @@ class _X11Backend(_Backend):
     def _listen(self) -> None:
         """Main X11 event loop (runs in background thread)."""
         try:
-            from Xlib import X, XK  # type: ignore[import-untyped]
+            from Xlib import XK, X  # type: ignore[import-untyped]
             from Xlib.display import Display  # type: ignore[import-untyped]
             from Xlib.ext import record  # type: ignore[import-untyped]
             from Xlib.protocol import rq  # type: ignore[import-untyped]

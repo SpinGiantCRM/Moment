@@ -7,14 +7,12 @@ handles is highlighted; crossed handles turn red.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal, QRectF, QSize
+from PyQt6.QtCore import QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
-    QBrush,
     QColor,
     QMouseEvent,
     QPainter,
     QPen,
-    QResizeEvent,
 )
 from PyQt6.QtWidgets import QWidget
 

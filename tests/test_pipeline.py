@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import time
-import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -14,7 +13,6 @@ from moment.core.encoder import Encoder, EncoderError
 from moment.core.models import (
     Clip,
     ClipStatus,
-    EditProfile,
     Task,
     TaskKind,
     TaskStatus,

@@ -21,27 +21,49 @@ class TestCheckAvailable:
 
 class TestResolveOrGenerateToken:
     def test_returns_existing_token(self):
+        """When a token is passed explicitly, it becomes the mutation token."""
         from moment.mcp.server import _resolve_or_generate_token
         result = _resolve_or_generate_token("existing-token")
-        assert result == "existing-token"
+        assert result == ("existing-token", None)
 
-    @patch("moment.mcp.server.Config")
-    def test_generates_token_when_none(self, mock_config_cls):
+    @patch("moment.mcp.server.keyring", None, create=True)
+    @patch("moment.mcp.server.secrets")
+    def test_generates_token_when_none(self, mock_secrets):
+        """When no token exists, generates a new mutation token."""
+        mock_secrets.token_urlsafe.return_value = "generated-token-value"
         from moment.mcp.server import _resolve_or_generate_token
         result = _resolve_or_generate_token(None)
         assert result is not None
-        assert len(result) > 0
+        assert result[0] == "generated-token-value"
+        assert result[1] is None  # No read-only token
 
-    @patch("moment.mcp.server.Config")
-    def test_generated_token_persisted(self, mock_config_cls):
-        mock_config = MagicMock()
-        mock_config_cls.return_value = mock_config
+    @patch("moment.mcp.server.secrets")
+    def test_generated_token_stored_in_keyring(self, mock_secrets):
+        """Generated token is persisted to keyring."""
+        mock_secrets.token_urlsafe.return_value = "new-keyring-token"
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None  # No existing token
+        with patch.dict("sys.modules", {"keyring": mock_keyring}):
+            from moment.mcp.server import _resolve_or_generate_token
+            result = _resolve_or_generate_token(None)
+            assert result[0] == "new-keyring-token"
+            mock_keyring.set_password.assert_called_once_with(
+                "moment", "mcp_api_token", "new-keyring-token"
+            )
 
-        from moment.mcp.server import _resolve_or_generate_token
-        result = _resolve_or_generate_token(None)
-        mock_config.set.assert_called_once()
-        assert mock_config.set.call_args[0][0] == "mcp_api_token"
-        assert mock_config.set.call_args[0][1] == result
+    @patch("moment.mcp.server.secrets")
+    def test_reads_ro_token_from_keyring(self, mock_secrets):
+        """Read-only token is read from keyring if available."""
+        mock_secrets.token_urlsafe.return_value = "new-mutation"
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.side_effect = lambda service, key: {
+            "mcp_api_token": None,
+            "mcp_token_ro": "ro-token-123",
+        }.get(key, None)
+        with patch.dict("sys.modules", {"keyring": mock_keyring}):
+            from moment.mcp.server import _resolve_or_generate_token
+            result = _resolve_or_generate_token(None)
+            assert result == ("new-mutation", "ro-token-123")
 
 
 class TestCreateServer:
@@ -61,7 +83,7 @@ class TestCreateServer:
     @patch("moment.mcp.server.FastMCP")
     @patch("moment.mcp.server._resolve_or_generate_token")
     def test_creates_server_with_mutations(self, mock_resolve, mock_fastmcp_class):
-        mock_resolve.return_value = "test-token"
+        mock_resolve.return_value = ("mut-token", "ro-token")
         mock_server = MagicMock()
         mock_fastmcp_class.return_value = mock_server
 
@@ -79,41 +101,30 @@ class TestCreateServer:
     @patch("moment.mcp.server.FastMCP")
     @patch("moment.mcp.server._resolve_or_generate_token")
     def test_creates_with_explicit_token(self, mock_resolve, mock_fastmcp_class):
-        mock_resolve.return_value = "my-token"
+        mock_resolve.return_value = ("my-token", None)
         mock_server = MagicMock()
         mock_fastmcp_class.return_value = mock_server
 
         from moment.mcp.server import create_server
         create_server(allow_mutations=True, api_token="my-token")
-        # _resolve_or_generate_token is called but just returns the existing token
         mock_resolve.assert_called_once_with("my-token")
 
 
-class TestMutationRoutes:
-    """Verify _MUTATION_ROUTES uses exact paths (prevents substring bypass)."""
+class TestAuthAllRoutes:
+    """Verify auth covers ALL routes, not just mutations."""
 
-    def test_known_routes_present(self):
-        from moment.mcp.server import _MUTATION_ROUTES
-        assert "/tools/enqueue_encode" in _MUTATION_ROUTES
-        assert "/tools/enqueue_upload" in _MUTATION_ROUTES
-        assert "/tools/save_game_profile" in _MUTATION_ROUTES
-        assert "/tools/test_webhook" in _MUTATION_ROUTES
+    def test_auth_no_longer_route_specific(self):
+        """_MUTATION_ROUTES is removed — auth middleware now covers all routes."""
+        from moment.mcp import server as mcp_server
+        assert not hasattr(mcp_server, "_MUTATION_ROUTES"), (
+            "_MUTATION_ROUTES should be removed — auth now covers all routes"
+        )
 
-    def test_read_only_route_not_in_mutation_set(self):
-        from moment.mcp.server import _MUTATION_ROUTES
-        assert "/tools/list_clips" not in _MUTATION_ROUTES
-        assert "/tools/search_clips" not in _MUTATION_ROUTES
-        assert "/tools/get_clip" not in _MUTATION_ROUTES
-        assert "/tools/get_stats" not in _MUTATION_ROUTES
-        assert "/tools/list_game_profiles" not in _MUTATION_ROUTES
-        assert "/tools/list_webhooks" not in _MUTATION_ROUTES
-
-    def test_bypass_attempt_rejected(self):
-        """A crafted path like /tools/enqueue_encode_evil should NOT match."""
-        from moment.mcp.server import _MUTATION_ROUTES
-        assert "/tools/enqueue_encode_evil" not in _MUTATION_ROUTES
-        assert "/tools/enqueue_encodeextra" not in _MUTATION_ROUTES
-        assert "/tools/save_game_profile_hack" not in _MUTATION_ROUTES
+    def test_read_only_routes_also_protected(self):
+        """Auth middleware no longer excludes read-only routes."""
+        from moment.mcp import server as mcp_server
+        # The middleware applies to all paths now
+        assert not hasattr(mcp_server, "_MUTATION_ROUTES")
 
 
 class TestAuthMiddleware:
@@ -121,14 +132,13 @@ class TestAuthMiddleware:
     @patch("moment.mcp.server.FastMCP")
     @patch("moment.mcp.server._resolve_or_generate_token")
     def test_adds_auth_when_app_present(self, mock_resolve, mock_fastmcp_class):
-        mock_resolve.return_value = "secret-token"
+        mock_resolve.return_value = ("secret-token", None)
         mock_server = MagicMock()
         mock_server._app = MagicMock()
         mock_fastmcp_class.return_value = mock_server
 
         from moment.mcp.server import create_server
         create_server(allow_mutations=True, api_token="secret-token")
-        # Middleware should have been registered
         mock_server._app.middleware.assert_called_once()
 
     @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
@@ -142,3 +152,51 @@ class TestAuthMiddleware:
         create_server(allow_mutations=False)
         # Should not try to add middleware
         mock_server._app.middleware.assert_not_called()
+
+    @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
+    @patch("moment.mcp.server.FastMCP")
+    @patch("moment.mcp.server._resolve_or_generate_token")
+    def test_auth_error_message_says_all_tools(self, mock_resolve, mock_fastmcp_class):
+        """The auth error message should say 'All tools' not 'Mutation tools'."""
+        mock_resolve.return_value = ("tok", None)
+        mock_server = MagicMock()
+        mock_server._app = MagicMock()
+        mock_fastmcp_class.return_value = mock_server
+
+        from moment.mcp.server import create_server
+        create_server(allow_mutations=True, api_token="tok")
+        mock_server._app.middleware.assert_called_once()
+
+
+class TestScopedTokens:
+    """Tests for read-only vs mutation token scoping."""
+
+    def test_mutation_token_names_set(self):
+        """_MUTATION_TOOL_NAMES contains all write operations."""
+        from moment.mcp.server import _MUTATION_TOOL_NAMES
+        assert "enqueue_encode" in _MUTATION_TOOL_NAMES
+        assert "enqueue_upload" in _MUTATION_TOOL_NAMES
+        assert "save_game_profile" in _MUTATION_TOOL_NAMES
+        assert "test_webhook" in _MUTATION_TOOL_NAMES
+        assert "list_clips" not in _MUTATION_TOOL_NAMES
+        assert "get_stats" not in _MUTATION_TOOL_NAMES
+
+    def test_get_auth_scope_default_none(self):
+        """Default auth scope is 'none' before any request."""
+        from moment.mcp.server import get_auth_scope
+        assert get_auth_scope() == "none"
+
+    @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
+    @patch("moment.mcp.server.FastMCP")
+    @patch("moment.mcp.server._resolve_or_generate_token")
+    def test_create_server_passes_ro_token_to_middleware(self, mock_resolve, mock_fastmcp_class):
+        """Read-only token is passed to auth middleware when available."""
+        mock_resolve.return_value = ("mut", "ro")
+        mock_server = MagicMock()
+        mock_server._app = MagicMock()
+        mock_fastmcp_class.return_value = mock_server
+
+        from moment.mcp.server import create_server
+        with patch("moment.mcp.server._add_auth_middleware") as mock_mw:
+            create_server(allow_mutations=True)
+            mock_mw.assert_called_once_with(mock_server, "mut", "ro")

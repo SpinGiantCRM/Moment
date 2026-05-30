@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from moment.core.models import Clip
-from moment.core.thumbnail import MAX_CACHE_SIZE, Thumbnailer, get_thumb_dir
+from moment.core.thumbnail import Thumbnailer, get_thumb_dir
 from moment.utils.ffmpeg import FFmpegError
 
 

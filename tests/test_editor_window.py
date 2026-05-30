@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+
 from moment.core.models import EditProfile
 from moment.ui.editor.editor_window import EditorWindow
 

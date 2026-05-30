@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from moment.ui.dialogs.about_dialog import AboutDialog, _SHORTCUTS, _CREDITS
+from moment.ui.dialogs.about_dialog import _CREDITS, _SHORTCUTS, AboutDialog
 
 
 class TestShortcutsData:

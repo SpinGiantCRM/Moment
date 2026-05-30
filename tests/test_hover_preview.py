@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from PyQt6.QtCore import QRect, Qt
 
-from moment.ui.widgets.hover_preview import HoverPreviewWidget, _POPUP_W, _POPUP_H
+from moment.ui.widgets.hover_preview import _POPUP_H, _POPUP_W, HoverPreviewWidget
 
 
 class TestHoverPreviewInit:

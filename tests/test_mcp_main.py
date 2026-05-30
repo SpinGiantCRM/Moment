@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestResolveApiToken:
     def test_cli_token_takes_precedence(self):
@@ -20,26 +18,20 @@ class TestResolveApiToken:
         assert result == "env-token"
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("moment.mcp.main.Config")
-    def test_config_fallback(self, mock_config_cls):
-        mock_config = MagicMock()
-        mock_config.get.return_value = "config-token"
-        mock_config_cls.return_value = mock_config
-
-        from moment.mcp.main import _resolve_api_token
-        result = _resolve_api_token(None)
-        assert result == "config-token"
+    def test_keyring_fallback(self):
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = "keyring-token"
+        with patch.dict("sys.modules", {"keyring": mock_keyring}):
+            from moment.mcp.main import _resolve_api_token
+            result = _resolve_api_token(None)
+            assert result == "keyring-token"
 
     @patch.dict("os.environ", {}, clear=True)
-    @patch("moment.mcp.main.Config")
-    def test_no_token_returns_none(self, mock_config_cls):
-        mock_config = MagicMock()
-        mock_config.get.return_value = None
-        mock_config_cls.return_value = mock_config
-
-        from moment.mcp.main import _resolve_api_token
-        result = _resolve_api_token(None)
-        assert result is None
+    def test_no_token_returns_none(self):
+        with patch.dict("sys.modules", {"keyring": None}):
+            from moment.mcp.main import _resolve_api_token
+            result = _resolve_api_token(None)
+            assert result is None
 
 
 class TestParser:

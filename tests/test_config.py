@@ -129,7 +129,7 @@ class TestKeyWhitelist:
             "game_processes", "game_scan_interval",
             "pause_encode_during_game", "pause_thumbnail_during_game",
             "minimize_during_game", "game_exit_behavior",
-            "mcp_api_token", "webhook_encryption_key",
+            "mcp_api_token",
             "discord_bot_auto_start",
         ]
         for key in known:

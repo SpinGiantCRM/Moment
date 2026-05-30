@@ -13,16 +13,14 @@ segments.  Supports:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from PyQt6.QtCore import QPoint, QRect, QRectF, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import (
-    QBrush,
     QColor,
     QMouseEvent,
     QPainter,
     QPen,
-    QResizeEvent,
 )
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -35,7 +33,6 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.core.models import SegmentEdit
-from moment.ui.resources import color
 
 logger = logging.getLogger(__name__)
 

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from moment.ui.widgets.pip_window import PipWindow, _PIP_W, _PIP_H
+from moment.ui.widgets.pip_window import _PIP_H, _PIP_W, PipWindow
 
 
 class TestPipWindowInit:

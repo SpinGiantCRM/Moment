@@ -11,17 +11,15 @@ charting library dependency.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QRect, QRectF, QPoint, pyqtSignal
+from PyQt6.QtCore import QRect, QRectF, Qt, pyqtSignal
 from PyQt6.QtGui import (
-    QBrush,
     QColor,
     QFont,
     QFontMetrics,
     QPainter,
-    QPainterPath,
     QPen,
 )
 from PyQt6.QtWidgets import (
@@ -572,7 +570,7 @@ class StatsPage(QWidget):
 
         try:
             stats = self._store.get_aggregate_stats()
-        except Exception as exc:
+        except Exception:
             logger.exception("Failed to load stats")
             self._show_zero_state()
             return

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from moment.ui.widgets.toast import (
-    ToastManager,
-    ToastWidget,
     _MAX_VISIBLE,
     _TOAST_PRESETS,
+    ToastManager,
+    ToastWidget,
     toast_manager,
 )
 

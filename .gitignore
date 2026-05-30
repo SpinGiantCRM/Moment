@@ -37,21 +37,24 @@ Thumbs.db
 # AI context (session memory, not version-controlled)
 .ai_context/
 
-# AI agent-facing files (stay local only)
-agents.md
+# Secrets
+.env
+.env.local
+.env.*
+*.pem
+*.key
+
+# AI agent-facing files (stay local only, not tracked)
 specs/
 SECURITY_AUDIT.md
-docs/
+ARCHITECTURE_AUDIT.md
 
 # Coverage data (local only)
 .coverage
-
-# Virtual environment
-.venv/
-
-# OS
-.DS_Store
-Thumbs.db
+.coverage.*
+coverage.json
+coverage.xml
+htmlcov/
 
 # Logs
 *.log

@@ -8,11 +8,9 @@ trash entirely.
 
 from __future__ import annotations
 
-import os
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,8 +18,6 @@ from moment.core.config import Config
 from moment.core.models import Clip, ClipStatus
 from moment.core.retention import (
     CLOUD_SIZE_LIMIT_BYTES,
-    ENCODED_MAX_AGE_DAYS,
-    SOURCE_MAX_AGE_DAYS,
     RetentionManager,
     _age_str,
 )

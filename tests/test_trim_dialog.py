@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from moment.ui.dialogs.trim_dialog import TrimDialog, _format_time
 
 

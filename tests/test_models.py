@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 from moment.core.models import (
@@ -13,7 +12,6 @@ from moment.core.models import (
     ClipType,
     ClipVisibility,
     EditProfile,
-    FilterConfig,
     Folder,
     GameProfile,
     OverlayConfig,

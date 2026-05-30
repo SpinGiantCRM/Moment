@@ -11,7 +11,6 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Literal
 
-
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -196,6 +195,7 @@ class Webhook:
     enabled: bool = True
     notify_on: list[str] = field(default_factory=list)
     per_game_filter: list[str] | None = None
+    include_clip_url: bool = False
 
 
 @dataclass

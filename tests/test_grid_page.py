@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from PyQt6.QtCore import QSize
 
 from moment.ui.pages.grid_page import ClipFilterProxyModel, GridPage

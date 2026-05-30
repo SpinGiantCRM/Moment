@@ -56,6 +56,7 @@ class TestTrashPageRefresh:
     def test_refresh_with_deleted_clips(self, qapp) -> None:
         """Refresh populates grid when deleted clips exist."""
         from datetime import datetime, timezone
+
         from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 
         clip = Clip(

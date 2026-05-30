@@ -3,14 +3,33 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+from cryptography.fernet import Fernet
 from PyQt6.QtWidgets import QApplication
 
 from moment.core.store import Store
+
+# ---------------------------------------------------------------------------
+# Test Fernet key for webhook tests (bypasses keyring requirement)
+# ---------------------------------------------------------------------------
+
+_TEST_FERNET = Fernet(Fernet.generate_key())
+
+
+def _make_test_conn(db_path: str) -> sqlite3.Connection:
+    """Create a plain SQLite connection for testing (no encryption required)."""
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
 
 # ---------------------------------------------------------------------------
 # QApplication (session-scoped for UI tests)
@@ -25,6 +44,16 @@ def qapp() -> QApplication:
     if app is None:
         app = QApplication([])
     return app
+
+
+@pytest.fixture(autouse=True)
+def _setup_test_fernet() -> None:
+    """Inject a test Fernet instance into Store's class-level cache
+    before each test, so webhook encrypt/decrypt works without keyring."""
+    Store._fernet_cache = _TEST_FERNET
+    if Store._fernet_lock is None:
+        import threading
+        Store._fernet_lock = threading.Lock()
 
 
 @pytest.fixture
@@ -44,13 +73,20 @@ def db_path() -> str:
 
 @pytest.fixture
 def store(db_path: str) -> Store:
-    """Return a Store backed by a temp file database."""
-    s = Store(db_path=db_path)
-    yield s
-    s.close()
-    # Give WAL checkpoint time to flush before file cleanup by db_path fixture
-    import time
-    time.sleep(0.05)
+    """Return a Store backed by a temp file database.
+
+    Uses a mocked ``_connect_encrypted`` to bypass the mandatory
+    pysqlcipher3 requirement for test environments.
+    """
+    test_conn = _make_test_conn(db_path)
+    with patch("moment.core.store._connect_encrypted", return_value=test_conn):
+        with patch.object(Store, "_run_encryption_health_check", return_value=None):
+            s = Store(db_path=db_path)
+            yield s
+            s.close()
+            # Give WAL checkpoint time to flush before file cleanup
+            import time
+            time.sleep(0.05)
 
 
 @pytest.fixture

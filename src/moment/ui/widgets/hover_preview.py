@@ -15,12 +15,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import (
-    QPoint,
     QRect,
     Qt,
     QTimer,
 )
-from PyQt6.QtGui import QColor, QPixmap, QPainter, QPainterPath
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QLabel,

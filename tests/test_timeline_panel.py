@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 from moment.core.models import SegmentEdit
-from moment.ui.editor.timeline_panel import TimelinePanel, _Segment, _TimelineWidget, _fmt
+from moment.ui.editor.timeline_panel import TimelinePanel, _fmt, _Segment, _TimelineWidget
 
 
 class TestTimelineWidgetInit:

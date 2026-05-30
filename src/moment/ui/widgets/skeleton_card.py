@@ -18,7 +18,7 @@ from PyQt6.QtCore import (
     Qt,
     pyqtProperty,
 )
-from PyQt6.QtGui import QBrush, QColor, QPainter, QPen
+from PyQt6.QtGui import QBrush, QColor, QPainter
 from PyQt6.QtWidgets import QWidget
 
 from moment.ui.resources import color

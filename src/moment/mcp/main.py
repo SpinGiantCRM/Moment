@@ -5,8 +5,7 @@ requested transport (stdio by default, or HTTP).
 
 HTTP transport always binds to ``127.0.0.1`` (localhost only).
 Mutation tools (``--allow-mutations``) require a Bearer token via
-``--api-token``, ``MOMENT_MCP_TOKEN`` env var, or the ``mcp_api_token``
-config key.
+``--api-token``, ``MOMENT_MCP_TOKEN`` env var, or the system keyring.
 """
 
 from __future__ import annotations
@@ -15,8 +14,6 @@ import argparse
 import logging
 import os
 import sys
-
-from moment.core.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +24,7 @@ def _resolve_api_token(cli_token: str | None) -> str | None:
     Precedence:
         1. CLI ``--api-token`` flag
         2. ``MOMENT_MCP_TOKEN`` environment variable
-        3. Config ``mcp_api_token`` setting
+        3. System keyring (``moment/mcp_api_token``)
 
     Returns ``None`` if no token is configured anywhere.
     """
@@ -36,9 +33,15 @@ def _resolve_api_token(cli_token: str | None) -> str | None:
     env_token = os.environ.get("MOMENT_MCP_TOKEN", "")
     if env_token:
         return env_token
-    config = Config()
-    stored = config.get("mcp_api_token")
-    return stored if isinstance(stored, str) and stored else None
+    # Try keyring
+    try:
+        import keyring
+        token = keyring.get_password("moment", "mcp_api_token")
+        if token:
+            return token
+    except Exception:
+        pass
+    return None
 
 
 def run_mcp(argv: list[str] | None = None) -> int:
@@ -110,7 +113,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="TOKEN",
         help=(
             "API token for mutation tools. "
-            "Also read from MOMENT_MCP_TOKEN env var or config."
+            "Also read from MOMENT_MCP_TOKEN env var or keyring."
         ),
     )
     return parser

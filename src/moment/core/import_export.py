@@ -309,8 +309,16 @@ class ImportExport:
         except Exception:
             pass  # graceful fallback; hardcoded roots are sufficient
 
+        from os.path import commonpath
+
         resolved_str = str(resolved)
-        if not any(resolved_str.startswith(root) for root in allowed):
+        for root in allowed:
+            try:
+                if commonpath([resolved_str, root]) == root:
+                    break
+            except ValueError:
+                continue
+        else:
             raise ImportError(
                 f"Export blocked: {path.name} resolves to {resolved}, "
                 f"which is outside allowed directories"

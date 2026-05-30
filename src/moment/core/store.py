@@ -5,9 +5,9 @@ complex types (datetimes, Paths, lists, dicts) transparently.
 
 Database path: ``~/.config/moment/clips.db``
 
-When ``pysqlcipher3`` is installed, the clips database is encrypted at
-rest using a 256-bit key stored in the system keyring.  If the library
-or keyring is unavailable, the DB opens in plaintext mode with a warning.
+The database is **always** encrypted at rest via ``pysqlcipher3`` with a
+256-bit key stored in the system keyring.  Encryption is mandatory — the
+store will not open without it.
 """
 
 from __future__ import annotations
@@ -51,17 +51,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Encrypted connection — pysqlcipher3 (optional)
+# Encrypted connection — pysqlcipher3 (mandatory)
 # ---------------------------------------------------------------------------
-
-_ENCRYPTION_WARNING_LOGGED = False
 
 
 def _get_or_create_db_key() -> bytes | None:
     """Return the 256-bit DB encryption key from the system keyring.
 
     Generates and stores a new key on first access.  Returns ``None``
-    if ``keyring`` is not installed or the keyring backend fails.
+    if ``keyring`` is not installed or the keyring backend fails
+    (caller must decide whether to hard-fail).
     """
     try:
         import keyring  # type: ignore[import-untyped]
@@ -84,50 +83,41 @@ def _get_or_create_db_key() -> bytes | None:
         logger.info("Generated and stored new DB encryption key in keyring")
         return new_key.encode()
     except Exception as exc:
-        logger.warning("Could not store DB encryption key in keyring: %s", exc)
-        # Return the key anyway — but it won't survive restart
-        return new_key.encode()
+        logger.error("Could not store DB encryption key in keyring: %s", exc)
+        return None
 
 
 def _connect_encrypted(db_path: str) -> sqlite3.Connection:
-    """Open the database with encryption if pysqlcipher3 + keyring are available.
+    """Open the database with encryption via pysqlcipher3.
 
-    Falls back to plain ``sqlite3.connect()`` when:
-        - ``pysqlcipher3`` is not installed
-        - ``keyring`` is not installed or fails
-        - ``libsqlcipher`` is not on the system
-
-    Logs a single WARNING per process for the plaintext fallback.
+    Encryption is **mandatory** — pysqlcipher3 and keyring are required.
+    Raises ``RuntimeError`` if any component is unavailable or fails.
 
     Args:
         db_path: Absolute path to the ``.db`` file.
 
     Returns:
-        A ``sqlite3.Connection`` (plain or encrypted).
-    """
-    global _ENCRYPTION_WARNING_LOGGED
+        An encrypted ``sqlite3.Connection``.
 
-    # 1. Try pysqlcipher3
+    Raises:
+        RuntimeError: If pysqlcipher3, keyring, or libsqlcipher are missing,
+                      or the encrypted connection cannot be opened.
+    """
+    # 1. pysqlcipher3 is mandatory
     try:
         import pysqlcipher3.dbapi2 as sqlcipher  # type: ignore[import-untyped]
     except ImportError:
-        if not _ENCRYPTION_WARNING_LOGGED:
-            logger.warning(
-                "pysqlcipher3 not installed — database will be PLAINTEXT. "
-                "Install 'moment[encrypted-db]' for at-rest encryption."
-            )
-            _ENCRYPTION_WARNING_LOGGED = True
-        return sqlite3.connect(db_path, check_same_thread=False)
+        raise RuntimeError(
+            "pysqlcipher3 is required — install with: pip install moment"
+        ) from None
 
-    # 2. Get encryption key from keyring
+    # 2. DB encryption key from keyring (mandatory)
     key = _get_or_create_db_key()
     if key is None:
-        if not _ENCRYPTION_WARNING_LOGGED:
-            logger.warning(
-                "keyring not available — database will be PLAINTEXT"
-            )
-            _ENCRYPTION_WARNING_LOGGED = True
-        return sqlite3.connect(db_path, check_same_thread=False)
+        raise RuntimeError(
+            "System keyring is required for database encryption. "
+            "Install keyring: pip install keyring"
+        )
 
     # 3. Open with encryption
     try:
@@ -138,12 +128,9 @@ def _connect_encrypted(db_path: str) -> sqlite3.Connection:
         logger.info("Opened encrypted database with pysqlcipher3")
         return conn
     except Exception as exc:
-        if not _ENCRYPTION_WARNING_LOGGED:
-            logger.warning(
-                "pysqlcipher3 connection failed: %s — falling back to plaintext", exc
-            )
-            _ENCRYPTION_WARNING_LOGGED = True
-        return sqlite3.connect(db_path, check_same_thread=False)
+        raise RuntimeError(
+            f"Failed to open encrypted database: {exc}"
+        ) from exc
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -356,6 +343,12 @@ class Store:
     def __init__(self, db_path: str | None = None) -> None:
         """Open (or create) the database and run migrations.
 
+        Includes a startup encryption health-check that verifies:
+        - pysqlcipher3 is importable (enforced by ``_connect_encrypted``)
+        - Keyring is available (warning if not)
+        - Fernet encrypt/decrypt round-trip works (hard fail if not)
+        - DB file header integrity (warning if not encrypted)
+
         Args:
             db_path: Override the default database path (useful for testing).
         """
@@ -372,6 +365,9 @@ class Store:
         if os.path.isfile(self._db_path):
             os.chmod(self._db_path, 0o600)
 
+        # --- Startup encryption health-check ---
+        self._run_encryption_health_check()
+
         # Migration: old clip-tray dirs → moment dirs (runs once)
         self._migrate_old_dirs()
 
@@ -379,6 +375,61 @@ class Store:
         self._migrate_discord_user_id()
         self._migrate_json()
         self._migrate_discord_token()
+        self._migrate_webhook_include_url()
+
+    def _run_encryption_health_check(self) -> None:
+        """Verify encryption components at startup.
+
+        Checks:
+            - pysqlcipher3 is importable (already enforced by ``_connect_encrypted``)
+            - Keyring is available (warning if not)
+            - Fernet encrypt/decrypt round-trip works (hard fail if not)
+            - DB file header is not plaintext SQLite (warning if it looks unencrypted)
+
+        Raises:
+            RuntimeError: If the Fernet round-trip test fails.
+        """
+        # 1. Keyring availability check (warning only — DB key is more critical)
+        try:
+            import keyring  # noqa: F401
+        except ImportError:
+            logger.warning(
+                "Keyring not available — webhook encryption and Discord token "
+                "storage will be unavailable. Install with: pip install keyring"
+            )
+
+        # 2. Fernet encrypt/decrypt round-trip test
+        try:
+            from cryptography.fernet import Fernet
+
+            test_key = Fernet.generate_key()
+            fernet = Fernet(test_key)
+            plaintext = b"moment-encryption-healthcheck"
+            ciphertext = fernet.encrypt(plaintext)
+            decrypted = fernet.decrypt(ciphertext)
+            if decrypted != plaintext:
+                raise RuntimeError("Fernet round-trip test failed")
+            logger.debug("Fernet encrypt/decrypt round-trip OK")
+        except Exception as exc:
+            raise RuntimeError(
+                f"Encryption health-check failed — Fernet not working: {exc}"
+            ) from exc
+
+        # 3. DB file header check (detect plaintext SQLite)
+        if os.path.isfile(self._db_path) and os.path.getsize(self._db_path) > 0:
+            with open(self._db_path, "rb") as fh:
+                header = fh.read(16)
+            # Standard SQLite3 header starts with "SQLite format 3\x00"
+            if header.startswith(b"SQLite format 3\x00"):
+                logger.warning(
+                    "Database file appears to be plaintext SQLite — "
+                    "expected SQLCipher-encrypted file. "
+                    "If migrating from an older version, delete %s and restart "
+                    "to create a new encrypted database.",
+                    self._db_path,
+                )
+            else:
+                logger.debug("Database file header OK (encrypted)")
 
     def _migrate_discord_token(self) -> None:
         """Move ``discord_bot_token`` from settings table to system keyring.
@@ -433,6 +484,20 @@ class Store:
             "DELETE FROM settings WHERE key = ?", ("discord_bot_token",)
         )
         self._conn.commit()
+
+    def _migrate_webhook_include_url(self) -> None:
+        """Add ``include_clip_url`` column to webhooks table (pre-v0.3 migration)."""
+        try:
+            rows = self._conn.execute("PRAGMA table_info(webhooks)").fetchall()
+            columns = {r["name"] for r in rows}
+            if "include_clip_url" not in columns:
+                self._conn.execute(
+                    "ALTER TABLE webhooks ADD COLUMN include_clip_url INTEGER NOT NULL DEFAULT 0"
+                )
+                logger.info("Added include_clip_url column to webhooks table")
+            self._conn.commit()
+        except sqlite3.Error:
+            pass
 
     def _migrate_discord_user_id(self) -> None:
         """Add ``discord_user_id`` column if it doesn't exist (pre-v0.2 migration)."""
@@ -680,6 +745,9 @@ class Store:
             # Exact visibility filter (e.g. PUBLIC only for /recent)
             where.append("visibility = ?")
             params.append(visibility.value)
+        elif owner_id == "*":
+            # Admin/mutation-token caller — sees all clips, no filter
+            pass
         elif owner_id is not None:
             # Owner sees: PUBLIC + UNLISTED + own PRIVATE clips
             # Guest sees: PUBLIC + UNLISTED only
@@ -959,59 +1027,101 @@ class Store:
     # Webhook encryption key (Fernet)
     # ------------------------------------------------------------------
 
-    _fernet_lock: "threading.Lock | None" = None
+    _fernet_lock: "threading.Lock" = threading.Lock()
     _fernet_cache: "Fernet | None" = None
 
     @staticmethod
     def _get_or_create_fernet() -> "Fernet":
-        """Return a Fernet instance, generating + persisting the key on first call.
+        """Return a Fernet instance for webhook URL encryption.
 
-        Cache order:
-            1. In-memory cache (survives missing Config; shared across Store instances)
-            2. Config-backed persisted key (survives restarts)
-            3. Generate a new key (only when neither cache nor config exists)
+        Key storage priority:
+            1. In-memory class-level cache
+            2. OS keyring (``moment_webhook_key``) — primary persistent store
+            3. Config settings table (``webhook_encryption_key``) — legacy
+               migration path; if found, moved to keyring and deleted from DB
+            4. Generate a new key → store in keyring
 
         Thread-safe: uses a class-level lock to prevent duplicate key generation.
+
+        Raises:
+            RuntimeError: If the Fernet key cannot be created or accessed.
         """
-        import threading
         from cryptography.fernet import Fernet
 
-        # Fast path: in-memory cache hit (no lock needed for reads of immutable refs)
+        # Fast path: in-memory cache hit
         if Store._fernet_cache is not None:
             return Store._fernet_cache
 
-        # Slow path: take lock to prevent race on cache population
-        if Store._fernet_lock is None:
-            Store._fernet_lock = threading.Lock()
-
+        # Slow path: take lock
         with Store._fernet_lock:
             # Double-check after acquiring lock
             if Store._fernet_cache is not None:
                 return Store._fernet_cache
 
-            cfg = _get_config()
-            if cfg is not None:
-                key_b64 = cfg.get("webhook_encryption_key", None)
+            # 1. Try OS keyring (primary store)
+            try:
+                import keyring
+                key_b64 = keyring.get_password("moment", "webhook_encryption_key")
                 if key_b64:
                     fernet = Fernet(key_b64.encode())
                     Store._fernet_cache = fernet
                     return fernet
+            except ImportError:
+                raise RuntimeError(
+                    "System keyring is required for webhook encryption. "
+                    "Install keyring: pip install keyring"
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to read webhook key from keyring: %s", exc
+                )
 
-            # Generate new key and persist it
+            # 2. Legacy migration: check settings table
+            cfg = _get_config()
+            if cfg is not None:
+                legacy_key = cfg.get("webhook_encryption_key", None)
+                if legacy_key:
+                    logger.info("Migrating webhook encryption key to keyring")
+                    fernet = Fernet(legacy_key.encode())
+                    Store._fernet_cache = fernet
+                    # Store in keyring and delete from settings table
+                    try:
+                        import keyring
+                        keyring.set_password(
+                            "moment", "webhook_encryption_key", legacy_key
+                        )
+                        cfg.delete("webhook_encryption_key")
+                        logger.info(
+                            "Webhook encryption key migrated to keyring and "
+                            "removed from settings table"
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Migrated webhook key to memory but could not "
+                            "persist to keyring: %s", exc
+                        )
+                    return fernet
+
+            # 3. Generate new key → store in keyring (never in settings table)
             key = Fernet.generate_key()
             fernet = Fernet(key)
             Store._fernet_cache = fernet
-            if cfg is not None:
-                cfg.set("webhook_encryption_key", key.decode())
+            try:
+                import keyring
+                keyring.set_password(
+                    "moment", "webhook_encryption_key", key.decode()
+                )
+                logger.info("Generated and stored new webhook encryption key in keyring")
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to persist webhook encryption key to keyring: {exc}"
+                ) from exc
             return fernet
 
     @classmethod
     def reset_fernet_cache(cls) -> None:
         """Clear the in-memory Fernet cache (for test isolation)."""
-        if cls._fernet_lock is not None:
-            with cls._fernet_lock:
-                cls._fernet_cache = None
-        else:
+        with cls._fernet_lock:
             cls._fernet_cache = None
 
     def save_webhook(self, wh: Webhook) -> Webhook:
@@ -1020,19 +1130,20 @@ class Store:
         try:
             fernet = self._get_or_create_fernet()
             encrypted_url = fernet.encrypt(wh.url.encode()).decode()
-        except Exception:
-            logger.warning("Fernet encrypt failed — storing webhook URL as plaintext")
-            encrypted_url = wh.url
+        except Exception as exc:
+            logger.error("Webhook encryption failed: %s", exc)
+            raise RuntimeError(f"Failed to encrypt webhook URL: {exc}") from exc
         with self._tx() as cur:
             cur.execute(
                 """INSERT OR REPLACE INTO webhooks
-                   (id, url, name, enabled, notify_on, per_game_filter)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (id, url, name, enabled, notify_on, per_game_filter, include_clip_url)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     wh.id, encrypted_url, wh.name,
                     int(wh.enabled),
                     _json_dumps(wh.notify_on),
                     _json_dumps(wh.per_game_filter),
+                    int(wh.include_clip_url),
                 ),
             )
         return wh
@@ -1054,15 +1165,15 @@ class Store:
         result: list[Webhook] = []
         for r in rows:
             stored = r["url"]
+            from cryptography.fernet import InvalidToken
+            fernet = self._get_or_create_fernet()
             try:
-                from cryptography.fernet import Fernet, InvalidToken
-                fernet = self._get_or_create_fernet()
-                try:
-                    real_url = fernet.decrypt(stored.encode()).decode()
-                except InvalidToken:
-                    real_url = stored  # legacy plaintext
-            except ImportError:
-                real_url = stored
+                real_url = fernet.decrypt(stored.encode()).decode()
+            except InvalidToken:
+                raise RuntimeError(
+                    f"Failed to decrypt webhook URL for webhook {r['id']}: "
+                    "key mismatch or legacy plaintext detected"
+                )
             # Redact the token for display
             redacted = self._redact_webhook_url(real_url)
             result.append(Webhook(
@@ -1072,26 +1183,31 @@ class Store:
                 enabled=bool(r["enabled"]),
                 notify_on=_json_loads(r["notify_on"]) or [],
                 per_game_filter=_json_loads(r["per_game_filter"]),
+                include_clip_url=bool(r["include_clip_url"]),
             ))
         return result
 
     def get_webhook_url(self, webhook_id: str) -> str | None:
-        """Return the decrypted (real) URL for a webhook, for dispatch use only."""
+        """Return the decrypted (real) URL for a webhook, for dispatch use only.
+
+        Raises:
+            RuntimeError: If the URL cannot be decrypted.
+        """
         row = self._conn.execute(
             "SELECT url FROM webhooks WHERE id = ?", (webhook_id,)
         ).fetchone()
         if row is None:
             return None
         stored = row["url"]
+        from cryptography.fernet import InvalidToken
+        fernet = self._get_or_create_fernet()
         try:
-            from cryptography.fernet import Fernet, InvalidToken
-            fernet = self._get_or_create_fernet()
-            try:
-                return fernet.decrypt(stored.encode()).decode()
-            except InvalidToken:
-                return stored  # legacy plaintext
-        except ImportError:
-            return stored
+            return fernet.decrypt(stored.encode()).decode()
+        except InvalidToken:
+            raise RuntimeError(
+                f"Failed to decrypt webhook URL for {webhook_id}: "
+                "key mismatch or legacy plaintext detected"
+            )
 
     def delete_webhook(self, webhook_id: str) -> None:
         with self._tx() as cur:
@@ -1361,6 +1477,61 @@ class Store:
         with self._tx() as cur:
             cur.execute("DELETE FROM webhook_log")
 
+    # ------------------------------------------------------------------
+    # Persistent rate limiting
+    # ------------------------------------------------------------------
+
+    def check_persistent_rate(
+        self, key: str, interval_secs: float = 60.0
+    ) -> str | None:
+        """Persistent rate-limit check persisted in SQLite.
+
+        Auto-cleans expired entries (older than *interval_secs* * 2).
+
+        Args:
+            key: Unique rate-limit key (e.g. truncated webhook hash).
+            interval_secs: Minimum seconds between allowed calls.
+
+        Returns:
+            An error message if rate-limited, or ``None`` if allowed.
+        """
+        import time
+
+        now = time.time()
+        expire_before = now - (interval_secs * 2)
+
+        with self._lock:
+            # Auto-clean expired entries
+            self._conn.execute(
+                "DELETE FROM rate_limits WHERE expires_at < ?",
+                (expire_before,),
+            )
+            self._conn.commit()
+
+            # Check existing entry
+            row = self._conn.execute(
+                "SELECT last_called FROM rate_limits WHERE key = ?", (key,)
+            ).fetchone()
+
+            if row is not None:
+                elapsed = now - row["last_called"]
+                if elapsed < interval_secs:
+                    wait = int(interval_secs - elapsed + 1)
+                    return f"Please wait {wait} seconds before trying again"
+                # Update existing entry
+                self._conn.execute(
+                    "UPDATE rate_limits SET last_called = ?, expires_at = ? WHERE key = ?",
+                    (now, now + interval_secs, key),
+                )
+            else:
+                # Insert new entry
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO rate_limits (key, last_called, expires_at) VALUES (?, ?, ?)",
+                    (key, now, now + interval_secs),
+                )
+            self._conn.commit()
+            return None
+
     def get_webhook_log_count(self, *, webhook_id: str | None = None) -> int:
         """Return total number of webhook log entries."""
         if webhook_id is not None:
@@ -1564,7 +1735,8 @@ CREATE TABLE IF NOT EXISTS webhooks (
     name            TEXT NOT NULL DEFAULT '',
     enabled         INTEGER NOT NULL DEFAULT 1,
     notify_on       TEXT NOT NULL DEFAULT '[]',
-    per_game_filter TEXT
+    per_game_filter TEXT,
+    include_clip_url INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS webhook_log (
@@ -1631,6 +1803,14 @@ CREATE TABLE IF NOT EXISTS folder_clips (
     clip_id   TEXT NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
     PRIMARY KEY (folder_id, clip_id)
 );
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+    key         TEXT PRIMARY KEY,
+    last_called REAL NOT NULL,
+    expires_at  REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limits_expires ON rate_limits(expires_at);
 
 CREATE TABLE IF NOT EXISTS pip_cache (
     id          TEXT PRIMARY KEY,

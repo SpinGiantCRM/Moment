@@ -8,16 +8,14 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess  # nosec B404 — required for external tool invocation
 import threading
-
-from moment.utils.subprocess import run_sandboxed
 from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from moment.core.models import Clip
 from moment.utils.ffmpeg import FFmpegError, find_ffmpeg
+from moment.utils.subprocess import run_sandboxed
 from moment.utils.system import ensure_dir, sanitize_stem
 
 if TYPE_CHECKING:

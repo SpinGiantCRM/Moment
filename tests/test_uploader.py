@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import subprocess
-import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from moment.core.uploader import Uploader, UploaderError, _RETRY_DELAYS, _MAX_RETRIES
+from moment.core.uploader import _MAX_RETRIES, _RETRY_DELAYS, Uploader, UploaderError
 
 
 @pytest.fixture
@@ -333,7 +332,7 @@ class TestCircuitBreaker:
 
     def test_circuit_breaker_opens_after_consecutive_failures(self, test_path: Path) -> None:
         """After 3 consecutive failures, the 4th attempt is blocked."""
-        from moment.core.uploader import _CIRCUIT_BREAKER_FAILURES, _CIRCUIT_BREAKER_BACKOFF
+        from moment.core.uploader import _CIRCUIT_BREAKER_FAILURES
 
         u = Uploader(remote="test", bucket="test")
 
@@ -356,7 +355,6 @@ class TestCircuitBreaker:
 
     def test_circuit_breaker_resets_after_success(self, test_path: Path) -> None:
         """One successful upload resets the circuit breaker."""
-        from moment.core.uploader import _CIRCUIT_BREAKER_FAILURES
 
         u = Uploader(remote="test", bucket="test")
 
@@ -386,6 +384,7 @@ class TestCircuitBreaker:
     def test_circuit_breaker_is_thread_safe(self, test_path: Path) -> None:
         """Circuit breaker state updates are thread-safe."""
         import concurrent.futures
+
         import moment.core.uploader as up_mod
 
         with up_mod.Uploader._failure_lock:

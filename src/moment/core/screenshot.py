@@ -13,12 +13,11 @@ import os
 import re
 import subprocess  # nosec B404 — required for external tool invocation
 from datetime import datetime, timezone
-
-from moment.utils.subprocess import run_sandboxed
 from pathlib import Path
 from typing import Callable
 
 from moment.utils.ffmpeg import FFmpegError, find_ffmpeg
+from moment.utils.subprocess import run_sandboxed
 from moment.utils.system import ensure_dir
 
 logger = logging.getLogger(__name__)

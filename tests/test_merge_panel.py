@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from PyQt6.QtCore import Qt
+
 from moment.core.models import Clip, ClipStatus, ClipType
 from moment.ui.editor.merge_panel import MergePanel
 

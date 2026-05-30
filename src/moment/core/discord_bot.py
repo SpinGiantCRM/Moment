@@ -12,9 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import threading
-from datetime import datetime, timezone
+from typing import Any
 
 from moment.core.config import Config
 from moment.core.models import Clip, ClipStatus, ClipVisibility, Webhook
@@ -51,21 +50,16 @@ _AUTO_START_DELAY_SECONDS = 30
 
 
 def _get_discord_token() -> str:
-    """Return the Discord bot token from env var or system keyring.
+    """Return the Discord bot token from the system keyring only.
 
-    Precedence:
-        1. ``MOMENT_DISCORD_TOKEN`` env var (headless / daemon mode)
-        2. ``keyring.get_password("moment", "discord_bot_token")``
-        3. Empty string — bot will not start
+    The token is stored via ``keyring.get_password("moment",
+    "discord_bot_token")``.  No environment-variable fallback is
+    provided — env vars are readable by any same-user process.
 
-    ``keyring`` is an optional dependency; import failure is logged and
-    skipped without crashing.
+    Returns:
+        The token string, or ``""`` if keyring is unavailable or
+        the token is not configured.
     """
-    token = os.environ.get("MOMENT_DISCORD_TOKEN", "")
-    if token:
-        logger.debug("Discord token read from MOMENT_DISCORD_TOKEN env var")
-        return token
-
     try:
         import keyring
 
@@ -74,7 +68,10 @@ def _get_discord_token() -> str:
             logger.debug("Discord token read from system keyring")
         return token
     except ImportError:
-        logger.debug("keyring not installed — skipping keychain lookup")
+        logger.warning(
+            "keyring not installed — Discord bot token unavailable. "
+            "Install with: pip install keyring"
+        )
         return ""
     except Exception:
         logger.warning("Failed to read Discord token from keyring", exc_info=True)
@@ -385,6 +382,17 @@ else:
     def _build_clip_embed(clip: Clip, *, include_url: bool = False) -> None:
         return None
 
+    def _get_allowed_roles(store: Store) -> set[str]:
+        return {"Moment User"}
+
+    def _require_role(store: Store):
+        def decorator(func):
+            return func
+        return decorator
+
+    def _get_caller_id(interaction: Any = None) -> str:
+        return ""
+
 
 # ---------------------------------------------------------------------------
 # DiscordBot — main public API
@@ -444,8 +452,7 @@ class DiscordBot:
         if not token:
             logger.warning(
                 "Cannot start Discord bot — no token configured. "
-                "Set MOMENT_DISCORD_TOKEN env var or run "
-                "`keyring set moment discord_bot_token`"
+                "Run `keyring set moment discord_bot_token`"
             )
             return
 
@@ -544,7 +551,7 @@ class DiscordBot:
             embed.add_field(
                 name="Size", value=_fmt_size(clip.file_size), inline=True
             )
-            if clip.r2_url:
+            if clip.r2_url and webhook.include_clip_url:
                 embed.add_field(name="Link", value=clip.r2_url, inline=False)
             if clip.tags:
                 embed.set_footer(text="Tags: " + ", ".join(clip.tags))

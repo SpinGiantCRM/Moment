@@ -13,10 +13,10 @@ import shutil
 import subprocess  # nosec B404 — required for external tool invocation
 import threading
 import time
-
-from moment.utils.subprocess import _sandbox_preexec
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from moment.utils.subprocess import _sandbox_preexec
 
 if TYPE_CHECKING:
     from moment.core.config import Config

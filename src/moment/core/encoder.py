@@ -9,10 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess  # nosec B404 — required for external tool invocation
 import threading
-
-from moment.utils.subprocess import run_sandboxed
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +20,7 @@ from moment.utils.ffmpeg import (
     detect_best_encoder,
     find_ffmpeg,
 )
+from moment.utils.subprocess import run_sandboxed
 from moment.utils.system import ensure_dir, is_nvidia_gpu, sanitize_stem
 
 if TYPE_CHECKING:

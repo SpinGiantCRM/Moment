@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from moment.ui.editor.music_panel import MusicPanel
 
 

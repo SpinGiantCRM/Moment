@@ -15,9 +15,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDoubleSpinBox,
     QFileDialog,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -28,7 +26,6 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.core.models import FilterConfig, OverlayConfig
-from moment.ui.resources import color
 
 logger = logging.getLogger(__name__)
 

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -16,7 +15,6 @@ from moment.core.hotkey_daemon import (
     _SigrtminBackend,
     _X11Backend,
 )
-
 
 # ---------------------------------------------------------------------------
 # HotkeyAction enum

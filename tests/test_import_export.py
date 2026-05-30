@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import os
 import tempfile
-import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from moment.core.import_export import (
-    CLIPS_DIR,
     ImportError,
     ImportExport,
 )

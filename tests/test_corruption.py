@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,8 +10,6 @@ import pytest
 
 from moment.core.corruption import (
     CHECK_INTERVAL,
-    DISK_CRITICAL_GB,
-    DISK_WARNING_GB,
     PIPELINE_STUCK_MINUTES,
     TEMP_MAX_AGE,
     CorruptionDetector,

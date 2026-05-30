@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from moment.ui.widgets.timeline_editor import TimelineEditor, _fmt
 
 
@@ -112,8 +111,8 @@ class TestTimelineEditorMousePress:
     def test_press_on_handle_starts_drag(self, qapp):
         editor = TimelineEditor(total_duration=30.0)
         editor.resize(400, 60)
-        from PyQt6.QtGui import QMouseEvent
         from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
 
         in_x = editor._handle_x(editor._start / editor._total)
         event = QMouseEvent(
@@ -130,8 +129,8 @@ class TestTimelineEditorMousePress:
     def test_press_empty_area_moves_nearest(self, qapp):
         editor = TimelineEditor(total_duration=30.0)
         editor.resize(400, 60)
-        from PyQt6.QtGui import QMouseEvent
         from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
 
         r = editor._track_rect()
         mid = r.center().x()
@@ -151,8 +150,8 @@ class TestTimelineEditorMouseMove:
     def test_move_updates_hover(self, qapp):
         editor = TimelineEditor(total_duration=30.0)
         editor.resize(400, 60)
-        from PyQt6.QtGui import QMouseEvent
         from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
 
         in_x = editor._handle_x(editor._start / editor._total)
         event = QMouseEvent(
@@ -169,8 +168,8 @@ class TestTimelineEditorMouseMove:
     def test_move_during_drag_updates_handle(self, qapp):
         editor = TimelineEditor(total_duration=30.0, start=0.0, end=30.0)
         editor.resize(400, 60)
-        from PyQt6.QtGui import QMouseEvent
         from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
 
         # Start drag on "in" handle
         in_x = editor._handle_x(editor._start / editor._total)
@@ -206,8 +205,8 @@ class TestTimelineEditorMouseRelease:
         editor = TimelineEditor(total_duration=30.0)
         editor.resize(400, 60)
         editor._dragging = "in"
-        from PyQt6.QtGui import QMouseEvent
         from PyQt6.QtCore import QPointF, Qt
+        from PyQt6.QtGui import QMouseEvent
         event = QMouseEvent(
             QMouseEvent.Type.MouseButtonRelease,
             QPointF(10, 10),

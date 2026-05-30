@@ -10,14 +10,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QIcon
-from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 from moment.ui.resources import load_icon
 
 if TYPE_CHECKING:
-    from moment.ui.main_window import MainWindow
+    pass
 
 logger = logging.getLogger(__name__)
 

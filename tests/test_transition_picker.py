@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
     QPushButton,
 )
 
-from moment.ui.widgets.transition_picker import TransitionPicker, _TRANSITIONS
+from moment.ui.widgets.transition_picker import _TRANSITIONS, TransitionPicker
 
 
 class TestTransitionPickerInit:

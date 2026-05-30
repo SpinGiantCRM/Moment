@@ -13,7 +13,6 @@ Usage::
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor  # noqa: F401 — used in commented-out progress styling
 from PyQt6.QtWidgets import (
     QHBoxLayout,

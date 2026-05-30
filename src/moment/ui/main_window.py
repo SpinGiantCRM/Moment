@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QPushButton,
     QStackedWidget,
     QStatusBar,
     QToolButton,
@@ -84,6 +85,11 @@ class MainWindow(QMainWindow):
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
 
+        # --- Service unavailable banner (shown when store is None) ---
+        self._unavailable_banner = self._build_unavailable_banner()
+        central_layout.addWidget(self._unavailable_banner)
+        self._unavailable_banner.setVisible(self._store is None)
+
         # --- Toolbar island ---
         toolbar = self._build_toolbar()
         central_layout.addWidget(toolbar)
@@ -108,6 +114,75 @@ class MainWindow(QMainWindow):
         # Show grid by default
         self._nav_buttons[_PAGE_GRID].setChecked(True)
         self._stack.setCurrentIndex(_PAGE_RECORD)
+
+        # Disable nav buttons if store is unavailable
+        if self._store is None:
+            self._set_nav_enabled(False)
+
+    # ==================================================================
+    # Service unavailable banner
+    # ==================================================================
+
+    def _build_unavailable_banner(self) -> QWidget:
+        """Build a banner widget shown when the store is unavailable."""
+        banner = QFrame()
+        banner.setObjectName("unavailableBanner")
+        banner.setStyleSheet("""
+            QFrame#unavailableBanner {
+                background-color: var(--accent-red);
+                border: none;
+                border-radius: 0;
+            }
+        """)
+        banner_layout = QHBoxLayout(banner)
+        banner_layout.setContentsMargins(16, 8, 16, 8)
+        banner_layout.setSpacing(8)
+
+        icon_label = QLabel("⚠")
+        icon_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold;")
+        banner_layout.addWidget(icon_label)
+
+        msg_label = QLabel("Service unavailable — database could not be opened.  "
+                          "Check that ~/.config/moment/clips.db is accessible.")
+        msg_label.setStyleSheet("color: white; font-size: 13px;")
+        msg_label.setWordWrap(True)
+        banner_layout.addWidget(msg_label, stretch=1)
+
+        retry_btn = QPushButton("Retry")
+        retry_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255,255,255,0.2);
+                border: 1px solid rgba(255,255,255,0.3);
+                border-radius: 4px;
+                color: white;
+                padding: 4px 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: rgba(255,255,255,0.3);
+            }
+        """)
+        retry_btn.clicked.connect(self._on_retry_store)
+        banner_layout.addWidget(retry_btn)
+
+        return banner
+
+    def _on_retry_store(self) -> None:
+        """Attempt to re-initialise the store on retry click."""
+        logger.info("Retry store initialisation requested")
+        # For now, just log — the parent AppManager would need to handle
+        # re-initialisation.  This button serves as user-visible signal
+        # that something is wrong.
+        from moment.ui.widgets.toast import toast_manager
+        toast_manager.show_toast(
+            "info", "Restart required",
+            "Please restart Moment to retry database connection.",
+        )
+
+    def _set_nav_enabled(self, enabled: bool) -> None:
+        """Enable or disable all navigation buttons."""
+        for btn in self._nav_buttons.values():
+            btn.setEnabled(enabled)
 
     # ==================================================================
     # Toolbar

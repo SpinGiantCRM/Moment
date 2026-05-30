@@ -21,8 +21,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from moment.ui.widgets.transition_picker import TransitionPicker
 from moment.ui.resources import color
+from moment.ui.widgets.transition_picker import TransitionPicker
 
 if TYPE_CHECKING:
     from moment.core.store import Store

@@ -14,10 +14,11 @@ import os
 import subprocess  # nosec B404 — required for external tool invocation
 import sys
 import traceback
+import uuid
 from pathlib import Path
 from typing import NoReturn
 
-from PyQt6.QtCore import QObject, Qt
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from moment import __version__
@@ -25,6 +26,18 @@ from moment.ui.resources import app_font, load_icon, stylesheet
 from moment.ui.tray import TrayIcon
 
 logger = logging.getLogger(__name__)
+
+
+def _clear_clipboard(expected_url: str) -> None:
+    """Clear the clipboard if it still contains *expected_url*.
+
+    Prevents sensitive R2 URLs from lingering in the clipboard beyond
+    the 60-second timeout window.
+    """
+    clipboard = QApplication.clipboard()
+    if clipboard is not None and clipboard.text() == expected_url:
+        clipboard.clear()
+
 
 # ---------------------------------------------------------------------------
 # Configuration paths
@@ -136,6 +149,15 @@ class AppManager(QObject):
         sys.exit(app.exec())
     """
 
+    # ---- Pipeline event signals (thread-safe bridge for worker→UI) ----
+    _pipeline_encoded = pyqtSignal(str)
+    _pipeline_uploaded = pyqtSignal(str, str)
+    _pipeline_errored = pyqtSignal(str, str)
+    _pipeline_status = pyqtSignal(str)
+    # GSR replay import signals (GSRWatcher may fire from background thread)
+    _gsr_import_success = pyqtSignal(str, str)  # stem, message
+    _gsr_import_error = pyqtSignal(str)          # error message
+
     # ------------------------------------------------------------------
     # Initialisation
     # ------------------------------------------------------------------
@@ -148,7 +170,7 @@ class AppManager(QObject):
         self._args = args or _parse_args()
         self._qapp: QApplication | None = None
         self._tray: TrayIcon | None = None
-        self._window = None  # MainWindow — created later in Phase 2b
+        self._window = None  # MainWindow — created later
         self._store = None
         self._pipeline = None
         self._config = None
@@ -156,6 +178,8 @@ class AppManager(QObject):
         self._gsr_watcher = None
         self._hotkey_manager = None
         self._overlay = None
+        self._game_monitor = None
+        self._bookmarker = None
 
     @property
     def app(self) -> QApplication | None:
@@ -209,6 +233,15 @@ class AppManager(QObject):
 
         # Install global exception hook
         sys.excepthook = _global_excepthook
+
+        # --- Wire pipeline signals → slots (thread-safe bridge) ---
+        self._pipeline_encoded.connect(self._on_pipeline_clip_encoded)
+        self._pipeline_uploaded.connect(self._on_pipeline_clip_uploaded)
+        self._pipeline_errored.connect(self._on_pipeline_clip_errored)
+        self._pipeline_status.connect(self._on_pipeline_status)
+        # GSR import toast signals
+        self._gsr_import_success.connect(self._on_gsr_import_toast_success)
+        self._gsr_import_error.connect(self._on_gsr_import_toast_error)
 
         # --- Init core services (best-effort — GUI works without them) ---
         self._init_services()
@@ -289,14 +322,44 @@ class AppManager(QObject):
         # Init GSR (instant replay) if enabled
         self._init_gsr()
 
-        # Pipeline requires game monitor, encoder, etc.  Defer to a later
-        # phase; for now the GUI runs without a pipeline.
-        #
-        # try:
-        #     from moment.core.pipeline import Pipeline
-        #     self._pipeline = Pipeline(self._store, self._config, ...)
-        # except Exception as exc:
-        #     logger.warning("Pipeline not started: %s", exc)
+        # Init Pipeline
+        self._init_pipeline()
+
+        # Init Bookmarker (records bookmarks into store)
+        if self._store is not None:
+            try:
+                from moment.core.bookmarker import Bookmarker
+                self._bookmarker = Bookmarker(self._store)
+            except Exception as exc:
+                logger.warning("Bookmarker init failed: %s", exc)
+
+    def _init_pipeline(self) -> None:
+        """Create and start the Pipeline if store + config are available."""
+        if self._store is None or self._config is None:
+            logger.info("Pipeline init skipped — store or config unavailable")
+            return
+
+        try:
+            from moment.core.game_monitor import GameMonitor
+            from moment.core.pipeline import Pipeline
+
+            self._game_monitor = GameMonitor(
+                on_state_changed=self._on_game_state_changed,
+            )
+            self._game_monitor.start()
+
+            self._pipeline = Pipeline(
+                self._store,
+                self._config,
+                game_monitor=self._game_monitor,
+                on_clip_encoded=self._pipeline_encoded.emit,
+                on_clip_uploaded=self._pipeline_uploaded.emit,
+                on_clip_errored=self._pipeline_errored.emit,
+                on_status=self._pipeline_status.emit,
+            )
+            logger.info("Pipeline started")
+        except Exception as exc:
+            logger.warning("Pipeline not started: %s", exc)
 
     def _init_gsr(self) -> None:
         """Start GSR instant replay and register the global hotkey.
@@ -402,6 +465,10 @@ class AppManager(QObject):
             # Wire close-to-tray signal
             window.close_to_tray.connect(self._on_window_hidden)
 
+            # Fix: when window is destroyed (closed without minimize-to-tray),
+            # clear the reference so _toggle_window can re-create it.
+            window.destroyed.connect(self._on_window_destroyed)
+
             self._window = window
 
             # Show window unless --minimized
@@ -413,10 +480,19 @@ class AppManager(QObject):
             logger.warning("Could not create main window: %s", exc)
             self._window = None
 
+    def _on_window_destroyed(self) -> None:
+        """Handle window destroyed — clear reference so a new one can be created."""
+        if self.sender() is self._window:
+            self._window = None
+
     def _toggle_window(self) -> None:
         """Show or hide the main window (called on tray left-click)."""
         if self._window is None:
             self._create_window()
+            if self._window is not None:
+                self._window.show()
+                self._window.raise_()
+                self._window.activateWindow()
             return
 
         if self._window.isVisible():
@@ -482,6 +558,13 @@ class AppManager(QObject):
             except Exception as exc:
                 logger.warning("Overlay hide error: %s", exc)
 
+        # Stop game monitor
+        if self._game_monitor is not None:
+            try:
+                self._game_monitor.stop()
+            except Exception as exc:
+                logger.warning("Game monitor stop error: %s", exc)
+
         # Shutdown pipeline if running
         if self._pipeline is not None:
             try:
@@ -499,42 +582,313 @@ class AppManager(QObject):
         QApplication.quit()
 
     def _on_recent_clicked(self, stem: str) -> None:
-        """Handle recent clip click — copy URL to clipboard."""
-        logger.info("Recent clip clicked: %s — copy URL not yet implemented", stem)
+        """Handle recent clip click — navigate to that clip in the player."""
+        if self._store is None or self._window is None:
+            return
+
+        try:
+            clips = self._store.list_clips(search=stem, limit=1)
+            if clips:
+                self._window.show_player(clips[0].id)
+                if not self._window.isVisible():
+                    self._window.show()
+                    self._window.raise_()
+                    self._window.activateWindow()
+            else:
+                logger.info("Recent clip %s not found in store", stem)
+        except Exception as exc:
+            logger.exception("Failed to navigate to recent clip %s: %s", stem, exc)
 
     def _on_action(self, action_name: str) -> None:
         """Handle generic tray actions (replay, screenshot, bookmark, etc.)."""
         logger.debug("Tray action: %s", action_name)
 
         if action_name == "copy_last_url":
-            logger.info("Copy last URL — not yet implemented")
+            self._copy_last_url()
         elif action_name.startswith("save_replay:"):
             duration = int(action_name.split(":", 1)[1])
             logger.info("Save %ds replay", duration)
             if self._gsr_controller is not None:
                 self._gsr_controller.save_replay()
         elif action_name == "screenshot":
-            logger.info("Screenshot — not yet implemented")
+            self._screenshot()
         elif action_name == "bookmark":
-            logger.info("Bookmark — not yet implemented")
+            self._bookmark()
 
     # ------------------------------------------------------------------
-    # GSR callbacks
+    # Tray action implementations
     # ------------------------------------------------------------------
+
+    def _screenshot(self) -> None:
+        """Capture a screenshot and show a toast with the file path."""
+        try:
+            from moment.core.screenshot import Screenshot
+            from moment.ui.widgets.toast import toast_manager
+
+            s = Screenshot()
+            path = s.capture_fallback()
+            toast_manager.show_toast("success", "Screenshot saved", str(path.name))
+        except Exception as exc:
+            logger.exception("Screenshot failed: %s", exc)
+            try:
+                from moment.ui.widgets.toast import toast_manager
+                toast_manager.show_toast("error", "Screenshot failed", str(exc))
+            except Exception:
+                pass
+
+    def _bookmark(self) -> None:
+        """Record a bookmark with timestamp. If GSR is running, save a replay too."""
+        try:
+            from datetime import datetime, timezone
+
+            from moment.ui.widgets.toast import toast_manager
+
+            # Save replay if GSR is running
+            if self._gsr_controller is not None and self._gsr_controller.is_recording:
+                self._gsr_controller.save_replay()
+
+            # Record a Bookmark in the database
+            if self._bookmarker is not None and self._bookmarker.current_session is not None:
+                self._bookmarker.create_bookmark(
+                    offset_seconds=0.0,
+                    label=f"Manual bookmark — {datetime.now(timezone.utc).strftime('%H:%M:%S')}",
+                )
+
+            toast_manager.show_toast("success", "Bookmark saved", "Replay saved with bookmark")
+        except Exception as exc:
+            logger.exception("Bookmark failed: %s", exc)
+            try:
+                from moment.ui.widgets.toast import toast_manager
+                toast_manager.show_toast("error", "Bookmark failed", str(exc))
+            except Exception:
+                pass
+
+    def _copy_last_url(self) -> None:
+        """Copy the most recently uploaded clip's R2 URL to clipboard.
+
+        The clipboard is automatically cleared after 60 seconds to
+        prevent sensitive URLs from lingering.
+        """
+        from PyQt6.QtCore import QTimer
+
+        try:
+            from moment.ui.widgets.toast import toast_manager
+
+            if self._store is None:
+                toast_manager.show_toast("warning", "No database", "Cannot copy URL")
+                return
+
+            from moment.core.models import ClipStatus
+            clips = self._store.list_clips(
+                status=ClipStatus.UPLOADED,
+                limit=1,
+                sort_by="-updated_at",
+            )
+            if clips and clips[0].r2_url:
+                url = clips[0].r2_url
+                clipboard = QApplication.clipboard()
+                clipboard.setText(url)
+
+                # Auto-clear clipboard after 60 seconds
+                QTimer.singleShot(60000, lambda: _clear_clipboard(url))
+
+                display_url = url if len(url) <= 80 else url[:77] + "..."
+                toast_manager.show_toast(
+                    "copy_success", "URL copied",
+                    f"{display_url} — clipboard clears in 60s"
+                )
+            else:
+                toast_manager.show_toast("info", "No uploads yet", "Upload a clip first")
+        except Exception as exc:
+            logger.exception("Copy URL failed: %s", exc)
+            try:
+                from moment.ui.widgets.toast import toast_manager
+                toast_manager.show_toast("error", "Copy failed", str(exc))
+            except Exception:
+                pass
+
+    # ------------------------------------------------------------------
+    # GSR import toast slots (runs on main thread via signal bridge)
+    # ------------------------------------------------------------------
+
+    def _on_gsr_import_toast_success(self, stem: str, message: str) -> None:
+        """Show success toast for GSR replay import."""
+        try:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast("success", "Replay saved", f"{stem} — {message}")
+        except Exception as exc:
+            logger.exception("Toast error in _on_gsr_import_toast_success: %s", exc)
+
+    def _on_gsr_import_toast_error(self, error: str) -> None:
+        """Show error toast for GSR replay import failure."""
+        try:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast("error", "Import failed", error)
+        except Exception as exc:
+            logger.exception("Toast error in _on_gsr_import_toast_error: %s", exc)
 
     def _on_gsr_replay_ready(self, path: Path) -> None:
         """Called by GSRWatcher when a new replay file is saved.
 
-        In the future, this will enqueue the file for import via the
-        pipeline. For now, we just log it.
+        Probes the file metadata, inserts a Clip into the store,
+        and enqueues encode + thumbnail tasks into the pipeline.
         """
         logger.info("GSR replay file ready: %s", path)
+
+        if self._store is None or self._pipeline is None:
+            logger.warning("Cannot import replay: store or pipeline not available")
+            return
+
+        try:
+            from moment.core.models import Clip, ClipStatus, Task, TaskKind
+            from moment.utils.ffmpeg import parse_fps
+            from moment.utils.ffmpeg import probe as ffprobe
+
+            # Probe metadata from the raw MKV
+            probe_data = ffprobe(path)
+            fmt = probe_data.get("format", {})
+            duration = float(fmt.get("duration", 0))
+            file_size = path.stat().st_size if path.is_file() else 0
+
+            video_stream = next(
+                (s for s in probe_data.get("streams", [])
+                 if s.get("codec_type") == "video"),
+                None,
+            )
+            video_codec = video_stream.get("codec_name", "") if video_stream else ""
+            fps = parse_fps(video_stream.get("r_frame_rate", "0/1")) if video_stream else 0.0
+            resolution = (
+                (video_stream.get("width", 0), video_stream.get("height", 0))
+                if video_stream else (0, 0)
+            )
+
+            audio_streams = [
+                s for s in probe_data.get("streams", [])
+                if s.get("codec_type") == "audio"
+            ]
+            has_game_audio = any(
+                s.get("codec_name") != "opus" for s in audio_streams
+            )
+            has_mic_audio = any(
+                s.get("codec_name") == "opus" for s in audio_streams
+            )
+
+            stem = path.stem
+            clip_id = str(uuid.uuid4())
+
+            clip = Clip(
+                id=clip_id,
+                stem=stem,
+                source_path=path,
+                duration=duration,
+                file_size=file_size,
+                video_codec=video_codec,
+                fps=fps,
+                resolution=resolution,
+                has_game_audio=has_game_audio,
+                has_mic_audio=has_mic_audio,
+                status=ClipStatus.PENDING,
+            )
+
+            self._store.insert_clip(clip)
+            logger.debug("Clip %s inserted into store", clip_id)
+
+            # Enqueue encode task (priority 10)
+            encode_task = Task(
+                id=str(uuid.uuid4()),
+                type=TaskKind.ENCODE,
+                priority=10,
+                payload={"clip_id": clip_id},
+            )
+            try:
+                self._pipeline.enqueue(encode_task)
+            except Exception:
+                clip.status = ClipStatus.ERROR
+                clip.error_message = "Failed to enqueue encode task"
+                self._store.update_clip(clip)
+                raise
+
+            # Enqueue thumbnail task (priority 5)
+            thumb_task = Task(
+                id=str(uuid.uuid4()),
+                type=TaskKind.THUMBNAIL,
+                priority=5,
+                payload={"clip_id": clip_id},
+            )
+            try:
+                self._pipeline.enqueue(thumb_task)
+            except Exception:
+                # Thumbnail failure is non-fatal — clip can still be encoded
+                logger.exception("Thumbnail enqueue failed for %s", clip_id)
+
+            # Notify the user (via signal for thread safety)
+            self._gsr_import_success.emit(stem, "encoding started")
+
+        except Exception as exc:
+            logger.exception("Failed to import GSR replay: %s", exc)
+            self._gsr_import_error.emit(str(exc))
 
     def _on_overlay_save(self, duration: int) -> None:
         """Called when the user clicks a quick-save button in the overlay."""
         logger.info("Overlay save %ds requested", duration)
         if self._gsr_controller is not None:
             self._gsr_controller.save_replay()
+
+    # ------------------------------------------------------------------
+    # Pipeline callbacks
+    # ------------------------------------------------------------------
+
+    def _on_pipeline_clip_encoded(self, stem: str) -> None:
+        """Called when a clip finishes encoding."""
+        try:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast("success", "Clip encoded", stem)
+        except Exception as exc:
+            logger.exception("Toast error in _on_pipeline_clip_encoded: %s", exc)
+
+    def _on_pipeline_clip_uploaded(self, stem: str, url: str) -> None:
+        """Called when a clip finishes uploading."""
+        try:
+            from moment.ui.widgets.toast import toast_manager
+            display_url = url if len(url) <= 60 else url[:57] + "..."
+            toast_manager.show_toast("success", "Clip uploaded", f"{stem} → {display_url}")
+        except Exception as exc:
+            logger.exception("Toast error in _on_pipeline_clip_uploaded: %s", exc)
+
+    def _on_pipeline_clip_errored(self, stem: str, error: str) -> None:
+        """Called when a clip processing step fails."""
+        try:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast("error", "Processing failed", f"{stem}: {error}")
+        except Exception as exc:
+            logger.exception("Toast error in _on_pipeline_clip_errored: %s", exc)
+
+    def _on_pipeline_status(self, status: str) -> None:
+        """Called periodically with human-readable pipeline status."""
+        try:
+            if self._window is not None:
+                self._window.set_pipeline_status(status)
+            if self._tray is not None:
+                self._tray.update_status(status)
+        except Exception as exc:
+            logger.exception("Status update error: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Game state → Pipeline pause/resume
+    # ------------------------------------------------------------------
+
+    def _on_game_state_changed(self, state: str, game_name: str | None) -> None:
+        """Called by GameMonitor when a game process starts or stops.
+
+        Pauses GPU-intensive pipeline tasks while a game is active to
+        avoid stealing NVENC sessions from the game.
+        """
+        if self._pipeline is None:
+            return
+        if state == "GAME_ACTIVE":
+            self._pipeline.pause()
+        elif state == "IDLE":
+            self._pipeline.resume()
 
 
 # ===========================================================================

@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QStringListModel
+from PyQt6.QtCore import QStringListModel, Qt
 from PyQt6.QtWidgets import (
     QCompleter,
     QDialog,

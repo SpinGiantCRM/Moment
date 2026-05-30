@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 from moment.ui.widgets.context_menu import ContextMenuBuilder
 

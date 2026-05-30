@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestProcessingBannerInit:
     """Tests for ProcessingBanner construction and defaults."""
 
     def test_create(self, qtbot) -> None:
         """ProcessingBanner can be created."""
-        from moment.ui.widgets.processing_banner import ProcessingBanner, _BANNER_HEIGHT
+        from moment.ui.widgets.processing_banner import _BANNER_HEIGHT, ProcessingBanner
 
         banner = ProcessingBanner()
         qtbot.addWidget(banner)
