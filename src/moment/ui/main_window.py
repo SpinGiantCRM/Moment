@@ -10,14 +10,16 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QStatusBar,
@@ -40,12 +42,12 @@ _PAGE_TRASH = 4
 _PAGE_WEBHOOK = 5
 
 _NAV_BUTTONS = [
-    ("Record", _PAGE_RECORD),
-    ("Grid", _PAGE_GRID),
-    ("Player", _PAGE_PLAYER),
-    ("Stats", _PAGE_STATS),
-    ("Trash", _PAGE_TRASH),
-    ("Webhook", _PAGE_WEBHOOK),
+    ("&Recording", _PAGE_RECORD),
+    ("&Grid", _PAGE_GRID),
+    ("&Player", _PAGE_PLAYER),
+    ("&Stats", _PAGE_STATS),
+    ("&Trash", _PAGE_TRASH),
+    ("&Webhooks", _PAGE_WEBHOOK),
 ]
 
 
@@ -66,6 +68,8 @@ class MainWindow(QMainWindow):
 
         # Window properties
         self.setWindowTitle("moment")
+        self.setAccessibleName("Moment — Game Clip Manager")
+        self.setAccessibleDescription("GPU-accelerated game clip recording and management")
         self.resize(950, 650)
         self.setMinimumSize(680, 400)
 
@@ -94,6 +98,12 @@ class MainWindow(QMainWindow):
         toolbar = self._build_toolbar()
         central_layout.addWidget(toolbar)
 
+        # --- Processing banner (pipeline progress) ---
+        from moment.ui.widgets.processing_banner import ProcessingBanner
+        self._processing_banner = ProcessingBanner()
+        self._processing_banner.setVisible(False)
+        central_layout.addWidget(self._processing_banner)
+
         # --- Page stack ---
         self._stack = QStackedWidget()
         central_layout.addWidget(self._stack, stretch=1)
@@ -113,11 +123,14 @@ class MainWindow(QMainWindow):
 
         # Show grid by default
         self._nav_buttons[_PAGE_GRID].setChecked(True)
-        self._stack.setCurrentIndex(_PAGE_RECORD)
+        self._stack.setCurrentIndex(_PAGE_GRID)
 
         # Disable nav buttons if store is unavailable
         if self._store is None:
             self._set_nav_enabled(False)
+
+        # Set keyboard focus on the search bar once the window is shown
+        QTimer.singleShot(0, self._focus_grid_search)
 
     # ==================================================================
     # Service unavailable banner
@@ -215,9 +228,29 @@ class MainWindow(QMainWindow):
             btn.setText(label)
             btn.setCheckable(True)
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             btn.clicked.connect(lambda checked, i=idx: self._switch_page(i))
+            # Accessible names
+            a11y_labels = {
+                _PAGE_RECORD: "Recording View",
+                _PAGE_GRID: "Grid View",
+                _PAGE_PLAYER: "Player",
+                _PAGE_STATS: "Statistics",
+                _PAGE_TRASH: "Trash",
+                _PAGE_WEBHOOK: "Webhooks",
+            }
+            btn.setAccessibleName(a11y_labels.get(idx, label))
             nav_layout.addWidget(btn)
             self._nav_buttons[idx] = btn
+
+        # Tab order: nav buttons in a logical chain
+        for i in range(len(_NAV_BUTTONS) - 1):
+            _, curr_idx = _NAV_BUTTONS[i]
+            _, next_idx = _NAV_BUTTONS[i + 1]
+            self.setTabOrder(
+                self._nav_buttons[curr_idx],
+                self._nav_buttons[next_idx],
+            )
 
         outer_layout.addWidget(nav_island)
 
@@ -326,10 +359,18 @@ class MainWindow(QMainWindow):
 
     def _on_batch_action(self, action: str, clip_ids: list[str]) -> None:
         """Handle batch operations from the grid page."""
-        logger.info("Batch action '%s' on %d clips — not yet fully implemented",
-                    action, len(clip_ids))
+        logger.info("Batch action '%s' on %d clips", action, len(clip_ids))
 
         if action == "Delete" and self._store is not None:
+            reply = QMessageBox.question(
+                self, "Delete Clips",
+                f"Delete {len(clip_ids)} clip(s)?\n\nThey will be moved to Trash.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
             for clip_id in clip_ids:
                 try:
                     self._store.delete_clip(clip_id, soft=True)
@@ -355,12 +396,59 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage(text, 5000)
 
     def set_pipeline_status(self, status_text: str) -> None:
-        """Update the status bar with pipeline state.
+        """Update the status bar and processing banner with pipeline state.
+
+        Parses the status string from :meth:`Pipeline.get_status` to extract
+        per-stage counts and updates both the status bar label and the
+        processing banner widget.
 
         Args:
-            status_text: Human-readable status (e.g. "Encoding clip-1.mp4").
+            status_text: Human-readable status (e.g. ``"Encoding 1 • Uploading 2"``).
         """
         self._update_status(status_text)
+        if hasattr(self, "_processing_banner") and self._processing_banner is not None:
+            self._update_banner(status_text)
+
+    def _update_banner(self, status_text: str) -> None:
+        """Translate pipeline status string into a ProcessingBanner update."""
+        banner = self._processing_banner
+        if status_text == "Idle" or not status_text.strip():
+            banner.update_status("idle")
+            return
+
+        # Count active stages from status segments like "Encoding 2•Uploading 1•Thumbnails 3"
+        counts: dict[str, int] = {}
+        segments = status_text.replace("•", "|").replace(",", "|").split("|")
+        for segment in segments:
+            segment = segment.strip()
+            parts = segment.split()
+            if len(parts) >= 2:
+                try:
+                    counts[parts[0].lower()] = int(parts[1])
+                except ValueError:
+                    pass
+
+        if "(paused)" in status_text and not counts:
+            banner.update_status("idle")
+            return
+
+        # Build a combined status so all active stages are visible
+        parts: list[str] = []
+        if counts.get("encoding", 0) > 0:
+            parts.append(f"Encoding {counts['encoding']}")
+        if counts.get("uploading", 0) > 0:
+            parts.append(f"Uploading {counts['uploading']}")
+        if counts.get("thumbnails", 0) > 0:
+            parts.append(f"Thumbnails {counts['thumbnails']}")
+
+        if parts:
+            banner.update_status(
+                "mixed", sum(counts.values()), sum(counts.values()),
+            )
+            # Override the label to show all stages explicitly
+            banner._label.setText(" — ".join(parts))
+        else:
+            banner.update_status("idle")
 
     # ==================================================================
     # State
@@ -398,14 +486,17 @@ class MainWindow(QMainWindow):
 
     def _setup_shortcuts(self) -> None:
         """Register global window shortcuts."""
-        # Ctrl+F -> focus search (handled by grid page)
-        # Ctrl+B -> batch select mode
-        shortcut = QShortcut(QKeySequence("Ctrl+B"), self)
-        shortcut.activated.connect(self._grid_page.enter_selection_mode)
+        # Ctrl+F -> focus search
+        ctrl_f = QShortcut(QKeySequence("Ctrl+F"), self)
+        ctrl_f.activated.connect(self._focus_grid_search)
 
-        # Esc -> back to grid from any page
+        # Ctrl+B -> batch select mode (guarded against null store)
+        ctrl_b = QShortcut(QKeySequence("Ctrl+B"), self)
+        ctrl_b.activated.connect(self._on_ctrl_b)
+
+        # Esc -> context-aware back navigation
         esc = QShortcut(QKeySequence("Escape"), self)
-        esc.activated.connect(lambda: self._switch_page(_PAGE_GRID))
+        esc.activated.connect(self._on_escape)
 
     # ==================================================================
     # Page-specific signal handlers
@@ -438,6 +529,58 @@ class MainWindow(QMainWindow):
         """Handle trash change — refresh grid."""
         logger.debug("Trash changed")
         self._grid_page.refresh()
+
+    def _on_ctrl_b(self) -> None:
+        """Enter batch selection mode (guarded against null store/grid)."""
+        if self._grid_page is not None and self._store is not None:
+            self._grid_page.enter_selection_mode()
+
+    def _on_escape(self) -> None:
+        """Context-aware Escape handler.
+
+        Priority order:
+        1. Player page active + video playing → stop video
+        2. Editor window open → close it
+        3. Grid page with search text → clear search
+        4. Grid selection mode active → exit selection mode
+        5. Otherwise → switch to Grid
+        """
+        current_idx = self._stack.currentIndex()
+
+        # 1. Player page: stop video if playing
+        if current_idx == _PAGE_PLAYER:
+            player = self._player_page
+            if player._fullscreen:
+                player._toggle_fullscreen()
+                return
+            if player._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+                player._player.pause()
+                player._play_btn.setText("▶")
+                return
+            # Check if editor window is open
+            if player._editor is not None and player._editor.isVisible():
+                player._editor.close()
+                return
+
+        # 3. Grid page: clear search first, then exit selection mode
+        if current_idx == _PAGE_GRID and self._grid_page is not None:
+            if self._grid_page._search_input.text():
+                self._grid_page._search_input.clear()
+                return
+            if self._grid_page._batch_bar.isVisible():
+                self._grid_page._exit_selection_mode()
+                return
+
+        # 5. Switch to Grid (default)
+        self._switch_page(_PAGE_GRID)
+
+    def _focus_grid_search(self) -> None:
+        """Set keyboard focus on the grid search bar after the window is shown."""
+        self._grid_page.focus_search()
+
+    def focus_search(self) -> None:
+        """Convenience alias for ``_focus_grid_search``."""
+        self._focus_grid_search()
 
     # ==================================================================
     # Public helpers

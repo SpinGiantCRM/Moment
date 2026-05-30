@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import time
 from unittest.mock import patch
 
@@ -51,8 +52,17 @@ class TestSigrtminBackend:
 class TestKdeBackend:
     def test_unavailable_when_no_dbus(self) -> None:
         backend = _KdeBackend({})
-        with pytest.raises(RuntimeError, match="dbus"):
-            backend.start()
+        # Force dbus import to fail even if the package is installed
+        _import = builtins.__import__
+
+        def _block_dbus(name, *args, **kwargs):
+            if name == "dbus" or name.startswith("dbus."):
+                raise ImportError(f"No module named '{name}'")
+            return _import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", _block_dbus):
+            with pytest.raises(RuntimeError, match="dbus"):
+                backend.start()
 
 
 # ---------------------------------------------------------------------------

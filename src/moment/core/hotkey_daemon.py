@@ -20,6 +20,7 @@ I/O thrashing from rapid key repeats.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from enum import Enum, auto
@@ -82,8 +83,12 @@ class _SigrtminBackend(_Backend):
 
     name = "sigrtmin"
 
-    def __init__(self) -> None:
-        logger.info("SIGRTMIN-stub backend selected (hotkeys handled by recorder process)")
+    def __init__(self, reason: str = "") -> None:
+        self._reason = reason
+        if reason:
+            logger.warning("SIGRTMIN-stub: %s", reason)
+        else:
+            logger.info("SIGRTMIN-stub backend selected (hotkeys handled by recorder process)")
 
     def start(self) -> None:
         pass
@@ -198,10 +203,8 @@ class _X11Backend(_Backend):
     def _listen(self) -> None:
         """Main X11 event loop (runs in background thread)."""
         try:
-            from Xlib import XK, X  # type: ignore[import-untyped]
+            from Xlib import X  # type: ignore[import-untyped]
             from Xlib.display import Display  # type: ignore[import-untyped]
-            from Xlib.ext import record  # type: ignore[import-untyped]
-            from Xlib.protocol import rq  # type: ignore[import-untyped]
         except ImportError:
             logger.debug("python-xlib not available; falling back")
             return
@@ -216,7 +219,10 @@ class _X11Backend(_Backend):
                 kc = _key_string_to_x11_keycode(self._display, key_str)
                 if kc:
                     keycodes[kc] = action
-                    root.grab_key(kc, _modifiers_for_x11(key_str), True, X.GrabModeAsync, X.GrabModeAsync)
+                    root.grab_key(
+                        kc, _modifiers_for_x11(key_str),
+                        True, X.GrabModeAsync, X.GrabModeAsync,
+                    )
             except Exception as exc:
                 logger.warning("Cannot grab X11 key %s: %s", key_str, exc)
 
@@ -348,28 +354,71 @@ def _detect_backend(
     bindings: dict[str, HotkeyAction],
     dispatch: Callable[[HotkeyAction], None],
 ) -> _Backend:
-    """Probe available backends in preference order."""
+    """Probe available backends in preference order.
 
-    # 1. Try KDE
+    Priority: KDE (kglobalaccel) → GNOME (gsettings) → X11 (Record ext) → SIGRTMIN stub.
+    On wlroots compositors (Sway, Hyprland), warns and falls back to SIGRTMIN.
+    """
+    desktop = _detect_desktop()
+    is_wayland = bool(os.environ.get("WAYLAND_DISPLAY", ""))
+
+    # 1. KDE — kglobalaccel D-Bus (primary on both X11 and Wayland)
     try:
         backend = _KdeBackend(bindings)
         backend.start()
         logger.info("KDE backend active")
         return backend
     except Exception:  # nosec
-        logger.debug("KDE backend unavailable; trying X11")
+        logger.debug("KDE backend unavailable")
 
-    # 2. Try X11 (dispatch wired via constructor)
+    # 2. GNOME Wayland — defer to SIGRTMIN with guidance
+    if is_wayland and "GNOME" in desktop:
+        logger.info(
+            "GNOME Wayland detected — global hotkeys are compositor-limited. "
+            "Using SIGRTMIN stub (recorder process handles hotkeys). "
+            "Configure custom shortcuts in Settings > Keyboard > Shortcuts."
+        )
+        return _SigrtminBackend(
+            "GNOME Wayland does not expose a global-hotkey API. "
+            "Configure custom shortcuts in Settings > Keyboard > Keyboard Shortcuts."
+        )
+
+    # 3. X11 Record extension
     try:
         backend = _X11Backend(bindings, dispatch=dispatch)
         backend.start()
         logger.info("X11 backend active")
         return backend
     except Exception:
-        logger.debug("X11 backend unavailable; falling back to SIGRTMIN stub")
+        logger.debug("X11 backend unavailable")
 
-    # 3. Fallback
+    # 4. Fallback — SIGRTMIN stub
+    if is_wayland:
+        if "sway" in desktop.lower() or "hyprland" in desktop.lower():
+            reason = (
+                "wlroots compositors do not expose a global-hotkey API. "
+                "Moment hotkeys are handled via the recorder process. "
+                "Consider using KDE Plasma for full global hotkey support."
+            )
+        else:
+            reason = (
+                "No hotkey backend could be registered on Wayland. "
+                "Moment hotkeys are handled via the recorder process."
+            )
+        return _SigrtminBackend(reason)
     return _SigrtminBackend()
+
+
+def _detect_desktop() -> str:
+    """Return the desktop environment identifier (e.g. ``"KDE"``, ``"GNOME"``)."""
+    xdg = os.environ.get("XDG_CURRENT_DESKTOP", "")
+    if not xdg:
+        # Fallback: check for desktop-specific env vars
+        if os.environ.get("KDE_FULL_SESSION"):
+            return "KDE"
+        if os.environ.get("GNOME_DESKTOP_SESSION_ID"):
+            return "GNOME"
+    return xdg
 
 
 # ---------------------------------------------------------------------------
@@ -410,7 +459,6 @@ def _key_string_to_x11_keycode(display: Any, key: str) -> int | None:
     key_name = key.split("+")[-1].strip()
 
     # Map common key names to XK constants
-    xk_name = key_name
     # XK_ prefix variants
     for prefix in ("XK_", ""):
         try:

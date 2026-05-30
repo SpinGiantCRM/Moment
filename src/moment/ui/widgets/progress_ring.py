@@ -118,7 +118,10 @@ class ProgressRing(QWidget):
 
     def _start_fade(self) -> None:
         """Begin opacity fade-out."""
-        if hasattr(self, "_fade_anim") and self._fade_anim.state() == QPropertyAnimation.State.Running:
+        if (
+            hasattr(self, "_fade_anim")
+            and self._fade_anim.state() == QPropertyAnimation.State.Running
+        ):
             self._fade_anim.stop()
         self._fade_anim = QPropertyAnimation(self, b"_opacity_prop", self)
         self._fade_anim.setDuration(500)
@@ -154,12 +157,16 @@ class ProgressRing(QWidget):
         )
 
         # Background track
-        painter.setPen(QPen(self._bg_color, _STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setPen(
+            QPen(self._bg_color, _STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+        )
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawArc(rect, 0, 360 * 16)
 
         # Foreground arc
-        painter.setPen(QPen(self._arc_color, _STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setPen(
+            QPen(self._arc_color, _STROKE, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+        )
         painter.drawArc(rect, self._start_angle, self._span_angle)
 
         painter.end()

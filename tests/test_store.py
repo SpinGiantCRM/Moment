@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from moment.core.models import (
     Bookmark,
@@ -32,10 +36,13 @@ from moment.core.models import (
 # ---------------------------------------------------------------------------
 
 def _make_clip(store, **overrides) -> Clip:
+    source_path = overrides.pop("source_path", Path("/tmp/test-clip.mkv"))
+    if isinstance(source_path, str):
+        source_path = Path(source_path)
     clip = Clip(
         id=overrides.pop("id", str(uuid.uuid4())),
         stem=overrides.pop("stem", "2026-05-01_12-00-00"),
-        source_path=Path("/tmp/test-clip.mkv"),
+        source_path=source_path,
         visibility=overrides.pop("visibility", ClipVisibility.PUBLIC),
         **overrides,
     )
@@ -699,3 +706,174 @@ class TestVisibilityFiltering:
         # Should be able to insert a clip with the field
         _make_clip(store, id="post-mig", discord_user_id="u1")
         assert store.get_clip("post-mig").discord_user_id == "u1"
+
+
+# ---------------------------------------------------------------------------
+# Spec 6 — Content-aware updated_at
+# ---------------------------------------------------------------------------
+
+class TestContentAwareUpdatedAt:
+    def test_content_field_change_bumps_updated_at(self, store) -> None:
+        clip = _make_clip(store, id="content-at", title="Original")
+        old_updated = clip.updated_at
+
+        # Change a content field (file_size)
+        clip.file_size = 999_999
+        store.update_clip(clip)
+
+        fetched = store.get_clip("content-at")
+        assert fetched is not None
+        assert fetched.updated_at > old_updated
+
+    def test_metadata_change_leaves_updated_at(self, store) -> None:
+        clip = _make_clip(store, id="meta-at", title="Original")
+        old_updated = clip.updated_at
+
+        # Change a metadata field (title) — NOT a content field
+        clip.title = "New Title"
+        store.update_clip(clip)
+
+        fetched = store.get_clip("meta-at")
+        assert fetched is not None
+        assert fetched.updated_at == old_updated
+
+    def test_status_change_bumps_updated_at(self, store) -> None:
+        clip = _make_clip(store, id="status-at", status=ClipStatus.PENDING)
+        old_updated = clip.updated_at
+
+        clip.status = ClipStatus.DONE
+        store.update_clip(clip)
+
+        fetched = store.get_clip("status-at")
+        assert fetched is not None
+        assert fetched.updated_at > old_updated
+
+    def test_resolution_change_bumps_updated_at(self, store) -> None:
+        clip = _make_clip(store, id="res-at", resolution=(1920, 1080))
+        old_updated = clip.updated_at
+
+        clip.resolution = (2560, 1440)
+        store.update_clip(clip)
+
+        fetched = store.get_clip("res-at")
+        assert fetched is not None
+        assert fetched.updated_at > old_updated
+
+
+# ---------------------------------------------------------------------------
+# Spec 6 — _execute_with_retry
+# ---------------------------------------------------------------------------
+
+class TestExecuteWithRetry:
+    def test_retry_on_database_locked(self, store) -> None:
+        """_execute_with_retry should retry on SQLITE_BUSY and eventually succeed."""
+        call_count = 0
+        real_cur = store._conn.cursor()
+
+        class FlakyCursor:
+            def __init__(self, real):
+                self._real = real
+
+            def execute(self, sql, params=()):
+                nonlocal call_count
+                call_count += 1
+                if call_count < 3:
+                    raise sqlite3.OperationalError("database is locked")
+                return self._real.execute(sql, params)
+
+        flaky = FlakyCursor(real_cur)
+        try:
+            store._execute_with_retry(
+                "INSERT INTO clips (id, stem, source_path, recorded_at) VALUES (?, ?, ?, ?)",
+                ("retry-test", "retry", "/tmp/retry.mkv", "2026-01-01T00:00:00"),
+                cursor=flaky,
+            )
+            store._conn.commit()
+            assert call_count == 3
+            fetched = store.get_clip("retry-test")
+            assert fetched is not None
+            assert fetched.stem == "retry"
+        finally:
+            store.delete_clip("retry-test", soft=False)
+
+    def test_non_busy_error_reraised(self, store) -> None:
+        """Non-SQLITE_BUSY OperationalErrors should be re-raised immediately."""
+
+        class BadCursor:
+            def execute(self, sql, params=()):
+                raise sqlite3.OperationalError("no such table: fake")
+
+        bad = BadCursor()
+        with pytest.raises(sqlite3.OperationalError, match="no such table"):
+            store._execute_with_retry("SELECT * FROM fake", cursor=bad)
+
+
+# ---------------------------------------------------------------------------
+# Spec 6 — Read-only connection
+# ---------------------------------------------------------------------------
+
+class TestReadOnlyConnection:
+    def test_query_only_rejects_writes(self, store) -> None:
+        """The read-only connection should reject write attempts."""
+        with pytest.raises(sqlite3.OperationalError):
+            store._read_conn.execute(
+                "INSERT INTO clips (id, stem, source_path, recorded_at) VALUES (?, ?, ?, ?)",
+                ("ro-test", "ro", "/tmp/ro.mkv", "2026-01-01T00:00:00"),
+            )
+
+    def test_read_conn_can_select(self, store) -> None:
+        _make_clip(store, id="ro-select", title="Readable")
+        row = store._read_conn.execute(
+            "SELECT title FROM clips WHERE id = ?", ("ro-select",)
+        ).fetchone()
+        assert row is not None
+        assert row["title"] == "Readable"
+
+
+# ---------------------------------------------------------------------------
+# Spec 6 — Retention helpers
+# ---------------------------------------------------------------------------
+
+class TestRetentionHelpers:
+    def test_list_old_source_clips(self, store) -> None:
+        from datetime import datetime, timezone
+        old = datetime.now(timezone.utc) - timedelta(days=100)
+        _make_clip(store, id="old-src", source_path="/tmp/old.mkv", recorded_at=old)
+        _make_clip(store, id="new-src", source_path="/tmp/new.mkv")
+
+        rows = store.list_old_source_clips(
+            (datetime.now(timezone.utc) - timedelta(days=50)).isoformat()
+        )
+        ids = {r["id"] for r in rows}
+        assert "old-src" in ids
+        assert "new-src" not in ids
+
+    def test_batch_soft_delete(self, store) -> None:
+        _make_clip(store, id="batch-1")
+        _make_clip(store, id="batch-2")
+        _make_clip(store, id="batch-3")
+
+        count = store.batch_soft_delete_clips(["batch-1", "batch-2"])
+        assert count == 2
+
+        # get_clip does not filter deleted_at, so check the field directly
+        assert store.get_clip("batch-1").deleted_at is not None
+        assert store.get_clip("batch-2").deleted_at is not None
+        assert store.get_clip("batch-3").deleted_at is None
+
+    def test_has_active_task_for_clip(self, store) -> None:
+        task = Task(
+            id="t-active", type=TaskKind.ENCODE,
+            payload={"clip_id": "task-clip"}, status=TaskStatus.PENDING,
+        )
+        store.insert_task(task)
+        assert store.has_active_task_for_clip("task-clip") is True
+        assert store.has_active_task_for_clip("no-task") is False
+
+    def test_has_active_task_excludes_completed(self, store) -> None:
+        task = Task(
+            id="t-done", type=TaskKind.ENCODE,
+            payload={"clip_id": "done-clip"}, status=TaskStatus.COMPLETED,
+        )
+        store.insert_task(task)
+        assert store.has_active_task_for_clip("done-clip") is False

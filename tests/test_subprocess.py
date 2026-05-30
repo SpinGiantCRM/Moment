@@ -82,7 +82,8 @@ class TestRunSandboxed:
         mock_result = subprocess.CompletedProcess(
             args=["echo"], returncode=0, stdout="", stderr=""
         )
-        custom_fn = lambda: None
+        def custom_fn():
+            return None
         with patch("moment.utils.subprocess._try_qprocess", return_value=None), \
              patch("moment.utils.subprocess.subprocess.run", return_value=mock_result) as mock_run:
             run_sandboxed(["echo", "hi"], preexec_fn=custom_fn)

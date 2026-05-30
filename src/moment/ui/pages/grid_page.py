@@ -32,6 +32,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.ui.services.async_loader import AsyncDataLoader
+from moment.ui.widgets.skeleton_card import SkeletonCard
+
 if TYPE_CHECKING:
     from moment.core.store import Store
 
@@ -84,7 +87,12 @@ class ClipFilterProxyModel(QSortFilterProxyModel):
     def set_sort_column(self, sort_key: str) -> None:
         """Set the sort column (e.g. ``"-recorded_at"``) and refresh."""
         self._sort_column = sort_key
-        self.sort(0, Qt.SortOrder.DescendingOrder if sort_key.startswith("-") else Qt.SortOrder.AscendingOrder)
+        order = (
+            Qt.SortOrder.DescendingOrder
+            if sort_key.startswith("-")
+            else Qt.SortOrder.AscendingOrder
+        )
+        self.sort(0, order)
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:
         """Compare two items by the current sort key."""
@@ -236,6 +244,12 @@ class GridPage(QWidget):
         self._cancel_select_btn.clicked.connect(self._exit_selection_mode)
         batch_layout.addWidget(self._cancel_select_btn)
 
+        self._loader: AsyncDataLoader | None = None
+
+        # Skeleton cards for async loading
+        self._skeleton_cards: list[SkeletonCard] = []
+        self._skeleton_container: QWidget | None = None
+
         # --- Grid view ---
         self._list_view = QListView()
         self._list_view.setViewMode(QListView.ViewMode.IconMode)
@@ -293,27 +307,51 @@ class GridPage(QWidget):
     # ==================================================================
 
     def refresh(self) -> None:
-        """Reload all clips from the store and repopulate the grid."""
+        """Reload all clips from the store asynchronously.
+
+        Shows skeleton cards immediately, cancels any in-flight loader,
+        then loads data on a background thread.
+        """
         if self._store is None:
             self._show_empty("No database available.\nStart Moment with a valid store.")
             return
 
-        try:
-            clips = self._store.list_clips(include_deleted=False, limit=2000)
-            if not clips:
-                self._show_empty(
-                    "No clips yet\n\nPress F8 in-game to capture your first clip."
-                )
-                return
+        # Cancel any previous loader (also disconnects signals)
+        self._cancel_loader()
 
-            self._hide_states()
-            self._list_view.setVisible(True)
+        # Show skeleton placeholders immediately
+        self._show_skeletons(8)
 
-            self._populate(clips)
-            logger.debug("Grid refreshed: %d clips", len(clips))
-        except Exception as exc:
-            logger.exception("Failed to load clips")
-            self._show_error(str(exc))
+        # Fire async load
+        self._loader = AsyncDataLoader(
+            self._store.list_clips, include_deleted=False, limit=2000
+        )
+        self._loader.data_ready.connect(self._on_data_ready)
+        self._loader.error_occurred.connect(self._on_load_error)
+        self._loader.start()
+
+    def _on_data_ready(self, clips: list[Any]) -> None:
+        """Handle successful async clip load."""
+        self._loader = None
+        self._remove_skeletons()
+
+        if not clips:
+            self._show_empty(
+                "No clips yet\n\nPress F8 in-game to capture your first clip."
+            )
+            return
+
+        self._hide_states()
+        self._list_view.setVisible(True)
+        self._populate(clips)
+        logger.debug("Grid refreshed: %d clips", len(clips))
+
+    def _on_load_error(self, error: str) -> None:
+        """Handle async load failure."""
+        self._loader = None
+        self._remove_skeletons()
+        logger.exception("Failed to load clips: %s", error)
+        self._show_error(f"Could not load clips. Database error.\n\n{error}")
 
     def _populate(self, clips: list[Any]) -> None:
         """Populate the model with clip data."""
@@ -334,6 +372,10 @@ class GridPage(QWidget):
                 | Qt.ItemFlag.ItemIsSelectable
                 | Qt.ItemFlag.ItemNeverHasChildren
             )
+            # Accessible description for screen readers (set once at creation)
+            a11y = data.get("accessible_description", "")
+            if a11y:
+                item.setData(a11y, Qt.ItemDataRole.AccessibleDescriptionRole)
             self._source_model.appendRow(item)
 
     # ==================================================================
@@ -373,6 +415,19 @@ class GridPage(QWidget):
         data = source_index.data(Qt.ItemDataRole.UserRole)
         if data and "id" in data:
             self.clip_activated.emit(data["id"])
+
+    def _cancel_loader(self) -> None:
+        """Cancel and disconnect any in-flight async loader."""
+        if self._loader is not None:
+            self._loader.data_ready.disconnect()
+            self._loader.error_occurred.disconnect()
+            self._loader.cancel()
+            self._loader = None
+
+    def hideEvent(self, event) -> None:
+        """Cancel in-flight loaders when the page is hidden."""
+        self._cancel_loader()
+        super().hideEvent(event)
 
     def _on_selection_changed(self) -> None:
         """Update batch bar when selection changes."""
@@ -417,6 +472,11 @@ class GridPage(QWidget):
         self._list_view.setSelectionMode(
             QAbstractItemView.SelectionMode.MultiSelection
         )
+
+    def focus_search(self) -> None:
+        """Set keyboard focus on the search bar."""
+        self._search_input.setFocus()
+        self._search_input.selectAll()
 
     # ==================================================================
     # Empty / error states
@@ -508,15 +568,55 @@ class GridPage(QWidget):
             self._empty_widget.setVisible(True)
 
     def _show_error(self, message: str) -> None:
-        """Display the error state with the given message."""
+        """Display the error state with the given message and a retry button."""
         self._list_view.setVisible(False)
         self._batch_bar.setVisible(False)
         if self._empty_widget:
             self._empty_widget.setVisible(False)
 
-        self._error_label.setText(f"Could not load database\n\n{message}")
+        self._error_label.setText(message)
         if self._error_widget:
             self._error_widget.setVisible(True)
+
+    # ==================================================================
+    # Skeleton cards (async loading placeholders)
+    # ==================================================================
+
+    def _show_skeletons(self, count: int = 8) -> None:
+        """Show skeleton card placeholders during async loading."""
+        self._remove_skeletons()
+        self._hide_states()
+        self._list_view.setVisible(False)
+
+        self._skeleton_container = QWidget(self)
+        layout = QHBoxLayout(self._skeleton_container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        layout.addStretch()
+
+        for _ in range(min(count, 12)):
+            card = SkeletonCard(self._skeleton_container)
+            self._skeleton_cards.append(card)
+            layout.addWidget(card)
+            layout.addStretch()
+
+        # Insert the skeleton container where the list view would be
+        parent_layout = self.layout()
+        if parent_layout is not None:
+            list_idx = parent_layout.indexOf(self._list_view)
+            if list_idx >= 0:
+                parent_layout.insertWidget(list_idx, self._skeleton_container)
+
+        self._skeleton_container.setVisible(True)
+
+    def _remove_skeletons(self) -> None:
+        """Remove all skeleton cards and the container."""
+        for card in self._skeleton_cards:
+            card.deleteLater()
+        self._skeleton_cards.clear()
+        if self._skeleton_container is not None:
+            self._skeleton_container.deleteLater()
+            self._skeleton_container = None
 
     # ==================================================================
     # Keyboard shortcuts
@@ -537,11 +637,10 @@ class GridPage(QWidget):
                 self.enter_selection_mode()
             return
 
+        # Escape is now handled context-aware by MainWindow._on_escape()
+        # via a global QShortcut, which checks search text and batch bar
+        # before falling through to page switch.
         if key == Qt.Key.Key_Escape:
-            if self._batch_bar.isVisible():
-                self._exit_selection_mode()
-            else:
-                self._search_input.clear()
             return
 
         super().keyPressEvent(event)

@@ -121,23 +121,40 @@ class ProcessingBanner(QWidget):
         hex_color = color(text_color)
 
         if status in ("encoding", "uploading", "mixed"):
-            verb = "Encoding" if status == "encoding" else "Uploading" if status == "uploading" else "Processing"
-            self._label.setText(f"{verb} {count}/{total} clips…")
-            self._label.setStyleSheet(
-                f"color: {hex_color}; font-size: 12px; font-weight: 500; border: none; background: transparent;"
+            verb = (
+                "Encoding"
+                if status == "encoding"
+                else "Uploading" if status == "uploading"
+                else "Processing"
             )
+            self._label.setText(f"{verb} {count}/{total} clips…")
+            style = (
+                f"color: {hex_color};"
+                " font-size: 12px;"
+                " font-weight: 500;"
+                " border: none; background: transparent;"
+            )
+            self._label.setStyleSheet(style)
             self._progress.setVisible(True)
         elif status == "error":
             self._label.setText("Pipeline error — check logs")
-            self._label.setStyleSheet(
-                f"color: {hex_color}; font-size: 12px; font-weight: 500; border: none; background: transparent;"
+            style = (
+                f"color: {hex_color};"
+                " font-size: 12px;"
+                " font-weight: 500;"
+                " border: none; background: transparent;"
             )
+            self._label.setStyleSheet(style)
             self._progress.setVisible(False)
         else:
             self._label.setText("Idle")
-            self._label.setStyleSheet(
-                f"color: {color('--text-primary')}; font-size: 12px; font-weight: 500; border: none; background: transparent;"
+            style = (
+                f"color: {color('--text-primary')};"
+                " font-size: 12px;"
+                " font-weight: 500;"
+                " border: none; background: transparent;"
             )
+            self._label.setStyleSheet(style)
             self._progress.setVisible(False)
 
     def _on_dismiss(self) -> None:

@@ -30,8 +30,6 @@ _LOG_FILE = os.path.join(_LOG_DIR, "moment.log")
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 3
 
-_log_config: Config | None = None
-
 # Home directory for path sanitization
 _HOME = os.path.expanduser("~")
 
@@ -118,34 +116,11 @@ class SanitizingFilter(logging.Filter):
 
 
 # ---------------------------------------------------------------------------
-# Config injection
-# ---------------------------------------------------------------------------
-
-
-def _get_config() -> Config | None:
-    return _log_config
-
-
-def set_log_config(config: Config | None) -> None:
-    """Inject a Config instance so log paths honour user overrides."""
-    global _log_config
-    _log_config = config
-
-
-def get_log_dir() -> str:
-    """Return the log directory, respecting Config overrides."""
-    cfg = _get_config()
-    if cfg is not None:
-        return cfg.get_path("log_dir")
-    return _LOG_DIR
-
-
-# ---------------------------------------------------------------------------
 # Logger setup
 # ---------------------------------------------------------------------------
 
 
-def setup_logging(verbose: bool = False) -> logging.Logger:
+def setup_logging(verbose: bool = False, *, config: "Config | None" = None) -> logging.Logger:
     """Configure the root logger and return the application logger.
 
     * File handler writes to ``~/.local/share/moment/moment.log``
@@ -159,12 +134,13 @@ def setup_logging(verbose: bool = False) -> logging.Logger:
 
     Args:
         verbose: If ``True``, set the log level to ``DEBUG``; otherwise ``INFO``.
+        config: Optional Config for path overrides.
 
     Returns:
         The configured root logger.
     """
-    # Ensure the log directory exists
-    log_dir = get_log_dir()
+    # Resolve log directory — honour Config path override if provided
+    log_dir = config.get_path("log_dir") if config is not None else _LOG_DIR
     log_file = os.path.join(log_dir, "moment.log")
     Path(log_dir).mkdir(parents=True, exist_ok=True)
 

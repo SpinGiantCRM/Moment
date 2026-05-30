@@ -40,8 +40,8 @@ BG_ELEVATED = QColor("#404040")
 BG_SELECTED = QColor("#2a3a45")
 BORDER_SELECTED = QColor("#60a5fa")
 TEXT_PRIMARY = QColor("#d9d9d9")
-TEXT_SECONDARY = QColor("#a1a1aa")
-TEXT_MUTED = QColor("#757575")
+TEXT_SECONDARY = QColor("#ababab")
+TEXT_MUTED = QColor("#9a9a9a")
 OVERLAY_DARK = QColor(0, 0, 0, 140)
 ACCENT_GREEN = QColor("#4ade80")
 ACCENT_ORANGE = QColor("#fb923c")
@@ -49,25 +49,86 @@ ACCENT_RED = QColor("#f87171")
 ACCENT_BLUE = QColor("#60a5fa")
 FAVORITE_GOLD = QColor("#fbbf24")
 
-# Cached placeholder pixmap
-_placeholder_pixmap: QPixmap | None = None
+def _placeholder_thumb(
+    size: QSize = QSize(THUMB_W, THUMB_H),
+    game: str = "",
+    duration: float = 0.0,
+) -> QPixmap:
+    """Return a deterministic placeholder thumbnail.
 
+    Shows the game name (or a video icon) centred on a dark background.
+    When duration is known it's overlaid in the bottom-right corner.
 
-def _placeholder_thumb(size: QSize = QSize(THUMB_W, THUMB_H)) -> QPixmap:
-    """Return a dark-grey placeholder thumbnail."""
-    global _placeholder_pixmap
-    if _placeholder_pixmap is None or _placeholder_pixmap.size() != size:
-        _placeholder_pixmap = QPixmap(size)
-        _placeholder_pixmap.fill(QColor("#252525"))
-        painter = QPainter(_placeholder_pixmap)
-        painter.setPen(QColor("#404040"))
-        painter.drawText(
-            QRectF(0, 0, size.width(), size.height()),
-            Qt.AlignmentFlag.AlignCenter,
-            "No thumbnail",
-        )
+    Args:
+        size: Thumbnail size in pixels.
+        game: Game name to display (empty → generic "video" icon).
+        duration: Clip duration in seconds for the overlay badge.
+    """
+    # Invalidate cache if game/duration info is richer than what's cached
+    cache_key = (game, duration)
+    cached = getattr(_placeholder_thumb, "_cache", None)
+    if cached is None or cached.get("key") != cache_key:
+        pixmap = QPixmap(size)
+        pixmap.fill(QColor("#1e1e2e"))
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Subtle grid pattern overlay for visual texture
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#252538"))
+        for row in range(0, size.height(), 16):
+            for col in range(0, size.width(), 16):
+                if (row // 16 + col // 16) % 2 == 0:
+                    painter.drawRect(col, row, 16, 16)
+
+        # Centred icon / game name
+        painter.setPen(QColor("#525270"))
+        font = painter.font()
+        if game:
+            font.setPointSize(11)
+            font.setBold(True)
+            painter.setFont(font)
+            elided = painter.fontMetrics().elidedText(
+                game, Qt.TextElideMode.ElideRight, size.width() - 24,
+            )
+            text_rect = QRectF(0, 0, size.width(), size.height() - 20)
+            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, elided)
+        else:
+            # Generic video icon (Unicode film symbol)
+            font.setPointSize(28)
+            painter.setFont(font)
+            painter.drawText(
+                QRectF(0, 0, size.width(), size.height() - 16),
+                Qt.AlignmentFlag.AlignCenter,
+                "🎬",
+            )
+
+        # Duration badge (bottom-right)
+        if duration > 0:
+            badge_text = _format_duration(duration)
+            badge_font = painter.font()
+            badge_font.setPointSize(8)
+            badge_font.setBold(True)
+            painter.setFont(badge_font)
+            fm = painter.fontMetrics()
+            text_w = fm.horizontalAdvance(badge_text) + 8
+            text_h = fm.height() + 4
+            badge_x = size.width() - text_w - 6
+            badge_y = size.height() - text_h - 6
+            badge_rect = QRectF(badge_x, badge_y, text_w, text_h)
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            bg = QColor(0, 0, 0, 160)
+            painter.setBrush(bg)
+            painter.drawRoundedRect(badge_rect, 3, 3)
+
+            painter.setPen(QColor("#d9d9d9"))
+            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
+
         painter.end()
-    return _placeholder_pixmap
+        _placeholder_thumb._cache = {"key": cache_key, "pixmap": pixmap}  # type: ignore[attr-defined]
+        return pixmap
+    return _placeholder_thumb._cache["pixmap"]  # type: ignore[attr-defined]
 
 
 class ClipDelegate(QStyledItemDelegate):
@@ -170,9 +231,10 @@ class ClipDelegate(QStyledItemDelegate):
                 scaled, src_x, src_y, THUMB_W, THUMB_H,
             )
         else:
+            # Deterministic placeholder with game name + duration
             painter.drawPixmap(
                 int(thumb_rect.x()), int(thumb_rect.y()),
-                _placeholder_thumb(),
+                _placeholder_thumb(game=game, duration=duration),
             )
         painter.restore()
 
@@ -225,11 +287,16 @@ class ClipDelegate(QStyledItemDelegate):
         )
         painter.drawText(meta_rect, Qt.AlignmentFlag.AlignLeft, elided_meta)
 
-        # --- Uploaded checkmark (second metadata row) ---
+        # --- Uploaded checkmark / Edited badge (second metadata row) ---
+        edited = data.get("edit_version", 0) > 0
         if status == "UPLOADED":
             painter.setPen(ACCENT_GREEN)
             check_rect = QRectF(thumb_x, meta_y + 14, THUMB_W, 14)
             painter.drawText(check_rect, Qt.AlignmentFlag.AlignLeft, "✓ Uploaded")
+        elif edited:
+            painter.setPen(ACCENT_ORANGE)
+            edit_rect = QRectF(thumb_x, meta_y + 14, THUMB_W, 14)
+            painter.drawText(edit_rect, Qt.AlignmentFlag.AlignLeft, "✎ Edited")
 
         painter.restore()
 
@@ -315,8 +382,8 @@ class ClipDelegate(QStyledItemDelegate):
     def clear_thumb_cache(self) -> None:
         """Clear the thumbnail pixmap cache."""
         self._thumb_cache.clear()
-        global _placeholder_pixmap
-        _placeholder_pixmap = None
+        if hasattr(_placeholder_thumb, "_cache"):
+            del _placeholder_thumb._cache
 
     # ------------------------------------------------------------------
     # Helper to build item data
@@ -345,7 +412,22 @@ class ClipDelegate(QStyledItemDelegate):
             "thumb_path": str(clip.thumb_path) if clip.thumb_path else "",
             "encoded_path": str(clip.encoded_path) if clip.encoded_path else "",
             "r2_url": clip.r2_url or "",
-            "created_at": clip.created_at.isoformat() if isinstance(clip.created_at, datetime) else "",
+            "edit_version": getattr(clip, "edit_version", 0),
+            "accessible_description": (
+                f"Clip: {clip.title or clip.stem}, "
+                f"{_format_duration(clip.duration)}, "
+                f"{clip.game or 'Unknown game'}"
+                + (
+                    f", {clip.created_at.strftime('%Y-%m-%d')}"
+                    if isinstance(clip.created_at, datetime)
+                    else ""
+                )
+            ),
+            "created_at": (
+                clip.created_at.isoformat()
+                if isinstance(clip.created_at, datetime)
+                else ""
+            ),
         }
 
 

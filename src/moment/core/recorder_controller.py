@@ -18,6 +18,7 @@ import signal
 import subprocess  # nosec B404 — required for external tool invocation
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -106,7 +107,7 @@ class RecorderController:
         self._lock = threading.Lock()
 
         # Crash tracking
-        self._restart_timestamps: list[float] = []
+        self._restart_timestamps: deque[float] = deque(maxlen=11)
 
         # Whether the controller was explicitly stopped (vs crashed)
         self._stopped_intentionally = False
@@ -314,11 +315,16 @@ class RecorderController:
             if not self._can_restart():
                 msg = f"Recorder crashed {_MAX_RESTARTS} times in {_RESTART_WINDOW}s; giving up"
                 logger.error(msg)
-                if self._on_crash is not None:
-                    try:
-                        self._on_crash(msg)
-                    except Exception as exc:
-                        logger.exception("on_crash callback error: %s", exc)
+                cb = self._on_crash
+                self._lock.release()
+                try:
+                    if cb is not None:
+                        try:
+                            cb(msg)
+                        except Exception as exc:
+                            logger.exception("on_crash callback error: %s", exc)
+                finally:
+                    self._lock.acquire()
                 return
 
             # Auto-restart
@@ -327,27 +333,20 @@ class RecorderController:
                 self._spawn_process_unlocked()
             except RecorderError as exc:
                 logger.error("Failed to restart: %s", exc)
-                if self._on_crash is not None:
-                    try:
-                        self._on_crash(str(exc))
-                    except Exception as exc2:
-                        logger.exception("on_crash callback error: %s", exc2)
+                cb = self._on_crash
+                self._lock.release()
+                try:
+                    if cb is not None:
+                        try:
+                            cb(str(exc))
+                        except Exception as exc2:
+                            logger.exception("on_crash callback error: %s", exc2)
+                finally:
+                    self._lock.acquire()
 
     def _can_restart(self) -> bool:
-        """Check whether we're within the crash restart budget.
-
-        Records the current timestamp and prunes old entries from the
-        rolling window.
-        """
-        now = time.monotonic()
-        self._restart_timestamps.append(now)
-
-        # Prune entries older than the window
-        cutoff = now - _RESTART_WINDOW
-        self._restart_timestamps = [
-            ts for ts in self._restart_timestamps if ts > cutoff
-        ]
-
+        """Check whether we're within the crash restart budget."""
+        self._restart_timestamps.append(time.monotonic())
         return len(self._restart_timestamps) <= _MAX_RESTARTS
 
     # ------------------------------------------------------------------
@@ -384,10 +383,10 @@ class RecorderController:
         if audio_config:
             game_device = audio_config.get("game_device", "")
             if game_device:
-                cmd.extend(["-a", validate_arg(game_device)])
+                cmd.extend(["-a", validate_arg(game_device, context="device")])
             mic_device = audio_config.get("mic_device", "")
             if mic_device:
-                cmd.extend(["-q", validate_arg(mic_device)])
+                cmd.extend(["-q", validate_arg(mic_device, context="device")])
                 # Bitrate and codec for mic
                 cmd.extend([
                     "-k", audio_config.get("mic_codec", "opus"),

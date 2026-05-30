@@ -51,6 +51,7 @@ class TestFallbackCapture:
         with (
             patch("subprocess.run") as mock_run,
             patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot._is_wayland", return_value=False),
             patch(
                 "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
@@ -75,6 +76,7 @@ class TestFallbackCapture:
         with (
             patch("subprocess.run") as mock_run,
             patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot._is_wayland", return_value=False),
             patch(
                 "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
@@ -90,6 +92,7 @@ class TestFallbackCapture:
         with (
             patch("subprocess.run") as mock_run,
             patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot._is_wayland", return_value=False),
             patch(
                 "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
@@ -120,6 +123,7 @@ class TestCallbacks:
         with (
             patch("subprocess.run") as mock_run,
             patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+            patch("moment.core.screenshot._is_wayland", return_value=False),
             patch(
                 "moment.core.screenshot.Screenshot._detect_resolution",
                 return_value="1920x1080",
@@ -130,7 +134,7 @@ class TestCallbacks:
             mock_run.return_value.returncode = 0
             mock_stat.return_value.st_size = 1000
 
-            result = s.capture_fallback()
+            s.capture_fallback()
             assert len(captured) >= 1
 
     def test_callback_exception_is_handled(self, tmp_path: Path) -> None:
@@ -194,7 +198,7 @@ class TestPostProcessing:
             patch("subprocess.run", mock_run),
             patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
         ):
-            result = screenshot.post_process(fake_screenshot, crop=(10, 10, 800, 600))
+            screenshot.post_process(fake_screenshot, crop=(10, 10, 800, 600))
 
             # Should have called ffmpeg for crop
             crop_calls = [

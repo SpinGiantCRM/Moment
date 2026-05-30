@@ -76,7 +76,10 @@ class TestImport:
         mock_probe.return_value = {
             "format": {"duration": "25.5"},
             "streams": [
-                {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080, "r_frame_rate": "60/1"},
+                {
+                    "codec_type": "video", "codec_name": "h264",
+                    "width": 1920, "height": 1080, "r_frame_rate": "60/1",
+                },
                 {"codec_type": "audio", "codec_name": "aac"},
             ],
         }
@@ -124,7 +127,10 @@ class TestImport:
         mock_probe.return_value = {
             "format": {"duration": "10.0"},
             "streams": [
-                {"codec_type": "video", "codec_name": "h264", "width": 1280, "height": 720, "r_frame_rate": "30/1"},
+                {
+                    "codec_type": "video", "codec_name": "h264",
+                    "width": 1280, "height": 720, "r_frame_rate": "30/1",
+                },
             ],
         }
         mock_thumb = MagicMock()
@@ -178,7 +184,10 @@ class TestImport:
         mock_probe.return_value = {
             "format": {"duration": "60.0"},
             "streams": [
-                {"codec_type": "video", "codec_name": "hevc", "width": 3840, "height": 2160, "r_frame_rate": "24/1"},
+                {
+                    "codec_type": "video", "codec_name": "hevc",
+                    "width": 3840, "height": 2160, "r_frame_rate": "24/1",
+                },
             ],
         }
         mock_thumb = MagicMock()

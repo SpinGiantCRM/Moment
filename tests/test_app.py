@@ -62,9 +62,8 @@ class TestAppManagerInit:
 @patch("builtins.print")
 class TestPrintVersion:
     def test_version_flag_prints_and_exits(self, mock_print, mock_exit):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
-        mgr._args.version = True
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args(["--version"]))
         mgr.init()
         mock_print.assert_called_once()
         mock_exit.assert_called_once_with(0)
@@ -72,22 +71,23 @@ class TestPrintVersion:
 
 @patch("sys.exit")
 class TestOpenEncoded:
-    @patch("moment.ui.app.subprocess.Popen")
+    @patch("moment.utils.subprocess.Popen_sandboxed")
     def test_open_encoded_opens_dir(self, mock_popen, mock_exit):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
-        mgr._args.open_encoded = True
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args(["--open-encoded"]))
         mgr.init()
         mock_popen.assert_called_once()
-        mock_exit.assert_called_once_with(0)
+        # _open_encoded_dir calls sys.exit(0), then init() also calls
+        # sys.exit(0) — both are recorded since sys.exit is mocked
+        mock_exit.assert_called_with(0)
 
-    @patch("moment.ui.app.subprocess.Popen", side_effect=FileNotFoundError)
+    @patch("moment.utils.subprocess.Popen_sandboxed", side_effect=FileNotFoundError)
     def test_open_encoded_failure(self, mock_popen, mock_exit):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
-        mgr._args.open_encoded = True
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args(["--open-encoded"]))
         mgr.init()
-        mock_exit.assert_called_once_with(1)
+        # _open_encoded_dir calls sys.exit(1), then init() calls sys.exit(0)
+        mock_exit.assert_any_call(1)
 
 
 class TestPrintVersionStatic:
@@ -99,8 +99,8 @@ class TestPrintVersionStatic:
 class TestAppManagerQuit:
     @patch("moment.ui.app.QApplication.quit")
     def test_on_quit_shuts_down_cleanly(self, mock_quit):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._store = MagicMock()
         mgr._pipeline = None
         mgr._gsr_controller = None
@@ -113,8 +113,8 @@ class TestAppManagerQuit:
 
     @patch("moment.ui.app.QApplication.quit")
     def test_on_quit_with_gsr(self, mock_quit):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._store = MagicMock()
         mgr._gsr_controller = MagicMock()
         mgr._gsr_watcher = MagicMock()
@@ -132,13 +132,13 @@ class TestAppManagerQuit:
 
 class TestAppManagerProperties:
     def test_app_property(self):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         assert mgr.app is None
 
     def test_tray_property(self):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         assert mgr.tray is None
 
 
@@ -146,7 +146,7 @@ class TestAppManagerProperties:
 @patch("moment.ui.app.AppManager._init_services")
 @patch("moment.ui.app.AppManager._create_window")
 @patch("moment.ui.app.TrayIcon")
-class TestAppManagerInit:
+class TestAppManagerInitMocks:
     def test_init_creates_qapp(
         self, mock_tray, mock_create, mock_svc, mock_exit,
     ):
@@ -206,8 +206,8 @@ class TestAppManagerInit:
 class TestAppManagerToggleWindow:
     @patch("moment.ui.app.AppManager._create_window")
     def test_toggle_shows_hidden_window(self, mock_create):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._window = MagicMock()
         mgr._window.isVisible.return_value = False
         mgr._toggle_window()
@@ -216,8 +216,8 @@ class TestAppManagerToggleWindow:
 
     @patch("moment.ui.app.AppManager._create_window")
     def test_toggle_hides_visible_window(self, mock_create):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._window = MagicMock()
         mgr._window.isVisible.return_value = True
         mgr._toggle_window()
@@ -225,8 +225,8 @@ class TestAppManagerToggleWindow:
 
     @patch("moment.ui.app.AppManager._create_window")
     def test_toggle_creates_window_if_none(self, mock_create):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._window = None
         mgr._toggle_window()
         mock_create.assert_called_once()
@@ -234,8 +234,8 @@ class TestAppManagerToggleWindow:
 
 class TestAppManagerWindowHidden:
     def test_window_hidden_updates_tray(self):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._tray = MagicMock()
         mgr._on_window_hidden()
         mgr._tray.update_status.assert_called_once()
@@ -243,47 +243,45 @@ class TestAppManagerWindowHidden:
 
 class TestAppManagerActionHandlers:
     def test_save_replay_action(self):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._gsr_controller = MagicMock()
         mgr._on_action("save_replay:30")
         mgr._gsr_controller.save_replay.assert_called_once()
 
     def test_unknown_action(self):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._on_action("unknown_action")
 
 
 class TestAppManagerExec:
     def test_exec_returns_1_if_no_qapp(self):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         result = mgr.exec()
         assert result == 1
 
 
 class TestAppManagerInitServices:
-    @patch("moment.ui.app.Config")
-    @patch("moment.ui.app.Store")
-    @patch("moment.ui.app.set_store_config")
-    @patch("moment.ui.app.set_corruption_config")
-    @patch("moment.ui.app.set_log_config")
+    @patch("moment.core.config.Config")
+    @patch("moment.core.store.Store")
+    @patch("moment.utils.logging.setup_logging")
     def test_init_services_success(
-        self, mock_log, mock_corr, mock_set_store, mock_store_cls, mock_config_cls,
+        self, mock_log, mock_store_cls, mock_config_cls,
     ):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._config = None
         mgr._store = None
         mgr._init_services()
         assert mgr._config is not None
         assert mgr._store is not None
 
-    @patch("moment.ui.app.Config", side_effect=Exception("no db"))
+    @patch("moment.core.config.Config", side_effect=Exception("no db"))
     def test_init_services_failure_handled(self, mock_config):
-        from moment.ui.app import AppManager
-        mgr = AppManager()
+        from moment.ui.app import AppManager, _parse_args
+        mgr = AppManager(_parse_args([]))
         mgr._init_services()
         # Should not raise, just logs warning
 
@@ -297,5 +295,5 @@ class TestGlobalExcepthook:
         except ValueError:
             import sys
             exc_type, exc_value, exc_tb = sys.exc_info()
-            with patch("moment.ui.app.QMessageBox"):
+            with patch("PyQt6.QtWidgets.QMessageBox"):
                 _global_excepthook(exc_type, exc_value, exc_tb)

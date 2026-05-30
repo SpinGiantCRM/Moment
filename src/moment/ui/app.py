@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import subprocess  # nosec B404 — required for external tool invocation
 import sys
 import traceback
 import uuid
@@ -19,11 +18,13 @@ from pathlib import Path
 from typing import NoReturn
 
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtWidgets import QApplication, QStyleFactory
 
 from moment import __version__
 from moment.ui.resources import app_font, load_icon, stylesheet
 from moment.ui.tray import TrayIcon
+from moment.utils.subprocess import ExternalCommandRunner
 
 logger = logging.getLogger(__name__)
 
@@ -222,8 +223,12 @@ class AppManager(QObject):
         self._qapp.setApplicationVersion(__version__)
         self._qapp.setQuitOnLastWindowClosed(False)
 
-        # Apply the dark theme
-        self._qapp.setStyleSheet(stylesheet())
+        # Detect high-contrast mode and apply appropriate theme
+        self._high_contrast = self._detect_high_contrast()
+        if self._high_contrast:
+            self._apply_high_contrast_theme()
+        else:
+            self._qapp.setStyleSheet(stylesheet())
         self._qapp.setFont(app_font())
 
         # Set the application icon (used for window title bars, etc.)
@@ -275,6 +280,98 @@ class AppManager(QObject):
         return self._qapp.exec()
 
     # ------------------------------------------------------------------
+    # Theme / High-contrast detection
+    # ------------------------------------------------------------------
+
+    def _detect_high_contrast(self) -> bool:
+        """Detect whether the system is using a high-contrast theme.
+
+        Checks the system palette's window/background lightness to
+        determine if a high-contrast or inverted theme is active.
+
+        Returns:
+            ``True`` if a high-contrast system theme is detected.
+        """
+        if self._qapp is None:
+            return False
+        palette = self._qapp.palette()
+        window = palette.color(QPalette.ColorRole.Window)
+        return window.lightness() > 200 or window.lightness() < 60
+
+    def _apply_high_contrast_theme(self) -> None:
+        """Apply a high-contrast accessible theme using Fusion style.
+
+        When high-contrast mode is detected:
+        - Use ``QStyleFactory.create("Fusion")`` as the base style
+          (ignores custom dark stylesheet which may break contrast)
+        - Read colors from ``QPalette`` instead of hardcoded tokens
+        - Apply 2px solid focus indicators on all interactive elements
+        """
+        if self._qapp is None:
+            return
+
+        logger.info("High-contrast system theme detected — switching to Fusion")
+
+        # Use Fusion as base (respects system palette, no custom stylesheet)
+        self._qapp.setStyle(QStyleFactory.create("Fusion"))
+
+        # Read colors from system palette
+        palette = self._qapp.palette()
+        window_color = palette.color(QPalette.ColorRole.Window)
+
+        # If the system theme uses a light background, provide a light variant
+        if window_color.lightness() > 128:
+            # Light high-contrast theme
+            palette.setColor(QPalette.ColorRole.Window, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.WindowText, QColor(0, 0, 0))
+            palette.setColor(QPalette.ColorRole.Base, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(240, 240, 240))
+            palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.ToolTipText, QColor(0, 0, 0))
+            palette.setColor(QPalette.ColorRole.Text, QColor(0, 0, 0))
+            palette.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))
+            palette.setColor(QPalette.ColorRole.ButtonText, QColor(0, 0, 0))
+            palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
+            palette.setColor(QPalette.ColorRole.Link, QColor(0, 0, 255))
+            palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 120, 215))
+            palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
+        else:
+            # Dark high-contrast theme
+            palette.setColor(QPalette.ColorRole.Window, QColor(0, 0, 0))
+            palette.setColor(QPalette.ColorRole.WindowText, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.Base, QColor(30, 30, 30))
+            palette.setColor(QPalette.ColorRole.AlternateBase, QColor(45, 45, 45))
+            palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(30, 30, 30))
+            palette.setColor(QPalette.ColorRole.ToolTipText, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.Text, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.Button, QColor(45, 45, 45))
+            palette.setColor(QPalette.ColorRole.ButtonText, QColor(255, 255, 255))
+            palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
+            palette.setColor(QPalette.ColorRole.Link, QColor(100, 149, 237))
+            palette.setColor(QPalette.ColorRole.Highlight, QColor(0, 120, 215))
+            palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
+
+        self._qapp.setPalette(palette)
+
+        # Apply strong focus indicators via a minimal stylesheet
+        # Note: Qt QSS does not support CSS3 outline/outline-offset.
+        # Use border-based focus indicators instead.
+        self._qapp.setStyleSheet("""
+            QPushButton:focus, QToolButton:focus {
+                border: 2px solid #60a5fa;
+            }
+            QLineEdit:focus {
+                border: 2px solid #60a5fa;
+            }
+            QListView:focus {
+                border: 2px solid #60a5fa;
+            }
+            QSlider::handle:horizontal:focus {
+                border: 2px solid #60a5fa;
+            }
+        """)
+
+    # ------------------------------------------------------------------
     # CLI actions
     # ------------------------------------------------------------------
 
@@ -288,7 +385,8 @@ class AppManager(QObject):
         """Open the encoded clips directory in the system file manager."""
         encoded_dir = os.path.expanduser("~/Videos")
         try:
-            subprocess.Popen(["xdg-open", encoded_dir])  # nosec
+            _command = ExternalCommandRunner()
+            _command.run_popen(["xdg-open", encoded_dir], text=True)
         except FileNotFoundError:
             logger.warning("Could not open %s — xdg-open not found", encoded_dir)
             sys.exit(1)
@@ -305,15 +403,12 @@ class AppManager(QObject):
         """
         try:
             from moment.core.config import Config
-            from moment.core.corruption import set_corruption_config
-            from moment.core.store import Store, set_store_config
-            from moment.utils.logging import set_log_config
+            from moment.core.store import Store
+            from moment.utils.logging import setup_logging
 
             self._config = Config()
-            set_store_config(self._config)
-            set_corruption_config(self._config)
-            set_log_config(self._config)
-            self._store = Store()
+            self._store = Store(config=self._config)
+            setup_logging(config=self._config, verbose=self._args.verbose)
             logger.info("Store + Config initialised")
         except Exception as exc:
             logger.warning("Core services not available: %s", exc)
@@ -340,8 +435,12 @@ class AppManager(QObject):
             return
 
         try:
+            from moment.core.event_bus import EventBus
             from moment.core.game_monitor import GameMonitor
             from moment.core.pipeline import Pipeline
+
+            self._event_bus = EventBus()
+            self._event_bus.toast_requested.connect(self._on_event_bus_toast)
 
             self._game_monitor = GameMonitor(
                 on_state_changed=self._on_game_state_changed,
@@ -357,6 +456,7 @@ class AppManager(QObject):
                 on_clip_errored=self._pipeline_errored.emit,
                 on_status=self._pipeline_status.emit,
             )
+            self._pipeline.start()
             logger.info("Pipeline started")
         except Exception as exc:
             logger.warning("Pipeline not started: %s", exc)
@@ -757,6 +857,9 @@ class AppManager(QObject):
             )
             video_codec = video_stream.get("codec_name", "") if video_stream else ""
             fps = parse_fps(video_stream.get("r_frame_rate", "0/1")) if video_stream else 0.0
+            if fps == 0.0:
+                fps = 30.0
+                logger.debug("parse_fps returned 0.0 — falling back to 30fps")
             resolution = (
                 (video_stream.get("width", 0), video_stream.get("height", 0))
                 if video_stream else (0, 0)
@@ -872,6 +975,14 @@ class AppManager(QObject):
                 self._tray.update_status(status)
         except Exception as exc:
             logger.exception("Status update error: %s", exc)
+
+    def _on_event_bus_toast(self, message: str, toast_type: str) -> None:
+        """Handle :meth:`EventBus.toast_requested` events."""
+        try:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(toast_type, message)
+        except Exception as exc:
+            logger.exception("EventBus toast error: %s", exc)
 
     # ------------------------------------------------------------------
     # Game state → Pipeline pause/resume

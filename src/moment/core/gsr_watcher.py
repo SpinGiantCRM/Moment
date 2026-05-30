@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from pathlib import Path
 from typing import Callable
 
@@ -68,6 +67,7 @@ class GSRWatcher:
         self._known_files: set[Path] = set()
         self._running = False
         self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -91,6 +91,7 @@ class GSRWatcher:
             self._known_files = set(self._dir.glob("*.mkv"))
 
         self._running = True
+        self._stop_event.clear()
         self._thread = threading.Thread(
             target=self._watch_loop,
             daemon=True,
@@ -106,6 +107,7 @@ class GSRWatcher:
     def stop(self) -> None:
         """Stop watching."""
         self._running = False
+        self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=3)
             self._thread = None
@@ -182,11 +184,8 @@ class GSRWatcher:
             except Exception:
                 logger.exception("Polling error")
 
-            # Sleep, but check _running every 500ms
-            for _ in range(int(self._poll_interval * 2)):
-                if not self._running:
-                    break
-                time.sleep(0.5)
+            # Sleep, but wake instantly on stop
+            self._stop_event.wait(timeout=self._poll_interval)
 
     def _handle_new_file(self, path: Path) -> None:
         """Fire the callback for a newly detected file."""

@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,7 @@ _ALLOWED_KEYS: frozenset[str] = frozenset({
     "encode_timing",
     # Encoding
     "preferred_codec",
+    "encode_concurrency",
     "preset",
     "cq",
     "bitrate_mbps",
@@ -64,6 +66,8 @@ _ALLOWED_KEYS: frozenset[str] = frozenset({
     # Retention
     "retention_trash_days",
     "retention_remove_corrupt",
+    # Thumbnail
+    "thumbnail_cache_size",
 })
 
 # Allowed key prefixes — set() checks these for path_* and gsr_* keys.
@@ -124,22 +128,28 @@ class Config:
     def __init__(self, db_path: str | None = None) -> None:
         self._db_path = db_path or os.path.join(CONFIG_DIR, "clips.db")
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
-        # Ensure settings table exists
-        conn = self._connect()
+
+        # 6.4 — Persistent connection: open once, reuse until close().
+        self._conn = self._connect()
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT ''
+            )
+        """)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.commit()
+        self._write_lock = threading.Lock()
+
+    def close(self) -> None:
+        """Close the persistent SQLite connection."""
         try:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS settings (
-                    key   TEXT PRIMARY KEY,
-                    value TEXT NOT NULL DEFAULT ''
-                )
-            """)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.commit()
-        finally:
-            conn.close()
+            self._conn.close()
+        except sqlite3.Error:
+            pass
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
+        conn = sqlite3.connect(self._db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
@@ -158,17 +168,13 @@ class Config:
         Returns:
             The deserialized value.
         """
-        conn = self._connect()
+        row = self._conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        if row is None:
+            return default
         try:
-            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-            if row is None:
-                return default
-            try:
-                return json.loads(row["value"])
-            except (json.JSONDecodeError, TypeError):
-                return row["value"]
-        finally:
-            conn.close()
+            return json.loads(row["value"])
+        except (json.JSONDecodeError, TypeError):
+            return row["value"]
 
     def set(self, key: str, value: Any) -> None:
         """Persist *value* as a JSON-encoded string under *key*.
@@ -179,15 +185,12 @@ class Config:
         """
         self._validate_key(key, value)
         serialised = json.dumps(value)
-        conn = self._connect()
-        try:
-            conn.execute(
+        with self._write_lock:
+            self._conn.execute(
                 "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                 (key, serialised),
             )
-            conn.commit()
-        finally:
-            conn.close()
+            self._conn.commit()
 
     def _validate_key(self, key: str, value: Any) -> None:
         """Raise ``ValueError`` for unknown keys or unsafe path values."""
@@ -220,27 +223,20 @@ class Config:
 
     def get_all(self) -> dict[str, Any]:
         """Return the entire settings table as a dictionary."""
-        conn = self._connect()
-        try:
-            rows = conn.execute("SELECT key, value FROM settings").fetchall()
-            result: dict[str, Any] = {}
-            for r in rows:
-                try:
-                    result[r["key"]] = json.loads(r["value"])
-                except (json.JSONDecodeError, TypeError):
-                    result[r["key"]] = r["value"]
-            return result
-        finally:
-            conn.close()
+        rows = self._conn.execute("SELECT key, value FROM settings").fetchall()
+        result: dict[str, Any] = {}
+        for r in rows:
+            try:
+                result[r["key"]] = json.loads(r["value"])
+            except (json.JSONDecodeError, TypeError):
+                result[r["key"]] = r["value"]
+        return result
 
     def delete(self, key: str) -> None:
         """Remove a setting."""
-        conn = self._connect()
-        try:
-            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
-            conn.commit()
-        finally:
-            conn.close()
+        with self._write_lock:
+            self._conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            self._conn.commit()
 
     # ------------------------------------------------------------------
     # Path overrides

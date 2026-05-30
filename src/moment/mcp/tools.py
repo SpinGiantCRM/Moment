@@ -30,7 +30,7 @@ from typing import Any
 
 from moment.core.config import Config
 from moment.core.models import ClipStatus, GameProfile
-from moment.core.store import Store, set_store_config
+from moment.core.store import Store
 from moment.utils.system import validate_arg
 
 logger = logging.getLogger(__name__)
@@ -48,8 +48,7 @@ def _get_store() -> Store:
     global _store
     if _store is None:
         config = Config()
-        set_store_config(config)
-        _store = Store()
+        _store = Store(config=config)
     return _store
 
 
@@ -106,6 +105,7 @@ def list_clips(
         offset=offset,
         visibility=clip_visibility,
         owner_id=owner_id,
+        shape="detail",
     )
     return [
         {
@@ -147,6 +147,7 @@ def search_clips(
         tag=tag,
         limit=limit,
         owner_id=owner_id,
+        shape="detail",
     )
     return [
         {
@@ -176,7 +177,12 @@ def _redact_path(path_str: str) -> str:
     return Path(path_str).name
 
 
-def get_clip(clip_id: str, *, show_paths: bool = False, include_urls: bool = False) -> dict[str, Any] | None:
+def get_clip(
+    clip_id: str,
+    *,
+    show_paths: bool = False,
+    include_urls: bool = False,
+) -> dict[str, Any] | None:
     """Get full details for a single clip by ID.
 
     Visibility enforced: PRIVATE clips are only visible to mutation-scoped
@@ -245,10 +251,21 @@ def get_stats() -> dict[str, Any]:
     return store.get_aggregate_stats()
 
 
-def list_game_profiles() -> list[dict[str, Any]]:
-    """List all per-game recording profiles."""
+def list_game_profiles(
+    limit: int = 200,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    """List per-game recording profiles with optional pagination.
+
+    Args:
+        limit: Max profiles to return (default 200, max 5000).
+        offset: Number of profiles to skip.
+    """
     store = _get_store()
-    profiles = store.list_game_profiles()
+    profiles = store.list_game_profiles(
+        limit=min(max(1, limit), 5000),
+        offset=max(0, offset),
+    )
     return [
         {
             "id": p.id,
@@ -333,7 +350,7 @@ def save_game_profile(profile_json: str) -> dict[str, str]:
         for key in ("game_device", "mic_device"):
             val = audio_config.get(key)
             if val:
-                validate_arg(str(val))
+                validate_arg(str(val), context="device")
 
     profile = GameProfile(
         id=data.get("id") or str(_uuid.uuid4()),

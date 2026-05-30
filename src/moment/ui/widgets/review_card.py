@@ -187,7 +187,10 @@ class ClipReviewCard(QWidget):
 
         if self._config.show_game_name and self._clip.game:
             game_label = QLabel(self._clip.game)
-            game_label.setStyleSheet(f"color: {color('--accent-blue')}; font-size: 11px; font-weight: 600;")
+            game_label.setStyleSheet(
+                f"color: {color('--accent-blue')};"
+                " font-size: 11px; font-weight: 600;"
+            )
             info_layout.addWidget(game_label)
 
         if self._config.show_duration:
@@ -308,7 +311,10 @@ class ClipReviewCard(QWidget):
         """Add to the global visible cards stack, evicting oldest if needed."""
         global _visible_cards
         # Clean up destroyed cards (skip those not yet shown)
-        _visible_cards = [c for c in _visible_cards if c.isVisible() or (hasattr(c, '_anim') and c._anim is not None)]
+        _visible_cards = [
+            c for c in _visible_cards
+            if c.isVisible() or (hasattr(c, '_anim') and c._anim is not None)
+        ]
 
         if len(_visible_cards) >= _MAX_VISIBLE:
             oldest = _visible_cards[0]

@@ -8,17 +8,24 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-import subprocess  # nosec B404 — required for external tool invocation
+import subprocess  # required for PIPE constant in encode()
 from pathlib import Path
 from typing import Any
 
-from moment.utils.subprocess import Popen_sandboxed, run_sandboxed
+from moment.utils.subprocess import ExternalCommandRunner, Popen_sandboxed, run_sandboxed
 
 logger = logging.getLogger(__name__)
+
+_command = ExternalCommandRunner()
 
 # Cache binary availability checks
 _ffmpeg_available: bool | None = None
 _ffprobe_available: bool | None = None
+
+# find_ffmpeg cache with 60-second TTL
+_ffmpeg_path: str | None = None
+_ffmpeg_path_timestamp: float = 0.0
+_FFMPEG_CACHE_TTL: float = 60.0
 
 # ---------------------------------------------------------------------------
 # GPU-agnostic encoder matrix
@@ -102,10 +109,10 @@ def _detect_vendor() -> str | None:
     """
     # NVIDIA
     try:
-        result = subprocess.run(
+        result = _command.run(
             ["nvidia-smi", "-L"],
             capture_output=True, text=True, check=False,
-        )  # nosec
+        )
         if result.returncode == 0 and "GPU" in result.stdout:
             return "nvidia"
     except (FileNotFoundError, OSError):
@@ -113,9 +120,9 @@ def _detect_vendor() -> str | None:
 
     # AMD
     try:
-        result = subprocess.run(
+        result = _command.run(
             ["lspci"], capture_output=True, text=True, check=False,
-        )  # nosec
+        )
         if result.returncode == 0:
             out = result.stdout.lower()
             if "vga" in out and "amd" in out:
@@ -163,7 +170,7 @@ def _encoder_works(encoder: str) -> bool:
         ffmpeg = shutil.which("ffmpeg")
         if ffmpeg is None:
             return False
-        result = subprocess.run(  # nosec B603 — tokenized args, no shell=True
+        result = _command.run(  # tokenized args, no shell=True
             [ffmpeg, "-hide_banner", "-encoders"],
             capture_output=True, text=True, check=False,
         )
@@ -191,18 +198,31 @@ class FFmpegError(RuntimeError):
 def find_ffmpeg() -> str:
     """Return the path to the ``ffmpeg`` binary.
 
+    Result is cached for 60 seconds; after expiry it re-checks availability.
+
     Raises:
         FFmpegError: If ffmpeg is not on the system PATH.
     """
-    global _ffmpeg_available
-    if _ffmpeg_available is None:
-        path = shutil.which("ffmpeg")
-        if path is None:
-            _ffmpeg_available = False
-            raise FFmpegError("ffmpeg not found on system PATH")
-        _ffmpeg_available = True
-    elif not _ffmpeg_available:
+    import time
+
+    global _ffmpeg_available, _ffmpeg_path, _ffmpeg_path_timestamp
+
+    now = time.monotonic()
+
+    # Return cached result if within TTL
+    if _ffmpeg_path is not None and (now - _ffmpeg_path_timestamp) < _FFMPEG_CACHE_TTL:
+        return _ffmpeg_path
+    if _ffmpeg_available is False and (now - _ffmpeg_path_timestamp) < _FFMPEG_CACHE_TTL:
         raise FFmpegError("ffmpeg not found on system PATH")
+
+    _ffmpeg_path_timestamp = now
+    path = shutil.which("ffmpeg")
+    if path is None:
+        _ffmpeg_path = None
+        _ffmpeg_available = False
+        raise FFmpegError("ffmpeg not found on system PATH")
+    _ffmpeg_path = "ffmpeg"
+    _ffmpeg_available = True
     return "ffmpeg"
 
 
@@ -296,7 +316,10 @@ def thumbnail(input_path: str | Path, output_path: str | Path, time: float = 0.0
 
     result = run_sandboxed(cmd)
     if result.returncode != 0:
-        raise FFmpegError(f"thumbnail generation failed (code={result.returncode}): {result.stderr.strip()}")
+        raise FFmpegError(
+            f"thumbnail generation failed (code={result.returncode}):"
+            f" {result.stderr.strip()}"
+        )
 
 
 def parse_fps(r_frame_rate: str) -> float:

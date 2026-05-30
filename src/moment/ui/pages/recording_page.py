@@ -3,11 +3,15 @@
 Shows a large Record button, FPS counter, and elapsed duration when idle.
 During active recording, displays a live preview placeholder with an
 animated REC indicator, duration ticker, and stop/save controls.
+
+Includes a "Configure Games" button for manually adding game process
+names on Wayland / Flatpak where auto-detection is unavailable.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QPainter
@@ -18,6 +22,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+if TYPE_CHECKING:
+    from moment.core.store import Store
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +114,7 @@ class RecordingPage(QWidget):
         self._recording = False
         self._elapsed: int = 0
         self._fps: int = 0
+        self._store: "Store | None" = None
 
         # --- Ready state widget ---
         self._ready_widget = QWidget()
@@ -213,6 +221,20 @@ class RecordingPage(QWidget):
 
         layout.addLayout(hints)
 
+        # Manual game configuration button (Wayland/Flatpak)
+        game_cfg_row = QHBoxLayout()
+        game_cfg_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._configure_games_btn = QPushButton("Configure Games")
+        self._configure_games_btn.setObjectName("muted")
+        self._configure_games_btn.setStyleSheet(
+            "QPushButton { border: 1px solid #3f3f46; border-radius: 6px; "
+            "padding: 6px 16px; font-size: 13px; color: #a1a1aa; }"
+            "QPushButton:hover { border-color: #71717a; color: #d9d9d9; }"
+        )
+        self._configure_games_btn.clicked.connect(self._on_configure_games)
+        game_cfg_row.addWidget(self._configure_games_btn)
+        layout.addLayout(game_cfg_row)
+
     # ==================================================================
     # Recording state
     # ==================================================================
@@ -293,6 +315,10 @@ class RecordingPage(QWidget):
         btn_row.addWidget(self._save_clip_btn)
         layout.addLayout(btn_row)
 
+    def set_store(self, store: "Store") -> None:
+        """Set the Store reference (called after init by AppManager)."""
+        self._store = store
+
     # ==================================================================
     # Public API
     # ==================================================================
@@ -343,6 +369,12 @@ class RecordingPage(QWidget):
         """User clicked Save Clip."""
         logger.info("Save %ds clip requested from recording page", duration)
         self.save_clip.emit(duration)
+
+    def _on_configure_games(self) -> None:
+        """Open the manual game configuration dialog."""
+        from moment.ui.dialogs.manual_game_dialog import ManualGameDialog
+        dlg = ManualGameDialog(store=self._store, parent=self)
+        dlg.exec()
 
     def _on_elapsed_tick(self) -> None:
         """Update the elapsed time display."""

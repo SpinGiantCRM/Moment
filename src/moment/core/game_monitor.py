@@ -2,6 +2,8 @@
 
 Scans ``/proc`` every 3 seconds for known game binary names.
 Uses ``nvidia-smi`` GPU utilisation as a secondary signal.
+In Flatpak sandboxes, delegates to ``flatpak-spawn --host`` for host
+process visibility.
 
 States: IDLE → GAME_ACTIVE → GAME_EXITING
 """
@@ -10,11 +12,16 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess  # nosec B404 — required for external tool invocation
+import subprocess  # nosec B404 — required for TimeoutExpired exception type
 import threading
+import time
 from typing import Callable
 
+from moment.utils.subprocess import ExternalCommandRunner
+
 logger = logging.getLogger(__name__)
+
+_command = ExternalCommandRunner()
 
 SCAN_INTERVAL = 3.0
 
@@ -59,6 +66,10 @@ class GameMonitor:
             use_nvidia_check: Whether to also check GPU utilisation.
         """
         self._binaries = game_binaries or _DEFAULT_GAME_BINARIES
+        # Precompute lowercase set for case-insensitive matching
+        self._binaries_lower: set[str] = {
+            b.lower().strip() for b in self._binaries
+        }
         self._on_state_changed = on_state_changed
         self._interval = scan_interval
         self._use_nvidia = use_nvidia_check
@@ -68,7 +79,12 @@ class GameMonitor:
         self._lock = threading.Lock()
         self._timer: threading.Timer | None = None
         self._running = False
-        self._proc_warned: bool = False  # tracks whether we've already warned about restricted /proc
+        self._last_tick: float = 0.0
+        self._watchdog_thread: threading.Thread | None = None
+        # tracks whether we've already warned about restricted /proc
+        self._proc_warned: bool = False
+        # tracks whether we've warned about flatpak-spawn unavailability
+        self._flatpak_warned: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -79,8 +95,10 @@ class GameMonitor:
         if self._running:
             return
         self._running = True
+        self._last_tick = time.monotonic()
         self._scan()
         self._schedule()
+        self._start_watchdog()
 
     def stop(self) -> None:
         """Stop monitoring."""
@@ -118,7 +136,31 @@ class GameMonitor:
         self._timer.daemon = True
         self._timer.start()
 
+    def _start_watchdog(self) -> None:
+        """Start a background thread that detects silent timer death."""
+        self._watchdog_thread = threading.Thread(
+            target=self._watchdog_loop,
+            daemon=True,
+            name="game-monitor-watchdog",
+        )
+        self._watchdog_thread.start()
+
+    def _watchdog_loop(self) -> None:
+        """Check every 60s that the timer chain is still alive."""
+        while self._running:
+            time.sleep(60.0)
+            if not self._running:
+                break
+            elapsed = time.monotonic() - self._last_tick
+            if elapsed > 2 * self._interval:
+                logger.warning(
+                    "GameMonitor timer appears stuck — no tick for %.1fs "
+                    "(expected interval %.1fs)",
+                    elapsed, self._interval,
+                )
+
     def _on_tick(self) -> None:
+        self._last_tick = time.monotonic()
         try:
             self._scan()
         except Exception:
@@ -166,8 +208,20 @@ class GameMonitor:
                     except Exception as exc:
                         logger.exception("on_state_changed callback error: %s", exc)
 
+    def _in_flatpak(self) -> bool:
+        """Return ``True`` if running inside a Flatpak sandbox."""
+        return os.path.exists("/.flatpak-info")
+
     def _find_game_process(self) -> str | None:
-        """Scan /proc for known game binaries.  Returns the process name or None."""
+        """Scan /proc for known game binaries.  Returns the process name or None.
+
+        In Flatpak, delegates to ``flatpak-spawn --host pgrep`` for
+        host process visibility.
+        """
+        # Flatpak sandbox: use flatpak-spawn to reach the host
+        if self._in_flatpak():
+            return self._find_game_process_flatpak()
+
         try:
             for pid_dir in os.listdir("/proc"):
                 if not pid_dir.isdigit():
@@ -179,7 +233,9 @@ class GameMonitor:
                 except (OSError, PermissionError):
                     continue
 
-                if comm in self._binaries:
+                # Normalize to lowercase for case-insensitive comparison
+                comm_lower = comm.lower().strip()
+                if comm_lower in self._binaries_lower:
                     # Optionally cross-check with nvidia-smi
                     if self._use_nvidia and not self._check_gpu_utilization():
                         continue
@@ -187,6 +243,33 @@ class GameMonitor:
         except (OSError, FileNotFoundError):
             pass
 
+        return None
+
+    def _find_game_process_flatpak(self) -> str | None:
+        """Use ``flatpak-spawn --host pgrep`` to find games on the host."""
+        for binary in self._binaries:
+            try:
+                result = _command.run(
+                    ["flatpak-spawn", "--host", "pgrep", "-x", binary],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    logger.info("Game detected in Flatpak host: %s", binary)
+                    if self._use_nvidia and not self._check_gpu_utilization():
+                        continue
+                    return binary
+            except FileNotFoundError:
+                if not self._flatpak_warned:
+                    self._flatpak_warned = True
+                    logger.warning(
+                        "Flatpak sandbox detected but flatpak-spawn unavailable — "
+                        "game auto-detection disabled. Configure games manually in Settings."
+                    )
+                return None
+            except (subprocess.TimeoutExpired, OSError):
+                continue
         return None
 
     def _check_proc_accessible(self) -> None:
@@ -212,12 +295,12 @@ class GameMonitor:
         Returns True if GPU utilisation > 0% (or if nvidia-smi is unavailable).
         """
         try:
-            result = subprocess.run(
+            result = _command.run(
                 ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
                 capture_output=True,
                 text=True,
                 timeout=5,
-            )  # nosec
+            )
             if result.returncode != 0:
                 return True  # Assume yes if we can't check
             util = int(result.stdout.strip())

@@ -67,7 +67,7 @@ class GameProfileManager:
 
     def list(self) -> list[GameProfile]:
         """Return all stored game profiles."""
-        return self._store.list_game_profiles()
+        return self._store.list_game_profiles(limit=10_000)
 
     def delete(self, game_name: str) -> None:
         """Remove the profile for *game_name* (no-op if it does not exist)."""

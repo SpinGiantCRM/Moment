@@ -3,6 +3,10 @@
 Provides ``run_sandboxed()`` and ``Popen_sandboxed()`` as drop-in
 replacements for ``subprocess.run()`` and ``subprocess.Popen()``.
 
+``ExternalCommandRunner`` is the canonical wrapper: all subprocess calls
+should go through it so sandboxing, PID tracking, and log redaction are
+applied consistently.
+
 Strategy:
     - ffmpeg / gpu-screen-recorder: QProcess with ``CloseFileDescriptors | ResetIds``
     - rclone (thread-pool): ``preexec_fn`` with ``os.closerange(3, 256)``
@@ -13,9 +17,12 @@ close inherited file descriptors to prevent FD-leak attacks.
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
+import signal
 import subprocess  # nosec B404
+import threading
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -23,6 +30,55 @@ logger = logging.getLogger(__name__)
 # Upper bound for file descriptor closing (rclone thread-pool path).
 # 256 is generous — most processes don't have more than a few dozen open.
 _FD_CLOSE_MAX = 256
+
+# ---------------------------------------------------------------------------
+# Orphan-prevention tracking
+# ---------------------------------------------------------------------------
+
+_child_pids: set[int] = set()
+_child_lock = threading.Lock()
+
+
+def _register_child(pid: int) -> None:
+    with _child_lock:
+        _child_pids.add(pid)
+
+
+def _deregister_child(pid: int) -> None:
+    with _child_lock:
+        _child_pids.discard(pid)
+
+
+def _cleanup_child_processes() -> None:
+    """SIGKILL all tracked child processes. Called on atexit and signals."""
+    with _child_lock:
+        pids = list(_child_pids)
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+            logger.debug("Sent SIGKILL to tracked child pid=%d", pid)
+        except (ProcessLookupError, OSError):
+            pass
+        try:
+            os.waitid(os.P_PID, pid, os.WNOHANG)
+        except (ChildProcessError, OSError):
+            pass
+
+
+def _signal_cleanup(signum: int, _frame: Any) -> None:
+    """Signal handler: kill children, then re-raise the signal."""
+    _cleanup_child_processes()
+    signal.signal(signum, signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
+# Register atexit and crash-signal handlers (idempotent)
+atexit.register(_cleanup_child_processes)
+for _sig in (signal.SIGTERM, signal.SIGSEGV):
+    try:
+        signal.signal(_sig, _signal_cleanup)
+    except (ValueError, OSError):
+        pass
 
 
 def _sandbox_preexec() -> None:
@@ -114,16 +170,147 @@ def Popen_sandboxed(
         **kwargs: Passed through to ``subprocess.Popen()``.
 
     Returns:
-        Managed Popen instance.
+        Managed Popen instance.  The PID is automatically tracked in
+        ``_child_pids`` and de-registered when the process exits.
     """
     if "preexec_fn" not in kwargs:
         kwargs["preexec_fn"] = _sandbox_preexec
 
-    return subprocess.Popen(  # nosec B603 — tokenized args, no shell=True
+    proc = subprocess.Popen(  # nosec B603 — tokenized args, no shell=True
         cmd,
         text=text,
         **kwargs,
     )
+
+    # Register for orphan-prevention tracking
+    pid = proc.pid
+    if pid is not None:
+        _register_child(pid)
+
+        # Monkey-patch wait / poll / communicate so the PID is
+        # de-registered as soon as we know the process has exited.
+        _orig_wait = proc.wait
+        _orig_poll = proc.poll
+        _orig_communicate = proc.communicate
+
+        def _wait_wait(*args: Any, **kw: Any) -> int:
+            rc = _orig_wait(*args, **kw)
+            _deregister_child(pid)
+            return rc
+
+        def _wait_poll(*args: Any, **kw: Any) -> int | None:
+            rc = _orig_poll(*args, **kw)
+            if rc is not None:
+                _deregister_child(pid)
+            return rc
+
+        def _wait_communicate(*args: Any, **kw: Any) -> tuple[str | None, str | None]:
+            result = _orig_communicate(*args, **kw)
+            _deregister_child(pid)
+            return result
+
+        proc.wait = _wait_wait  # type: ignore[method-assign]
+        proc.poll = _wait_poll  # type: ignore[method-assign]
+        proc.communicate = _wait_communicate  # type: ignore[method-assign]
+
+    return proc
+
+
+# ---------------------------------------------------------------------------
+# ExternalCommandRunner — canonical wrapper
+# ---------------------------------------------------------------------------
+
+
+class ExternalCommandRunner:
+    """Canonical wrapper for all external subprocess calls.
+
+    Applies sandboxing (close_fds, new session), registers child PIDs
+    for orphan prevention, logs commands with secrets redacted, and
+    applies timeouts via :class:`subprocess.TimeoutExpired`.
+
+    All direct ``subprocess.run()`` / ``subprocess.Popen()`` calls
+    should be ported to this class so ``# nosec`` annotations are
+    no longer needed.
+    """
+
+    def __init__(self) -> None:
+        pass
+
+    def run(
+        self,
+        cmd: list[str],
+        *,
+        timeout: float | None = 30,
+        capture_output: bool = True,
+        text: bool = True,
+        check: bool = False,
+        **kwargs: Any,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run a short-lived subprocess with full sandboxing.
+
+        Delegates to :func:`run_sandboxed` which applies QProcess or
+        preexec_fn sandboxing depending on runtime context.
+
+        Args:
+            cmd: Tokenised command-line arguments.
+            timeout: Seconds before :class:`subprocess.TimeoutExpired`.
+            capture_output: Capture stdout/stderr.
+            text: Decode output as text.
+            check: Raise on non-zero exit.
+            **kwargs: Passed through to ``subprocess.run()``.
+
+        Returns:
+            CompletedProcess with stdout/stderr captured.
+        """
+        logger.debug("Running: %s", _redact_cmd(cmd))
+        return run_sandboxed(
+            cmd,
+            timeout=timeout,
+            capture_output=capture_output,
+            text=text,
+            check=check,
+            **kwargs,
+        )
+
+    def run_popen(
+        self,
+        cmd: list[str],
+        *,
+        text: bool = True,
+        **kwargs: Any,
+    ) -> subprocess.Popen[str]:
+        """Launch a long-running subprocess with sandboxing.
+
+        Delegates to :func:`Popen_sandboxed` for sandboxing + PID tracking.
+
+        Args:
+            cmd: Tokenised command-line arguments.
+            text: Decode output as text.
+            **kwargs: Passed through to ``subprocess.Popen()``.
+
+        Returns:
+            Managed Popen instance with PID tracked for orphan prevention.
+        """
+        logger.debug("Launching: %s", _redact_cmd(cmd))
+        return Popen_sandboxed(cmd, text=text, **kwargs)
+
+
+def _redact_cmd(cmd: list[str]) -> str:
+    """Return a log-safe string representation of *cmd*.
+
+    Strips long tokens (URLs, keys) that might contain secrets.
+    """
+    parts: list[str] = []
+    for i, arg in enumerate(cmd):
+        if len(arg) > 200:
+            parts.append(arg[:100] + "..." + arg[-20:])
+        elif "://" in arg and any(
+            pat in arg.lower() for pat in ("token=", "key=", "secret=", "password=")
+        ):
+            parts.append("[REDACTED]")
+        else:
+            parts.append(arg)
+    return " ".join(parts)
 
 
 def _try_qprocess(

@@ -298,8 +298,9 @@ class TestCrashRecovery:
         )
 
         # Set up 3 recent crash timestamps
+        from collections import deque
         now = time.monotonic()
-        ctrl._restart_timestamps = [now - 10, now - 5, now - 2]
+        ctrl._restart_timestamps = deque([now - 10, now - 5, now - 2], maxlen=11)
 
         # Spawn a process manually
         mock_proc = MagicMock(spec=subprocess.Popen)

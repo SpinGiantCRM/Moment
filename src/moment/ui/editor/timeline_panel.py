@@ -229,7 +229,7 @@ class _TimelineWidget(QWidget):
 
             # Speed badge
             if seg.speed != 1.0:
-                mid_x = (x1 + x2) / 2
+                (x1 + x2) / 2
                 font = p.font()
                 font.setPointSize(8)
                 font.setBold(True)
@@ -258,7 +258,10 @@ class _TimelineWidget(QWidget):
         # Trim handles
         trim_colors = {"trim_in": "#60a5fa", "trim_out": "#fb923c"}
         for name, val in [("trim_in", self._trim_start), ("trim_out", self._trim_end)]:
-            hx = self._time_to_x(val) if val > 0 else (self._time_to_x(0) if name == "trim_in" else self._time_to_x(self._total))
+            if val > 0:
+                hx = self._time_to_x(val)
+            else:
+                hx = self._time_to_x(0) if name == "trim_in" else self._time_to_x(self._total)
             p.setPen(Qt.PenStyle.NoPen)
             is_active = self._hover == name or self._dragging == name
             clr = "#f87171" if (name == "trim_in" and val >= self._trim_end) else trim_colors[name]
@@ -270,7 +273,10 @@ class _TimelineWidget(QWidget):
                 p.setPen(QPen(QColor(clr), 2))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawRoundedRect(
-                    QRectF(hx - _HANDLE_W // 2 - 2, r.y() - 6, _HANDLE_W + 4, r.height() + 12), 4, 4,
+                    QRectF(
+                        hx - _HANDLE_W // 2 - 2, r.y() - 6,
+                        _HANDLE_W + 4, r.height() + 12,
+                    ), 4, 4,
                 )
 
         # Time labels
@@ -303,7 +309,10 @@ class _TimelineWidget(QWidget):
         # Split point handles
         for i, pt in enumerate(self._split_points):
             hx = self._time_to_x(pt)
-            if abs(px - hx) <= _HANDLE_W + 2 and r.y() - _MARKER_H <= pos.y() <= r.bottom() + _MARKER_H:
+            if (
+                abs(px - hx) <= _HANDLE_W + 2
+                and r.y() - _MARKER_H <= pos.y() <= r.bottom() + _MARKER_H
+            ):
                 return (f"split_{i}", i)
 
         return (None, -1)
@@ -453,7 +462,9 @@ class TimelinePanel(QWidget):
         # Split button
         split_btn = QPushButton("Split at Playhead (S)")
         split_btn.setToolTip("Split the segment at the current playback position")
-        split_btn.clicked.connect(lambda: self._timeline.split_at_playhead(self._timeline._total / 2))
+        split_btn.clicked.connect(
+            lambda: self._timeline.split_at_playhead(self._timeline._total / 2)
+        )
         ctrl_layout.addWidget(split_btn)
 
         ctrl_layout.addStretch()

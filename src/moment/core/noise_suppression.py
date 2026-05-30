@@ -13,14 +13,17 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess  # nosec B404 — required for external tool invocation
+import subprocess  # nosec B404 — required for CalledProcessError exception type
 from pathlib import Path
 from typing import Callable
 
 from moment.utils.ffmpeg import FFmpegError, find_ffmpeg
+from moment.utils.subprocess import ExternalCommandRunner
 from moment.utils.system import validate_arg
 
 logger = logging.getLogger(__name__)
+
+_command = ExternalCommandRunner()
 
 
 class NoiseSuppressorError(RuntimeError):
@@ -147,7 +150,7 @@ class NoiseSuppressor:
     @staticmethod
     def _get_audio_streams(path: Path) -> list[dict]:
         """Use ffprobe to find audio stream indices and codecs."""
-        result = subprocess.run(
+        result = _command.run(
             [
                 "ffprobe",
                 "-v", "quiet",
@@ -157,7 +160,7 @@ class NoiseSuppressor:
             ],
             capture_output=True,
             text=True,
-        )  # nosec
+        )
         if result.returncode != 0:
             return []
 
@@ -215,7 +218,7 @@ class NoiseSuppressor:
         ]
 
         logger.debug("RNNoise: %s", cmd)
-        subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=300)  # nosec B603 — tokenized args, no shell=True
+        _command.run(cmd, capture_output=True, text=True, check=True, timeout=300)
 
         if not output_path.is_file() or output_path.stat().st_size == 0:
             raise NoiseSuppressorError("RNNoise output missing or empty")

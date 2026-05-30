@@ -73,7 +73,7 @@ class TestUpload:
 
     def test_upload_with_custom_remote_path(self, test_path: Path, uploader: Uploader) -> None:
         with (
-            patch.object(uploader, "_do_copy") as mock_copy,
+            patch.object(uploader, "_do_copy"),
             patch.object(uploader, "_verify_upload", return_value=True),
             patch.object(uploader, "_ensure_rclone"),
         ):
@@ -225,7 +225,7 @@ class TestLogSanitization:
     def test_build_url_uses_debug_not_info(self, uploader: Uploader) -> None:
         """_build_url without base_url should log at debug level, not info."""
         with patch("moment.core.uploader.logger") as mock_logger:
-            result = uploader._build_url("foo.mp4")
+            uploader._build_url("foo.mp4")
             # Should not call info
             info_calls = [
                 c for c in mock_logger.info.call_args_list
@@ -270,7 +270,9 @@ class TestRetryConfig:
 # ---------------------------------------------------------------------------
 
 class TestDeadline:
-    def test_deadline_not_exceeded_for_quick_upload(self, test_path: Path, uploader: Uploader) -> None:
+    def test_deadline_not_exceeded_for_quick_upload(
+        self, test_path: Path, uploader: Uploader
+    ) -> None:
         """Quick uploads should not trigger the deadline."""
         with (
             patch.object(uploader, "_do_copy"),

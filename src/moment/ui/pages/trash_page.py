@@ -24,6 +24,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.ui.services.async_loader import AsyncDataLoader
+from moment.ui.widgets.skeleton_card import SkeletonCard
+
 if TYPE_CHECKING:
     from moment.core.store import Store
 
@@ -103,6 +106,13 @@ class TrashPage(QWidget):
         # --- Empty state ---
         self._empty_widget = self._build_empty_state()
 
+        # Async loader
+        self._loader: AsyncDataLoader | None = None
+
+        # Skeleton cards for async loading
+        self._skeleton_cards: list[SkeletonCard] = []
+        self._skeleton_container: QWidget | None = None
+
         # --- Layout ---
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 16)
@@ -127,27 +137,65 @@ class TrashPage(QWidget):
     # ==================================================================
 
     def refresh(self) -> None:
-        """Reload all soft-deleted clips from the store."""
+        """Reload all soft-deleted clips from the store asynchronously.
+
+        Shows skeleton cards immediately, cancels any in-flight loader,
+        then loads data on a background thread.
+        """
         if self._store is None:
             self._show_empty("No database available.")
             return
 
-        try:
-            clips = self._store.list_clips(include_deleted=True, limit=2000)
-            deleted = [c for c in clips if c.deleted_at is not None]
+        # Cancel any previous loader (also disconnects signals)
+        self._cancel_loader()
 
-            if not deleted:
-                self._show_empty("Trash is empty")
-                return
+        # Show skeleton placeholders immediately
+        self._show_skeletons(4)
 
-            self._empty_widget.setVisible(False)
-            self._list_view.setVisible(True)
+        # Fire async load
+        self._loader = AsyncDataLoader(
+            self._store.list_clips, include_deleted=True, limit=2000
+        )
+        self._loader.data_ready.connect(self._on_data_ready)
+        self._loader.error_occurred.connect(self._on_load_error)
+        self._loader.start()
 
-            self._populate(deleted)
-            logger.debug("Trash refreshed: %d deleted clips", len(deleted))
-        except Exception as exc:
-            logger.exception("Failed to load trash clips")
-            self._show_empty(f"Could not load trash: {exc}")
+    def _on_data_ready(self, clips: list[Any]) -> None:
+        """Handle successful async trash load."""
+        self._loader = None
+        self._remove_skeletons()
+
+        deleted = [c for c in clips if c.deleted_at is not None]
+
+        if not deleted:
+            self._show_empty("Trash is empty")
+            return
+
+        self._empty_widget.setVisible(False)
+        self._list_view.setVisible(True)
+
+        self._populate(deleted)
+        logger.debug("Trash refreshed: %d deleted clips", len(deleted))
+
+    def _on_load_error(self, error: str) -> None:
+        """Handle async load failure."""
+        self._loader = None
+        self._remove_skeletons()
+        logger.exception("Failed to load trash clips: %s", error)
+        self._show_empty(f"Could not load trash. Database error.\n\n{error}")
+
+    def _cancel_loader(self) -> None:
+        """Cancel and disconnect any in-flight async loader."""
+        if self._loader is not None:
+            self._loader.data_ready.disconnect()
+            self._loader.error_occurred.disconnect()
+            self._loader.cancel()
+            self._loader = None
+
+    def hideEvent(self, event) -> None:
+        """Cancel in-flight loaders when the page is hidden."""
+        self._cancel_loader()
+        super().hideEvent(event)
 
     def _populate(self, clips: list[Any]) -> None:
         """Populate the grid with soft-deleted clips."""
@@ -160,7 +208,10 @@ class TrashPage(QWidget):
             data = ClipDelegate.build_item_data(clip)
             # Add deleted_at info for the overlay
             if clip.deleted_at:
-                data["deleted_at"] = clip.deleted_at.isoformat() if isinstance(clip.deleted_at, datetime) else str(clip.deleted_at)
+                if isinstance(clip.deleted_at, datetime):
+                    data["deleted_at"] = clip.deleted_at.isoformat()
+                else:
+                    data["deleted_at"] = str(clip.deleted_at)
             self._clips.append(data)
 
             item = QStandardItem()
@@ -317,3 +368,43 @@ class TrashPage(QWidget):
 
         self._empty_label.setText(message)
         self._empty_widget.setVisible(True)
+
+    # ==================================================================
+    # Skeleton cards (async loading placeholders)
+    # ==================================================================
+
+    def _show_skeletons(self, count: int = 4) -> None:
+        """Show skeleton card placeholders during async loading."""
+        self._remove_skeletons()
+        self._list_view.setVisible(False)
+        if self._empty_widget:
+            self._empty_widget.setVisible(False)
+
+        self._skeleton_container = QWidget(self)
+        layout = QHBoxLayout(self._skeleton_container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        layout.addStretch()
+
+        for _ in range(min(count, 8)):
+            card = SkeletonCard(self._skeleton_container)
+            self._skeleton_cards.append(card)
+            layout.addWidget(card)
+            layout.addStretch()
+
+        parent_layout = self.layout()
+        if parent_layout is not None:
+            list_idx = parent_layout.indexOf(self._list_view)
+            if list_idx >= 0:
+                parent_layout.insertWidget(list_idx, self._skeleton_container)
+
+        self._skeleton_container.setVisible(True)
+
+    def _remove_skeletons(self) -> None:
+        """Remove all skeleton cards and the container."""
+        for card in self._skeleton_cards:
+            card.deleteLater()
+        self._skeleton_cards.clear()
+        if self._skeleton_container is not None:
+            self._skeleton_container.deleteLater()
+            self._skeleton_container = None

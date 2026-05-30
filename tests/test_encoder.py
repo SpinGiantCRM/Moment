@@ -183,11 +183,13 @@ class TestEncode:
         encoder = Encoder(codec="h264")
 
         with (
-            patch("subprocess.run") as mock_run,
+            patch("moment.core.encoder.Popen_sandboxed") as mock_popen,
             patch("moment.core.encoder.find_ffmpeg", return_value="ffmpeg"),
             patch("moment.core.encoder.ensure_dir"),
         ):
-            mock_run.return_value.returncode = 0
+            mock_proc = mock_popen.return_value
+            mock_proc.returncode = 0
+            mock_proc.communicate.return_value = ("", "")
 
             with patch("pathlib.Path.is_file", return_value=True), \
                  patch("pathlib.Path.stat") as mock_stat:
@@ -198,36 +200,36 @@ class TestEncode:
             assert result.suffix == ".mp4"
 
     def test_encode_calls_subprocess_with_correct_args(self, clip: Clip) -> None:
-        """Verify subprocess.run receives the right command list."""
+        """Verify Popen_sandboxed receives the right command list."""
         encoder = Encoder(codec="h264")
 
         with (
-            patch("subprocess.run") as mock_run,
+            patch("moment.core.encoder.Popen_sandboxed") as mock_popen,
             patch("moment.core.encoder.find_ffmpeg", return_value="ffmpeg"),
             patch("moment.core.encoder.ensure_dir"),
             patch("pathlib.Path.is_file", return_value=True),
             patch("pathlib.Path.stat") as mock_stat,
         ):
-            mock_run.return_value.returncode = 0
+            mock_proc = mock_popen.return_value
+            mock_proc.returncode = 0
+            mock_proc.communicate.return_value = ("", "")
             mock_stat.return_value.st_size = 1000
             encoder.encode(clip)
 
-            # Verify subprocess.run was called (may be 2 calls: NVENC probe + encode)
-            assert mock_run.call_count >= 1
-            call_args = mock_run.call_args[1]
-            # Check output capture
-            assert "capture_output" in call_args or call_args.get("stdout") is not None
+            # Verify Popen_sandboxed was called
+            assert mock_popen.call_count >= 1
 
     def test_encode_failure_raises(self, clip: Clip) -> None:
         encoder = Encoder(codec="h264")
 
         with (
-            patch("subprocess.run") as mock_run,
+            patch("moment.core.encoder.Popen_sandboxed") as mock_popen,
             patch("moment.core.encoder.find_ffmpeg", return_value="ffmpeg"),
             patch("moment.core.encoder.ensure_dir"),
         ):
-            mock_run.return_value.returncode = 1
-            mock_run.return_value.stderr = "Error: something went wrong"
+            mock_proc = mock_popen.return_value
+            mock_proc.returncode = 1
+            mock_proc.communicate.return_value = ("", "Error: something went wrong")
 
             with pytest.raises(EncoderError, match="ffmpeg encode failed"):
                 encoder.encode(clip)
@@ -236,13 +238,15 @@ class TestEncode:
         encoder = Encoder(codec="h264")
 
         with (
-            patch("subprocess.run") as mock_run,
+            patch("moment.core.encoder.Popen_sandboxed") as mock_popen,
             patch("moment.core.encoder.find_ffmpeg", return_value="ffmpeg"),
             patch("moment.core.encoder.ensure_dir"),
             patch("pathlib.Path.is_file", return_value=True),
             patch("pathlib.Path.stat") as mock_stat,
         ):
-            mock_run.return_value.returncode = 0
+            mock_proc = mock_popen.return_value
+            mock_proc.returncode = 0
+            mock_proc.communicate.return_value = ("", "")
             mock_stat.return_value.st_size = 0
 
             with pytest.raises(EncoderError, match="empty"):

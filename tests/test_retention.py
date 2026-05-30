@@ -43,7 +43,10 @@ def manager(store: Store, trash_dir: str) -> RetentionManager:
     m.stop()
 
 
-def _make_clip(store: Store, *, id: str, stem: str = "", source_path: str = "", **kwargs: object) -> Clip:
+def _make_clip(
+    store: Store, *, id: str, stem: str = "", source_path: str = "",
+    **kwargs: object,
+) -> Clip:
     """Helper to insert a clip with minimal required fields."""
     clip = Clip(
         id=id,
@@ -82,7 +85,9 @@ class TestAgeString:
 # ---------------------------------------------------------------------------
 
 class TestSourceAge:
-    def test_old_source_trashed(self, manager: RetentionManager, store: Store, trash_dir: str) -> None:
+    def test_old_source_trashed(
+        self, manager: RetentionManager, store: Store, trash_dir: str,
+    ) -> None:
         _make_clip(
             store,
             id="old-source",
@@ -135,7 +140,9 @@ class TestSourceAge:
 # ---------------------------------------------------------------------------
 
 class TestEncodedAge:
-    def test_old_encoded_trashed(self, manager: RetentionManager, store: Store, trash_dir: str) -> None:
+    def test_old_encoded_trashed(
+        self, manager: RetentionManager, store: Store, trash_dir: str,
+    ) -> None:
         _make_clip(
             store,
             id="old-encoded",
@@ -213,7 +220,7 @@ class TestErrorCorruptSkipping:
             assert purged == 0
             mock_move.assert_not_called()
 
-    def test_error_clip_trashed_when_remove_corrupt_enabled(
+    def test_error_clip_trashed_when_remove_corrupt(
         self, store: Store, trash_dir: str,
     ) -> None:
         """When retention_remove_corrupt=true, ERROR clips ARE purged."""

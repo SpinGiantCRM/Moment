@@ -78,8 +78,10 @@ def store(db_path: str) -> Store:
     Uses a mocked ``_connect_encrypted`` to bypass the mandatory
     pysqlcipher3 requirement for test environments.
     """
-    test_conn = _make_test_conn(db_path)
-    with patch("moment.core.store._connect_encrypted", return_value=test_conn):
+    def _fresh_test_conn(path: str) -> sqlite3.Connection:
+        return _make_test_conn(path)
+
+    with patch("moment.core.store._connect_encrypted", side_effect=_fresh_test_conn):
         with patch.object(Store, "_run_encryption_health_check", return_value=None):
             s = Store(db_path=db_path)
             yield s

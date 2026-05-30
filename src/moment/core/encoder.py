@@ -20,7 +20,7 @@ from moment.utils.ffmpeg import (
     detect_best_encoder,
     find_ffmpeg,
 )
-from moment.utils.subprocess import run_sandboxed
+from moment.utils.subprocess import Popen_sandboxed
 from moment.utils.system import ensure_dir, is_nvidia_gpu, sanitize_stem
 
 if TYPE_CHECKING:
@@ -29,33 +29,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# GPU semaphore — public so Pipeline / tests can inspect it
+# GPU semaphore — public so Pipeline / tests can inspect it; kept as
+# a module-level default for backward compat.  Each Encoder instance
+# now creates its own semaphore sized from ``Config.get("encode_concurrency")``.
 # ---------------------------------------------------------------------------
 
 GPU_SEMAPHORE = threading.BoundedSemaphore(1)
 
 # Directory for encoded output (default; override via Config.get_path("encode_dir"))
 _DEFAULT_ENCODE_DIR = os.path.expanduser("~/.local/share/moment/encoded")
-
-_encoder_config: Config | None = None
-
-
-def _get_config() -> Config | None:
-    return _encoder_config
-
-
-def set_encoder_config(config: Config | None) -> None:
-    """Inject a Config instance so encode paths honour user overrides."""
-    global _encoder_config
-    _encoder_config = config
-
-
-def get_encode_dir() -> str:
-    """Return the encode output directory, respecting Config overrides."""
-    cfg = _get_config()
-    if cfg is not None:
-        return cfg.get_path("encode_dir")
-    return _DEFAULT_ENCODE_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -86,20 +68,31 @@ class EncoderError(RuntimeError):
 class Encoder:
     """Builds and executes ffmpeg NVENC encode commands.
 
-    The class-level :data:`GPU_SEMAPHORE` ensures only one encode process
-    runs at any time — a second caller blocks until the first completes.
+    The class-level :data:`GPU_SEMAPHORE` is kept for backward-compat;
+    each instance creates its own semaphore sized from config.
     """
 
-    def __init__(self, codec: str = "h264", quality: int | None = None) -> None:
+    def __init__(self, codec: str = "h264", quality: int | None = None,
+                 config: "Config | None" = None) -> None:
         """Args:
             codec: One of ``"h264"``, ``"h265"``, ``"hevc"``, ``"av1"``.
             quality: CQ value 0–51.  Lower = better quality.  Defaults to
                 a codec-appropriate value if omitted.
+            config: Optional Config for path overrides and encode concurrency.
         """
         self._codec = codec.lower()
         self._quality = quality if quality is not None else _DEFAULT_CQ.get(self._codec, 23)
         self._quality = max(0, min(51, self._quality))
         self._nvenc_available: bool | None = None
+        self._config = config
+
+        # Per-instance GPU semaphore sized from config
+        concurrency = 1
+        if config is not None:
+            concurrency = max(1, min(8, config.get("encode_concurrency", 1)))
+        self._gpu_semaphore = threading.BoundedSemaphore(concurrency)
+        if concurrency > 1:
+            logger.info("GPU encode concurrency set to %d", concurrency)
 
     # ------------------------------------------------------------------
     # Public API
@@ -131,12 +124,17 @@ class Encoder:
         cmd = self.build_command(clip, profile, output_dir=output_dir)
         output_path = Path(cmd[-1])
 
-        with GPU_SEMAPHORE:
+        with self._gpu_semaphore:
             logger.info("Encoding %s → %s …", clip.stem, output_path.name)
             find_ffmpeg()
-            proc = run_sandboxed(cmd)
+            proc = Popen_sandboxed(cmd)
+            try:
+                stdout, stderr = proc.communicate()
+            except Exception:
+                proc.kill()
+                raise
             if proc.returncode != 0:
-                msg = f"ffmpeg encode failed (code={proc.returncode}): {proc.stderr.strip()[-300:]}"
+                msg = f"ffmpeg encode failed (code={proc.returncode}): {stderr.strip()[-300:]}"
                 logger.error(msg)
                 raise EncoderError(msg)
 
@@ -218,7 +216,9 @@ class Encoder:
                     cmd.extend(["-af", f"volume={profile.mic_audio_volume}"])
 
         # -- Output ---------------------------------------------------------
-        out_dir = Path(output_dir) if output_dir else Path(get_encode_dir())
+        out_dir = Path(output_dir) if output_dir else Path(
+            self._config.get_path("encode_dir") if self._config else _DEFAULT_ENCODE_DIR
+        )
         ensure_dir(out_dir)
         output_path = out_dir / f"{sanitize_stem(clip.stem)}.mp4"
         cmd.append(str(output_path))
@@ -239,7 +239,7 @@ class Encoder:
             3. If the detected encoder doesn't match the codec family, fall
                back to the software encoder for that codec.
         """
-        cfg = _get_config()
+        cfg = self._config
 
         # Explicit override from Config
         if cfg is not None:

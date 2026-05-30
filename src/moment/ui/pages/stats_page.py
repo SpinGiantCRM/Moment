@@ -37,6 +37,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.ui.services.async_loader import AsyncDataLoader
+
 if TYPE_CHECKING:
     from moment.core.store import Store
 
@@ -267,7 +269,11 @@ class _DonutChart(QWidget):
             p.setPen(QColor("#d9d9d9"))
             text_width = 100
             text = fm.elidedText(label, Qt.TextElideMode.ElideRight, text_width)
-            p.drawText(QRect(legend_x + 16, legend_y, text_width, 16), Qt.AlignmentFlag.AlignLeft, text)
+            p.drawText(
+                QRect(legend_x + 16, legend_y, text_width, 16),
+                Qt.AlignmentFlag.AlignLeft,
+                text,
+            )
 
             # Value
             p.setPen(QColor("#a1a1aa"))
@@ -360,7 +366,8 @@ class _BarChart(QWidget):
                 # Empty slot — draw thin line
                 x = margin_left + slot * (bar_w + gap)
                 p.setPen(QPen(QColor("#3a3a3a"), 1))
-                p.drawLine(int(x + bar_w / 2), h - margin_bottom, int(x + bar_w / 2), h - margin_bottom - 2)
+                bar_x = int(x + bar_w / 2)
+                p.drawLine(bar_x, h - margin_bottom, bar_x, h - margin_bottom - 2)
                 continue
 
             date = dates[date_idx]
@@ -399,7 +406,8 @@ class _BarChart(QWidget):
         for i in range(3):
             y_val = max_count * (3 - i) / 3
             y_pos = h - margin_bottom - int((y_val / max(max_count, 1)) * chart_h)
-            p.drawText(QRect(0, y_pos - 8, margin_left - 4, 16), Qt.AlignmentFlag.AlignRight, str(int(y_val)))
+            label_rect = QRect(0, y_pos - 8, margin_left - 4, 16)
+            p.drawText(label_rect, Qt.AlignmentFlag.AlignRight, str(int(y_val)))
 
         p.end()
 
@@ -439,6 +447,9 @@ class StatsPage(QWidget):
         self._refresh_btn.clicked.connect(self.refresh)
         title_row.addWidget(self._refresh_btn)
         content_layout.addLayout(title_row)
+
+        # Async loader
+        self._loader: AsyncDataLoader | None = None
 
         # --- Metric cards ---
         metrics_grid = QGridLayout()
@@ -563,17 +574,35 @@ class StatsPage(QWidget):
     # ==================================================================
 
     def refresh(self) -> None:
-        """Load aggregate stats from the store and update all widgets."""
+        """Load aggregate stats from the store asynchronously.
+
+        Shows shimmer placeholders immediately, cancels any in-flight loader,
+        then loads data on a background thread.
+        """
         if self._store is None:
             self._show_zero_state()
             return
 
-        try:
-            stats = self._store.get_aggregate_stats()
-        except Exception:
-            logger.exception("Failed to load stats")
-            self._show_zero_state()
-            return
+        # Cancel any previous loader (also disconnects signals)
+        self._cancel_loader()
+
+        # Show loading placeholders
+        self._card_total.set_value("…")
+        self._card_storage.set_value("…")
+        self._card_today.set_value("…")
+        self._card_week.set_value("…")
+        self._refresh_btn.setEnabled(False)
+
+        # Fire async load
+        self._loader = AsyncDataLoader(self._store.get_aggregate_stats)
+        self._loader.data_ready.connect(self._on_data_ready)
+        self._loader.error_occurred.connect(self._on_load_error)
+        self._loader.start()
+
+    def _on_data_ready(self, stats: dict) -> None:
+        """Handle successful async stats load."""
+        self._loader = None
+        self._refresh_btn.setEnabled(True)
 
         self._card_total.set_value(str(stats["total_clips"]))
         self._card_storage.set_value(_human_size(stats["total_storage_bytes"]))
@@ -584,6 +613,33 @@ class StatsPage(QWidget):
         self._bar_chart.set_data(stats["uploads_per_day"])
 
         self._populate_table(stats["recent_uploads"])
+
+    def _on_load_error(self, error: str) -> None:
+        """Handle async load failure."""
+        self._loader = None
+        self._refresh_btn.setEnabled(True)
+        logger.exception("Failed to load stats: %s", error)
+        # Show visible error state (not just zeros)
+        self._card_total.set_value("Error")
+        self._card_storage.set_value("Retry")
+        self._card_today.set_value("—")
+        self._card_week.set_value("—")
+        self._donut_chart.set_data([])
+        self._bar_chart.set_data([])
+        self._table.setRowCount(0)
+
+    def _cancel_loader(self) -> None:
+        """Cancel and disconnect any in-flight async loader."""
+        if self._loader is not None:
+            self._loader.data_ready.disconnect()
+            self._loader.error_occurred.disconnect()
+            self._loader.cancel()
+            self._loader = None
+
+    def hideEvent(self, event) -> None:
+        """Cancel in-flight loaders when the page is hidden."""
+        self._cancel_loader()
+        super().hideEvent(event)
 
     # ==================================================================
     # Internals

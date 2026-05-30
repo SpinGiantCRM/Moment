@@ -64,7 +64,7 @@ class TestAggregateStats:
         assert stats["total_storage_bytes"] == 3_500_000
 
     def test_uploads_today(self, store) -> None:
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        datetime.now(timezone.utc).strftime("%Y-%m-%d")
         _make_clip(store, uploaded_at=datetime.now(timezone.utc))
         stats = store.get_aggregate_stats()
         assert stats["uploads_today"] >= 1
@@ -127,8 +127,13 @@ class TestWebhookLogs:
 
     def test_list_all(self, store) -> None:
         self._setup_webhooks(store)
-        e1 = WebhookLogEntry(id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200)
-        e2 = WebhookLogEntry(id="wl2", webhook_id="wh-b", clip_id="c2", success=False, status_code=404, error_message="Not found")
+        e1 = WebhookLogEntry(
+            id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200
+        )
+        e2 = WebhookLogEntry(
+            id="wl2", webhook_id="wh-b", clip_id="c2",
+            success=False, status_code=404, error_message="Not found",
+        )
         store.insert_webhook_log(e1)
         store.insert_webhook_log(e2)
 
@@ -137,8 +142,13 @@ class TestWebhookLogs:
 
     def test_filter_by_webhook(self, store) -> None:
         self._setup_webhooks(store)
-        store.insert_webhook_log(WebhookLogEntry(id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200))
-        store.insert_webhook_log(WebhookLogEntry(id="wl2", webhook_id="wh-b", clip_id="c2", success=False, status_code=404))
+        store.insert_webhook_log(WebhookLogEntry(
+            id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200
+        ))
+        store.insert_webhook_log(WebhookLogEntry(
+            id="wl2", webhook_id="wh-b", clip_id="c2",
+            success=False, status_code=404,
+        ))
 
         entries = store.list_webhook_logs(webhook_id="wh-a")
         assert len(entries) == 1
@@ -146,8 +156,14 @@ class TestWebhookLogs:
 
     def test_filter_by_success(self, store) -> None:
         self._setup_webhooks(store)
-        store.insert_webhook_log(WebhookLogEntry(id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200))
-        store.insert_webhook_log(WebhookLogEntry(id="wl2", webhook_id="wh-a", clip_id="c2", success=False, status_code=500))
+        _insert_log = store.insert_webhook_log
+        _insert_log(WebhookLogEntry(
+            id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200
+        ))
+        _insert_log(WebhookLogEntry(
+            id="wl2", webhook_id="wh-a", clip_id="c2",
+            success=False, status_code=500,
+        ))
 
         success_entries = store.list_webhook_logs(success=True)
         assert len(success_entries) == 1
@@ -159,9 +175,17 @@ class TestWebhookLogs:
 
     def test_combined_filters(self, store) -> None:
         self._setup_webhooks(store)
-        store.insert_webhook_log(WebhookLogEntry(id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200))
-        store.insert_webhook_log(WebhookLogEntry(id="wl2", webhook_id="wh-a", clip_id="c2", success=False, status_code=500))
-        store.insert_webhook_log(WebhookLogEntry(id="wl3", webhook_id="wh-b", clip_id="c1", success=True, status_code=200))
+        _insert_log = store.insert_webhook_log
+        _insert_log(WebhookLogEntry(
+            id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200
+        ))
+        _insert_log(WebhookLogEntry(
+            id="wl2", webhook_id="wh-a", clip_id="c2",
+            success=False, status_code=500,
+        ))
+        _insert_log(WebhookLogEntry(
+            id="wl3", webhook_id="wh-b", clip_id="c1", success=True, status_code=200
+        ))
 
         entries = store.list_webhook_logs(webhook_id="wh-a", success=False)
         assert len(entries) == 1
@@ -172,7 +196,10 @@ class TestWebhookLogs:
         self._setup_webhooks(store)
         for i in range(5):
             store.insert_webhook_log(
-                WebhookLogEntry(id=f"wl-p{i}", webhook_id="wh-a", clip_id="c1", success=True, status_code=200)
+                WebhookLogEntry(
+                    id=f"wl-p{i}", webhook_id="wh-a",
+                    clip_id="c1", success=True, status_code=200,
+                )
             )
 
         page1 = store.list_webhook_logs(limit=3, offset=0)
@@ -183,8 +210,13 @@ class TestWebhookLogs:
 
     def test_clear_logs(self, store) -> None:
         self._setup_webhooks(store)
-        store.insert_webhook_log(WebhookLogEntry(id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200))
-        store.insert_webhook_log(WebhookLogEntry(id="wl2", webhook_id="wh-a", clip_id="c2", success=False, status_code=404))
+        store.insert_webhook_log(WebhookLogEntry(
+            id="wl1", webhook_id="wh-a", clip_id="c1", success=True, status_code=200
+        ))
+        store.insert_webhook_log(WebhookLogEntry(
+            id="wl2", webhook_id="wh-a", clip_id="c2",
+            success=False, status_code=404,
+        ))
 
         store.clear_webhook_logs()
         assert len(store.list_webhook_logs()) == 0

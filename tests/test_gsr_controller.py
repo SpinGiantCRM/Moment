@@ -273,8 +273,9 @@ class TestCrashRecovery:
             ctrl.start()
 
             # Pre-fill crash timestamps
+            from collections import deque
             now = time.monotonic()
-            ctrl._restart_timestamps = [now] * _MAX_RESTARTS
+            ctrl._restart_timestamps = deque([now] * _MAX_RESTARTS, maxlen=11)
             ctrl._proc = mock_proc
             ctrl._stopped_intentionally = False
 
@@ -317,8 +318,9 @@ class TestCanRestart:
         assert gsr._can_restart()
 
     def test_over_limit(self, gsr: GSRController) -> None:
+        from collections import deque
         now = time.monotonic()
-        gsr._restart_timestamps = [now] * (_MAX_RESTARTS + 1)
+        gsr._restart_timestamps = deque([now] * (_MAX_RESTARTS + 1), maxlen=11)
         assert not gsr._can_restart()
 
 

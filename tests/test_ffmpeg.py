@@ -24,9 +24,11 @@ class TestFind:
 
     def test_find_ffmpeg_not_found(self) -> None:
         with patch("moment.utils.ffmpeg.shutil.which", return_value=None):
-            # Reset cache
+            # Reset cache — new 60s TTL uses _ffmpeg_path + _ffmpeg_available
             import moment.utils.ffmpeg as ffmpeg_mod
             ffmpeg_mod._ffmpeg_available = None
+            ffmpeg_mod._ffmpeg_path = None
+            ffmpeg_mod._ffmpeg_path_timestamp = 0.0
             with pytest.raises(FFmpegError, match="ffmpeg not found"):
                 find_ffmpeg()
 
@@ -65,7 +67,9 @@ class TestProbe:
                 probe("test.mkv")
 
     def test_invalid_json(self) -> None:
-        mock_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="not json", stderr=""
+        )
         with (
             patch("moment.utils.ffmpeg.find_ffprobe", return_value="ffprobe"),
             patch("subprocess.run", return_value=mock_result),

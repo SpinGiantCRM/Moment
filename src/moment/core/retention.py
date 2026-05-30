@@ -20,6 +20,7 @@ import logging
 import os
 import shutil
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
@@ -81,6 +82,8 @@ class RetentionManager:
         self._trash_dir = trash_dir or _DEFAULT_TRASH_DIR
         self._timer: threading.Timer | None = None
         self._running = False
+        self._last_tick: float = 0.0
+        self._watchdog_thread: threading.Thread | None = None
 
         # Cache config values at init time (avoid repeated SQLite reads)
         self._trash_days: int = (
@@ -103,9 +106,11 @@ class RetentionManager:
         if self._running:
             return
         self._running = True
+        self._last_tick = time.monotonic()
         # Run immediately on startup
         self.enforce()
         self._schedule()
+        self._start_watchdog()
 
     def stop(self) -> None:
         """Stop periodic enforcement."""
@@ -164,7 +169,31 @@ class RetentionManager:
         self._timer.daemon = True
         self._timer.start()
 
+    def _start_watchdog(self) -> None:
+        """Start a background thread that detects silent timer death."""
+        self._watchdog_thread = threading.Thread(
+            target=self._watchdog_loop,
+            daemon=True,
+            name="retention-watchdog",
+        )
+        self._watchdog_thread.start()
+
+    def _watchdog_loop(self) -> None:
+        """Check every 60s that the timer chain is still alive."""
+        while self._running:
+            time.sleep(60.0)
+            if not self._running:
+                break
+            elapsed = time.monotonic() - self._last_tick
+            if elapsed > 2 * RETENTION_INTERVAL:
+                logger.warning(
+                    "RetentionManager timer appears stuck — no tick for %.1fs "
+                    "(expected interval %.1fs)",
+                    elapsed, RETENTION_INTERVAL,
+                )
+
     def _on_tick(self) -> None:
+        self._last_tick = time.monotonic()
         try:
             self.enforce()
         except Exception:
@@ -175,64 +204,82 @@ class RetentionManager:
     def _enforce_source_age(self) -> tuple[int, int]:
         """Trash source MKV files older than the threshold."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=self._source_max_age)
+        cutoff_iso = cutoff.isoformat()
         purged = 0
         freed = 0
+        offset = 0
+        batch_size = 500
 
-        clips = self._store.list_clips(
-            limit=10_000,
-            sort_by="created_at",
-            include_deleted=False,
-        )
+        while True:
+            rows = self._store.list_old_source_clips(
+                cutoff_iso, limit=batch_size, offset=offset
+            )
+            if not rows:
+                break
+            offset += batch_size
 
-        for clip in clips:
-            if clip.protect_from_retention:
-                continue
-            if self._skip_error_corrupt(clip):
-                continue
-            if clip.recorded_at >= cutoff:
-                continue
-            if clip.source_path.is_file():
-                try:
-                    size = clip.source_path.stat().st_size
-                    self._trash_file(clip.source_path, clip.stem)
-                    freed += size
-                    purged += 1
-                    logger.debug("Retention: trashed source %s (%s old)", clip.stem, _age_str(clip.recorded_at))
-                except OSError:
-                    pass
+            for row in rows:
+                if row["protect_from_retention"]:
+                    continue
+                if self._store.has_active_task_for_clip(row["id"]):
+                    continue
+                if row["status"] in ("ERROR", "CORRUPT") and not self._remove_corrupt:
+                    continue
+                source_path = Path(row["source_path"])
+                if source_path.is_file():
+                    try:
+                        size = source_path.stat().st_size
+                        self._trash_file(source_path, row["stem"])
+                        freed += size
+                        purged += 1
+                        recorded_dt = datetime.fromisoformat(row["recorded_at"])
+                        logger.debug(
+                            "Retention: trashed source %s (%s old)",
+                            row["stem"], _age_str(recorded_dt),
+                        )
+                    except OSError:
+                        pass
 
         return purged, freed
 
     def _enforce_encoded_age(self) -> tuple[int, int]:
         """Trash encoded MP4 files older than the threshold."""
         cutoff = datetime.now(timezone.utc) - timedelta(days=self._encoded_max_age)
+        cutoff_iso = cutoff.isoformat()
         purged = 0
         freed = 0
+        offset = 0
+        batch_size = 500
 
-        clips = self._store.list_clips(
-            limit=10_000,
-            sort_by="created_at",
-            include_deleted=False,
-        )
+        while True:
+            rows = self._store.list_old_encoded_clips(
+                cutoff_iso, limit=batch_size, offset=offset
+            )
+            if not rows:
+                break
+            offset += batch_size
 
-        for clip in clips:
-            if clip.protect_from_retention:
-                continue
-            if self._skip_error_corrupt(clip):
-                continue
-            if clip.encoded_path is None:
-                continue
-            if clip.recorded_at >= cutoff:
-                continue
-            if clip.encoded_path.is_file():
-                try:
-                    size = clip.encoded_path.stat().st_size
-                    self._trash_file(clip.encoded_path, clip.stem)
-                    freed += size
-                    purged += 1
-                    logger.debug("Retention: trashed encoded %s (%s old)", clip.stem, _age_str(clip.recorded_at))
-                except OSError:
-                    pass
+            for row in rows:
+                if row["protect_from_retention"]:
+                    continue
+                if self._store.has_active_task_for_clip(row["id"]):
+                    continue
+                if row["status"] in ("ERROR", "CORRUPT") and not self._remove_corrupt:
+                    continue
+                encoded_path = Path(row["encoded_path"])
+                if encoded_path.is_file():
+                    try:
+                        size = encoded_path.stat().st_size
+                        self._trash_file(encoded_path, row["stem"])
+                        freed += size
+                        purged += 1
+                        recorded_dt = datetime.fromisoformat(row["recorded_at"])
+                        logger.debug(
+                            "Retention: trashed encoded %s (%s old)",
+                            row["stem"], _age_str(recorded_dt),
+                        )
+                    except OSError:
+                        pass
 
         return purged, freed
 
@@ -265,31 +312,44 @@ class RetentionManager:
 
     def _enforce_cloud_limit(self) -> tuple[int, int]:
         """FIFO eviction from cloud storage when total exceeds the limit."""
-        # Get uploaded clips ordered oldest-first
-        clips = self._store.list_clips(
-            status=ClipStatus.UPLOADED,
-            limit=10_000,
-            sort_by="created_at",
-        )
-
-        # Calculate total cloud size from file_size field
-        total_size = sum(c.file_size for c in clips if c.file_size > 0)
+        # Calculate total cloud size from the DB aggregate
+        agg = self._store.get_aggregate_stats()
+        total_size = agg.get("total_storage_bytes", 0)
         if total_size <= self._cloud_limit:
             return 0, 0
 
         purged = 0
         freed = 0
-        for clip in clips:
-            if total_size <= self._cloud_limit:
+        offset = 0
+        batch_size = 500
+        to_delete: list[str] = []
+
+        while total_size > self._cloud_limit:
+            rows = self._store.list_uploaded_clips_oldest_first(
+                limit=batch_size, offset=offset
+            )
+            if not rows:
                 break
-            if clip.protect_from_retention:
-                continue
-            # Soft-delete the clip (cloud removal will be handled by uploader)
-            self._store.delete_clip(clip.id, soft=True)
-            total_size -= clip.file_size
-            freed += clip.file_size
-            purged += 1
-            logger.debug("Retention: cloud-FIFO purged %s (%s)", clip.stem, human_size(clip.file_size))
+            offset += batch_size
+
+            for row in rows:
+                if total_size <= self._cloud_limit:
+                    break
+                if row["protect_from_retention"]:
+                    continue
+                if self._store.has_active_task_for_clip(row["id"]):
+                    continue
+                to_delete.append(row["id"])
+                total_size -= row["file_size"]
+                freed += row["file_size"]
+                purged += 1
+                logger.debug(
+                    "Retention: cloud-FIFO purged %s (%s)",
+                    row["stem"], human_size(row["file_size"]),
+                )
+
+        if to_delete:
+            self._store.batch_soft_delete_clips(to_delete)
 
         return purged, freed
 

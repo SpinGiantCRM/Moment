@@ -135,9 +135,12 @@ class TestHealthCheck:
         old_time = time.time() - TEMP_MAX_AGE - 60
         os.utime(str(stale_file), (old_time, old_time))
 
-        with patch("moment.core.corruption.get_temp_dir", return_value=str(temp_dir)), \
-             patch.object(detector, "_check_pipeline_stuck", return_value=[]):
-            issues = detector.check()
+        # Inject a mock config that points to our temp dir
+        detector._config = MagicMock()
+        detector._config.get_path.return_value = str(temp_dir)
+
+        with patch.object(detector, "_check_pipeline_stuck", return_value=[]):
+            detector.check()
             # File should be deleted
             assert not stale_file.exists()
 

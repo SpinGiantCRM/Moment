@@ -141,7 +141,9 @@ class FilterPanel(QWidget):
 
         # Brightness
         adj_layout.addLayout(
-            self._slider_row("Brightness", -100, 100, 0, "%", "_brightness_slider", self._on_brightness)
+            self._slider_row(
+                "Brightness", -100, 100, 0, "%", "_brightness_slider", self._on_brightness
+            )
         )
 
         # Contrast
@@ -151,7 +153,9 @@ class FilterPanel(QWidget):
 
         # Saturation
         adj_layout.addLayout(
-            self._slider_row("Saturation", 0, 200, 100, "%", "_saturation_slider", self._on_saturation)
+            self._slider_row(
+                "Saturation", 0, 200, 100, "%", "_saturation_slider", self._on_saturation
+            )
         )
 
         # Hue
@@ -213,7 +217,9 @@ class FilterPanel(QWidget):
 
         # Preset sizes
         preset_row = QHBoxLayout()
-        for label, w, h in [("1920×1080", 1920, 1080), ("1280×720", 1280, 720), ("854×480", 854, 480)]:
+        for label, w, h in [
+            ("1920×1080", 1920, 1080), ("1280×720", 1280, 720), ("854×480", 854, 480)
+        ]:
             btn = QPushButton(label)
             btn.setFixedSize(88, 28)
             btn.clicked.connect(lambda checked, cw=w, ch=h: self._set_crop_size(cw, ch))

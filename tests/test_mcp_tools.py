@@ -542,7 +542,10 @@ class TestMCPScopedTokens:
     """Tests for scoped token enforcement."""
 
     @patch("moment.mcp.tools._get_store")
-    @patch("moment.mcp.tools._check_mutation_allowed", return_value="Forbidden: mutation-scoped token required")
+    @patch(
+        "moment.mcp.tools._check_mutation_allowed",
+        return_value="Forbidden: mutation-scoped token required",
+    )
     def test_enqueue_encode_rejected_for_readonly(self, mock_check, mock_get_store, mock_store):
         """enqueue_encode rejects read-only tokens."""
         from moment.mcp.tools import enqueue_encode

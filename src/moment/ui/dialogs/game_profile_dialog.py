@@ -171,7 +171,7 @@ class GameProfileDialog(QDialog):
         """Load profiles from the store."""
         if self._store is None:
             return
-        self._profiles = self._store.list_game_profiles()
+        self._profiles = self._store.list_game_profiles(limit=10000)
         self._profile_list.clear()
         for p in self._profiles:
             item = QListWidgetItem(p.display_name or p.game_name)

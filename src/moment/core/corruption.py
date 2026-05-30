@@ -25,26 +25,6 @@ logger = logging.getLogger(__name__)
 CHECK_INTERVAL = 120  # seconds
 _DEFAULT_TEMP_DIR = os.path.expanduser("~/.local/share/moment/temp")
 TEMP_MAX_AGE = 3600  # 1 hour
-
-_corruption_config: Config | None = None
-
-
-def _get_config() -> Config | None:
-    return _corruption_config
-
-
-def set_corruption_config(config: Config | None) -> None:
-    """Inject a Config instance so temp paths honour user overrides."""
-    global _corruption_config
-    _corruption_config = config
-
-
-def get_temp_dir() -> str:
-    """Return the temp directory, respecting Config overrides."""
-    cfg = _get_config()
-    if cfg is not None:
-        return cfg.get_path("temp_dir")
-    return _DEFAULT_TEMP_DIR
 DISK_WARNING_GB = 5
 DISK_CRITICAL_GB = 1
 PIPELINE_STUCK_MINUTES = 30
@@ -63,21 +43,26 @@ class CorruptionDetector:
         on_warning: Callable[[str], None] | None = None,
         on_critical: Callable[[str], None] | None = None,
         check_interval: float = CHECK_INTERVAL,
+        config: "Config | None" = None,
     ) -> None:
         """Args:
             store: The application store.
             on_warning: Called with a warning message string.
             on_critical: Called with a critical error message string.
             check_interval: Seconds between health checks.
+            config: Optional Config for path overrides.
         """
         self._store = store
         self._on_warning = on_warning
         self._on_critical = on_critical
         self._interval = check_interval
+        self._config = config
         self._last_task_count: int = 0
         self._last_task_time: float = time.monotonic()
         self._timer: threading.Timer | None = None
         self._running = False
+        self._last_tick: float = 0.0
+        self._watchdog_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -88,8 +73,10 @@ class CorruptionDetector:
         if self._running:
             return
         self._running = True
+        self._last_tick = time.monotonic()
         self.check()
         self._schedule()
+        self._start_watchdog()
 
     def stop(self) -> None:
         """Stop health checks."""
@@ -158,7 +145,31 @@ class CorruptionDetector:
         self._timer.daemon = True
         self._timer.start()
 
+    def _start_watchdog(self) -> None:
+        """Start a background thread that detects silent timer death."""
+        self._watchdog_thread = threading.Thread(
+            target=self._watchdog_loop,
+            daemon=True,
+            name="corruption-watchdog",
+        )
+        self._watchdog_thread.start()
+
+    def _watchdog_loop(self) -> None:
+        """Check every 60s that the timer chain is still alive."""
+        while self._running:
+            time.sleep(60.0)
+            if not self._running:
+                break
+            elapsed = time.monotonic() - self._last_tick
+            if elapsed > 2 * self._interval:
+                logger.warning(
+                    "CorruptionDetector timer appears stuck — no tick for %.1fs "
+                    "(expected interval %.1fs)",
+                    elapsed, self._interval,
+                )
+
     def _on_tick(self) -> None:
+        self._last_tick = time.monotonic()
         try:
             self.check()
         except Exception:
@@ -189,7 +200,9 @@ class CorruptionDetector:
     def _check_temp_files(self) -> list[str]:
         """Clean up stale temporary files."""
         issues: list[str] = []
-        temp_dir = Path(get_temp_dir())
+        temp_dir = Path(
+            self._config.get_path("temp_dir") if self._config else _DEFAULT_TEMP_DIR
+        )
         if not temp_dir.is_dir():
             return issues
         try:

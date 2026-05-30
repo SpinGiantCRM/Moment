@@ -11,14 +11,16 @@ Usage::
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
@@ -68,6 +70,12 @@ class EditorWindow(QMainWindow):
         self._profile = store.get_edit_profile(clip_id)
         if self._profile is None:
             self._profile = EditProfile(clip_id=clip_id)
+
+        # Undo stack for Ctrl+Z support
+        self._undo_stack: list[EditProfile] = []
+
+        # Track unsaved changes for close prompt
+        self._dirty = False
 
         # Auto-save timer (debounced)
         self._save_timer = QTimer(self)
@@ -200,11 +208,17 @@ class EditorWindow(QMainWindow):
 
     def _schedule_save(self) -> None:
         """Debounced save — collects state from panels into the profile."""
+        self._dirty = True
         self._save_timer.start()
 
     def _do_save(self) -> None:
         """Gather state from all panels and persist to the store."""
         try:
+            # Snapshot for undo before mutating
+            self._undo_stack.append(copy.deepcopy(self._profile))
+            if len(self._undo_stack) > 20:
+                self._undo_stack.pop(0)
+
             p = self._profile
 
             # Timeline
@@ -221,6 +235,7 @@ class EditorWindow(QMainWindow):
             p.edit_version += 1
 
             self._store.save_edit_profile(p)
+            self._dirty = False
             self.profile_saved.emit(self._clip_id)
             logger.debug("EditProfile saved (v%d) for %s", p.edit_version, self._clip_id)
         except Exception as exc:
@@ -240,8 +255,83 @@ class EditorWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
-        """Flush pending save and emit close_requested."""
+        """Flush pending save with prompt if dirty, then emit close_requested."""
+        if self._dirty:
+            reply = QMessageBox.question(
+                self,
+                "Unsaved Changes",
+                "You have unsaved edits. Save before closing?",
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save,
+            )
+            if reply == QMessageBox.StandardButton.Save:
+                self._save_timer.stop()
+                self._do_save()
+            elif reply == QMessageBox.StandardButton.Discard:
+                self._save_timer.stop()
+                self._dirty = False
+            elif reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+
         self._save_timer.stop()
-        self._do_save()
         self.close_requested.emit()
         super().closeEvent(event)
+
+    # ------------------------------------------------------------------
+    # Keyboard shortcuts
+    # ------------------------------------------------------------------
+
+    def keyPressEvent(self, event) -> None:
+        """Handle keyboard shortcuts for the editor.
+
+        Shortcuts:
+            Ctrl+Z       — Undo last save
+            Ctrl+S       — Save current edits
+            Escape       — Close editor (prompt if unsaved)
+            Space        — Play/Pause (no-op with guidance)
+            Ctrl+Shift+E — Open GIF export dialog
+        """
+        mods = event.modifiers()
+        key = event.key()
+
+        if mods == Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_Z:
+                self._undo()
+                return
+            if key == Qt.Key.Key_S:
+                self._save_timer.stop()
+                self._do_save()
+                return
+
+        if mods == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
+            if key == Qt.Key.Key_E:
+                self._open_gif_export()
+                return
+
+        if key == Qt.Key.Key_Escape:
+            self.close()
+            return
+
+        if key == Qt.Key.Key_Space and mods == Qt.KeyboardModifier.NoModifier:
+            # No video player in editor — informational
+            logger.debug("Space pressed — no preview player in editor")
+            return
+
+        super().keyPressEvent(event)
+
+    def _undo(self) -> None:
+        """Restore the last saved profile state."""
+        if not self._undo_stack:
+            logger.debug("Undo stack empty — nothing to undo")
+            return
+
+        prev = self._undo_stack.pop()
+        self._profile = prev
+        self._load_profile_into_panels()
+        self._dirty = False
+        self._store.save_edit_profile(prev)
+        self.profile_saved.emit(self._clip_id)
+        logger.debug("Undo: restored profile v%d", prev.edit_version)

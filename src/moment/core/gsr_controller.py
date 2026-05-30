@@ -16,7 +16,10 @@ import signal
 import subprocess  # nosec B404 — required for external tool invocation
 import threading
 import time
+from collections import deque
 from pathlib import Path
+
+from moment.utils.subprocess import Popen_sandboxed
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +123,7 @@ class GSRController:
         self._lock = threading.Lock()
 
         # Crash tracking
-        self._restart_timestamps: list[float] = []
+        self._restart_timestamps: deque[float] = deque(maxlen=11)
         self._stopped_intentionally = False
 
         # Debounce
@@ -244,7 +247,7 @@ class GSRController:
         logger.info("Starting GSR: %s", cmd)
 
         try:
-            self._proc = subprocess.Popen(  # nosec B603 — tokenized args, no shell=True
+            self._proc = Popen_sandboxed(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -321,11 +324,16 @@ class GSRController:
                     f"{_RESTART_WINDOW}s; giving up"
                 )
                 logger.error(msg)
-                if self._on_crash is not None:
-                    try:
-                        self._on_crash(msg)
-                    except Exception as exc:
-                        logger.exception("on_crash callback error: %s", exc)
+                cb = self._on_crash
+                self._lock.release()
+                try:
+                    if cb is not None:
+                        try:
+                            cb(msg)
+                        except Exception as exc:
+                            logger.exception("on_crash callback error: %s", exc)
+                finally:
+                    self._lock.acquire()
                 return
 
             # Auto-restart
@@ -334,20 +342,18 @@ class GSRController:
                 self._spawn_process_unlocked()
             except GSRControllerError as exc:
                 logger.error("Failed to restart GSR: %s", exc)
-                if self._on_crash is not None:
-                    try:
-                        self._on_crash(str(exc))
-                    except Exception as exc2:
-                        logger.exception("on_crash callback error: %s", exc2)
+                cb = self._on_crash
+                self._lock.release()
+                try:
+                    if cb is not None:
+                        try:
+                            cb(str(exc))
+                        except Exception as exc2:
+                            logger.exception("on_crash callback error: %s", exc2)
+                finally:
+                    self._lock.acquire()
 
     def _can_restart(self) -> bool:
         """Check whether we're within the crash-restart budget."""
-        now = time.monotonic()
-        self._restart_timestamps.append(now)
-
-        cutoff = now - _RESTART_WINDOW
-        self._restart_timestamps = [
-            ts for ts in self._restart_timestamps if ts > cutoff
-        ]
-
+        self._restart_timestamps.append(time.monotonic())
         return len(self._restart_timestamps) <= _MAX_RESTARTS

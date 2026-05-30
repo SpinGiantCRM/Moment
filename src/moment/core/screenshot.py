@@ -2,8 +2,8 @@
 
 Primary path: ``RecorderController.take_screenshot()`` sends SIGUSR1 to
 gpu-screen-recorder, which writes a PNG.  This module provides the
-**fallback** path (ffmpeg x11grab) and post-processing (crop, auto-name,
-thumbnail generation).
+**fallback** path (ffmpeg x11grab on X11, grim/spectacle/dbus on Wayland)
+and post-processing (crop, auto-name, thumbnail generation).
 """
 
 from __future__ import annotations
@@ -11,22 +11,29 @@ from __future__ import annotations
 import logging
 import os
 import re
-import subprocess  # nosec B404 — required for external tool invocation
+import subprocess  # nosec B404 — required for TimeoutExpired exception type
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
 from moment.utils.ffmpeg import FFmpegError, find_ffmpeg
-from moment.utils.subprocess import run_sandboxed
+from moment.utils.subprocess import ExternalCommandRunner, run_sandboxed
 from moment.utils.system import ensure_dir
 
 logger = logging.getLogger(__name__)
+
+_command = ExternalCommandRunner()
 
 # Default screenshot directory
 SCREENSHOT_DIR = os.path.expanduser("~/Pictures/Moment")
 
 # Default image format
 _DEFAULT_FORMAT = "png"
+
+
+def _is_wayland() -> bool:
+    """Return ``True`` if the session is running under a Wayland compositor."""
+    return bool(os.environ.get("WAYLAND_DISPLAY", ""))
 
 
 class ScreenshotError(RuntimeError):
@@ -66,7 +73,7 @@ class Screenshot:
     # ------------------------------------------------------------------
 
     def capture_fallback(self, *, label: str | None = None) -> Path:
-        """Capture a screenshot using ffmpeg x11grab (fallback path).
+        """Capture a screenshot using ffmpeg x11grab (X11) or native tools (Wayland).
 
         Args:
             label: Optional label for the filename.
@@ -85,7 +92,11 @@ class Screenshot:
 
         output = self._output_dir / f"{name}.{_DEFAULT_FORMAT}"
 
-        # Detect display and resolution
+        # Wayland: use native tools instead of x11grab
+        if _is_wayland():
+            return self._capture_wayland(output)
+
+        # X11: use ffmpeg x11grab
         raw_display = os.environ.get("DISPLAY", ":0.0")
         display = self._validate_display(raw_display)
         resolution = self._detect_resolution(display)
@@ -177,15 +188,22 @@ class Screenshot:
 
     @staticmethod
     def _detect_resolution(display: str) -> str:
-        """Detect screen resolution via xrandr or fallback to 1920x1080."""
+        """Detect screen resolution via xdpyinfo/xrandr on X11.
+
+        On Wayland, resolution detection via wlr-randr is also attempted
+        (useful when called directly, though ``capture_fallback`` uses
+        ``_capture_wayland`` which doesn't need resolution).
+
+        Falls back to 1920x1080 if detection fails.
+        """
         try:
             # Try xdpyinfo first (most reliable on X11)
-            result = subprocess.run(
+            result = _command.run(
                 ["xdpyinfo"],
                 capture_output=True,
                 text=True,
                 timeout=5,
-            )  # nosec
+            )
             if result.returncode == 0:
                 for line in result.stdout.splitlines():
                     if "dimensions:" in line:
@@ -196,16 +214,32 @@ class Screenshot:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # Fallback: ask xrandr for the primary output
+        # Try wlr-randr on Wayland (wlroots compositors)
+        if _is_wayland():
+            try:
+                result = _command.run(
+                    ["wlr-randr"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    for line in result.stdout.splitlines():
+                        m = re.search(r"(\d+x\d+)", line)
+                        if m:
+                            return m.group(1)
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # Fallback: ask xrandr for the primary output (X11)
         try:
-            result = subprocess.run(
+            result = _command.run(
                 ["xrandr"],
                 capture_output=True,
                 text=True,
                 timeout=5,
-            )  # nosec
+            )
             if result.returncode == 0:
-                import re
                 for line in result.stdout.splitlines():
                     if " connected" in line and "+0+0" in line:
                         m = re.search(r"(\d+x\d+)", line)
@@ -215,6 +249,80 @@ class Screenshot:
             pass
 
         return "1920x1080"
+
+    def _capture_wayland(self, output: Path) -> Path:
+        """Capture a screenshot on Wayland using native tools.
+
+        Tries in priority order: grim (wlroots), spectacle (KDE),
+        gnome-screenshot, then xdg-desktop-portal via dbus-send.
+        Only one needs to succeed.
+
+        Raises:
+            ScreenshotError: If all capture methods fail.
+        """
+        methods = [
+            ("grim", ["grim", str(output)]),
+            ("spectacle", ["spectacle", "-b", "-o", str(output)]),
+            ("gnome-screenshot", ["gnome-screenshot", "-f", str(output)]),
+        ]
+
+        for name, cmd in methods:
+            try:
+                logger.info("Wayland screenshot: trying %s", name)
+                result = _command.run(cmd, capture_output=True, text=True, timeout=10)
+                if result.returncode == 0 and output.is_file() and output.stat().st_size > 0:
+                    logger.info("Wayland screenshot captured via %s: %s", name, output.name)
+                    if self._on_captured is not None:
+                        try:
+                            self._on_captured(output)
+                        except Exception as exc:
+                            logger.exception("on_captured callback error: %s", exc)
+                    return output
+                else:
+                    logger.debug(
+                        "%s failed (code=%d): %s",
+                        name, result.returncode, result.stderr.strip()[-200:],
+                    )
+            except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+                logger.debug("%s unavailable: %s", name, exc)
+                continue
+
+        # Last resort: xdg-desktop-portal via dbus-send
+        try:
+            logger.info("Wayland screenshot: trying xdg-desktop-portal via dbus-send")
+            result = _command.run(
+                [
+                    "dbus-send", "--session", "--type=method_call",
+                    "--print-reply",
+                    "--dest=org.freedesktop.portal.Desktop",
+                    "/org/freedesktop/portal/desktop",
+                    "org.freedesktop.portal.Screenshot.Screenshot",
+                    "string:",
+                    "dict:string:string:interactive,false",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode == 0:
+                logger.debug("dbus-send returned: %s", result.stdout[:200])
+                # Portal may save to ~/Pictures or XDG_PICTURES_DIR;
+                # check if our output path was created
+                if output.is_file() and output.stat().st_size > 0:
+                    logger.info("Wayland screenshot via portal: %s", output.name)
+                    if self._on_captured is not None:
+                        try:
+                            self._on_captured(output)
+                        except Exception as exc:
+                            logger.exception("on_captured callback error: %s", exc)
+                    return output
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            logger.debug("xdg-desktop-portal unavailable: %s", exc)
+
+        raise ScreenshotError(
+            "Wayland screenshot failed: no capture tool available. "
+            "Install grim, spectacle, or gnome-screenshot."
+        )
 
     def _crop(self, path: Path, crop: tuple[int, int, int, int]) -> Path:
         """Crop the screenshot using ffmpeg."""

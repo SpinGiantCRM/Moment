@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from moment.core.models import Clip
-from moment.core.thumbnail import Thumbnailer, get_thumb_dir
+from moment.core.thumbnail import DEFAULT_CACHE_SIZE, Thumbnailer
 from moment.utils.ffmpeg import FFmpegError
 
 
@@ -20,7 +20,7 @@ def thumb_dir(tmp_path: Path) -> str:
 
 @pytest.fixture
 def thumbnailer(thumb_dir: str) -> Thumbnailer:
-    return Thumbnailer(thumb_dir=thumb_dir, max_cache=5)
+    return Thumbnailer(thumb_dir=thumb_dir, max_cache=5, max_workers=1)
 
 
 @pytest.fixture
@@ -76,18 +76,16 @@ class TestCache:
 class TestDeduplication:
     def test_in_flight_deduplication(self, clip: Clip, thumbnailer: Thumbnailer) -> None:
         """Second concurrent generate for same clip should not start new generation."""
-        # First call — starts generation
-        with patch.object(thumbnailer, "_generate_in_thread"), \
-             patch("threading.Thread") as mock_thread:
+        with patch.object(thumbnailer._executor, "submit") as mock_submit:
             # Register as in-flight manually
             with thumbnailer._lock:
                 thumbnailer._in_flight.add(clip.stem)
 
-            # Second call should NOT start a new thread
+            # Second call should NOT submit to executor
             result = thumbnailer.generate(clip)
             assert result is None
-            # Thread.start should not have been called by generate
-            mock_thread.assert_not_called()
+            # executor.submit should not have been called
+            mock_submit.assert_not_called()
 
     def test_callback_queued_during_in_flight(self, clip: Clip, thumbnailer: Thumbnailer) -> None:
         """Callbacks are queued when a generation is already in progress."""
@@ -112,7 +110,7 @@ class TestExtractFrame:
         self, clip: Clip, thumbnailer: Thumbnailer, thumb_dir: str
     ) -> None:
         with (
-            patch("subprocess.run") as mock_run,
+            patch("moment.utils.subprocess.ExternalCommandRunner.run") as mock_run,
             patch("moment.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
         ):
             mock_run.return_value.returncode = 0
@@ -129,7 +127,7 @@ class TestExtractFrame:
 
     def test_extraction_failure(self, clip: Clip, thumbnailer: Thumbnailer, thumb_dir: str) -> None:
         with (
-            patch("subprocess.run") as mock_run,
+            patch("moment.utils.subprocess.ExternalCommandRunner.run") as mock_run,
             patch("moment.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
         ):
             mock_run.return_value.returncode = 1
@@ -140,12 +138,14 @@ class TestExtractFrame:
             with pytest.raises(FFmpegError, match="thumbnail failed"):
                 thumbnailer._extract_frame(clip.source_path, output, 1.0)
 
-    def test_minimum_snapshot_time(self, clip: Clip, thumbnailer: Thumbnailer, thumb_dir: str) -> None:
+    def test_minimum_snapshot_time(
+        self, clip: Clip, thumbnailer: Thumbnailer, thumb_dir: str
+    ) -> None:
         """Very short clips should use at least 1 second."""
         clip.duration = 2.0  # 25% = 0.5, minimum is 1.0
 
         with (
-            patch("subprocess.run") as mock_run,
+            patch("moment.utils.subprocess.ExternalCommandRunner.run") as mock_run,
             patch("moment.core.thumbnail.find_ffmpeg", return_value="ffmpeg"),
         ):
             mock_run.return_value.returncode = 0
@@ -198,10 +198,21 @@ class TestCacheEviction:
 # Default thumbnail directory
 # ---------------------------------------------------------------------------
 
+class TestConfig:
+    def test_default_cache_size(self) -> None:
+        """Without config, cache size should be DEFAULT_CACHE_SIZE."""
+        t = Thumbnailer(config=None)
+        assert t._max_cache == DEFAULT_CACHE_SIZE
+
+    def test_explicit_max_cache_overrides(self) -> None:
+        """Explicit max_cache argument takes precedence."""
+        t = Thumbnailer(config=None, max_cache=100)
+        assert t._max_cache == 100
+
+
 class TestDefaultDir:
     def test_default_thumb_dir_is_expanded(self) -> None:
-        # Ensure no config leak from other tests
-        from moment.core import thumbnail
-        thumbnail._thumb_config = None
-        result = get_thumb_dir()
+        """Default thumb_dir (no Config) should resolve to an absolute path."""
+        t = Thumbnailer(config=None)
+        result = str(t._thumb_dir)
         assert result.startswith("/"), f"Expected absolute path, got: {result!r}"

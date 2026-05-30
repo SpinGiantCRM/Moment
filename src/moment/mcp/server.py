@@ -178,7 +178,9 @@ def create_server(
     return server
 
 
-def _add_auth_middleware(server: "FastMCP", mutation_token: str, ro_token: str | None = None) -> None:
+def _add_auth_middleware(
+    server: "FastMCP", mutation_token: str, ro_token: str | None = None
+) -> None:
     """Add FastAPI middleware with scoped Bearer-token authentication.
 
     Token scoping:

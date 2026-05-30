@@ -61,7 +61,9 @@ class TestCRUD:
             mgr.save(GameProfile(id="x", game_name="x", display_name="X", min_duration=-1))
 
     def test_save_persists_new_fields(self, mgr):
-        profile = mgr.create_default("cs2", "Counter-Strike 2", min_duration=15, post_capture_action="editor")
+        profile = mgr.create_default(
+            "cs2", "Counter-Strike 2", min_duration=15, post_capture_action="editor"
+        )
         mgr.save(profile)
         fetched = mgr.get("cs2")
         assert fetched is not None

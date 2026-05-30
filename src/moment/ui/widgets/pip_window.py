@@ -21,6 +21,8 @@ Usage::
 from __future__ import annotations
 
 import logging
+import subprocess  # nosec B404 — required for PIPE, DEVNULL, TimeoutExpired
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -45,6 +47,7 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.ui.resources import color
+from moment.utils.subprocess import ExternalCommandRunner
 
 if TYPE_CHECKING:
     from moment.core.store import Store
@@ -200,16 +203,14 @@ class PipWindow(QWidget):
 
     def _start_playback(self) -> None:
         """Spawn ffmpeg to extract frames as raw RGB24 via pipe."""
-        import subprocess  # nosec B404 — required for external tool invocation
-        import threading
-
         self._restart_count = 0
         self._frame_timer = QTimer(self)
         frame_interval = int(1000 / self._fps)
 
         # Count total frames for loop detection
         try:
-            probe = subprocess.run(
+            _command = ExternalCommandRunner()
+            probe = _command.run(
                 [
                     "ffprobe",
                     "-v", "error",
@@ -219,17 +220,16 @@ class PipWindow(QWidget):
                     "-of", "csv=p=0",
                     str(self._source_path),
                 ],
-                capture_output=True,
                 text=True,
                 timeout=10,
-            )  # nosec
+            )
             self._total_frames = int(probe.stdout.strip() or 0)
         except (subprocess.TimeoutExpired, ValueError, OSError):
             self._total_frames = 0
 
         try:
             # ffmpeg pipe: rawvideo rgb24, one frame at a time
-            self._ffmpeg_proc = subprocess.Popen(
+            self._ffmpeg_proc = _command.run_popen(
                 [
                     "ffmpeg",
                     "-loglevel", "error",
@@ -242,7 +242,7 @@ class PipWindow(QWidget):
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
-            )  # nosec
+            )
 
             # Read frames in a background thread, push to main thread via timer
             self._frame_lock = threading.Lock()

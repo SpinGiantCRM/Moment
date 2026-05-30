@@ -16,15 +16,18 @@ Orchestrates the core data flow:
 
 from __future__ import annotations
 
+import enum
 import logging
+import os
 import queue
+import signal
 import threading
 import uuid
 from pathlib import Path
 from typing import Callable
 
 from moment.core.config import Config
-from moment.core.encoder import Encoder, EncoderError, set_encoder_config
+from moment.core.encoder import Encoder, EncoderError
 from moment.core.game_monitor import GameMonitor
 from moment.core.models import (
     ClipStatus,
@@ -33,10 +36,11 @@ from moment.core.models import (
     TaskStatus,
 )
 from moment.core.store import Store
-from moment.core.thumbnail import Thumbnailer, set_thumb_config
+from moment.core.thumbnail import Thumbnailer
 from moment.core.uploader import Uploader, UploaderError
 from moment.utils.ffmpeg import parse_fps
 from moment.utils.ffmpeg import probe as ffprobe
+from moment.utils.subprocess import _child_pids
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,13 @@ DEFAULT_THUMBNAIL_WORKERS = 1
 
 # Status emit interval (seconds)
 STATUS_INTERVAL = 3.0
+
+
+class _State(enum.Enum):
+    IDLE = "idle"
+    RUNNING = "running"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
 
 
 class Pipeline:
@@ -73,6 +84,7 @@ class Pipeline:
         on_clip_uploaded: Callable[[str, str], None] | None = None,
         on_clip_errored: Callable[[str, str], None] | None = None,
         on_status: Callable[[str], None] | None = None,
+        on_thumbnail_progress: Callable[[int, int, str], None] | None = None,
     ) -> None:
         """Args:
             store: The application store.
@@ -88,6 +100,8 @@ class Pipeline:
             on_clip_uploaded: ``callback(stem, url)`` when upload completes.
             on_clip_errored: ``callback(stem, error_message)`` on failure.
             on_status: ``callback(status_text)`` for processing banner updates.
+            on_thumbnail_progress: ``callback(current, total, clip_id)``
+                during batch thumbnail generation.
         """
         self._store = store
         self._config = config
@@ -97,8 +111,7 @@ class Pipeline:
         if encoder is not None:
             self._encoder = encoder
         else:
-            set_encoder_config(config)
-            self._encoder = Encoder()
+            self._encoder = Encoder(config=config)
 
         if uploader is not None:
             self._uploader = uploader
@@ -108,8 +121,10 @@ class Pipeline:
         if thumbnailer is not None:
             self._thumbnailer = thumbnailer
         else:
-            set_thumb_config(config)
-            self._thumbnailer = Thumbnailer()
+            self._thumbnailer = Thumbnailer(
+                config=config,
+                on_progress=on_thumbnail_progress,
+            )
         self._game_monitor = game_monitor
 
         # Callbacks
@@ -118,8 +133,8 @@ class Pipeline:
         self._on_clip_errored = on_clip_errored
         self._on_status = on_status
 
-        # Task queue — priority ordered (higher = more urgent)
-        self._queue: queue.PriorityQueue[tuple[int, Task]] = queue.PriorityQueue()
+        # Task queue — priority ordered (higher = more urgent), maxsize=100 backpressure
+        self._queue: queue.PriorityQueue[tuple[int, Task]] = queue.PriorityQueue(maxsize=100)
         self._shutdown = threading.Event()
         self._workers: list[threading.Thread] = []
         self._paused = False
@@ -127,25 +142,49 @@ class Pipeline:
         self._active_counts: dict[str, int] = {"encode": 0, "upload": 0, "thumbnail": 0}
         self._counts_lock = threading.Lock()
 
-        # Spawn workers
-        for _ in range(encode_workers):
-            self._add_worker(self._encode_worker)
-        for _ in range(upload_workers):
-            self._add_worker(self._upload_worker)
-        for _ in range(thumbnail_workers):
-            self._add_worker(self._thumbnail_worker)
+        # State machine
+        self._state = _State.IDLE
+        self._state_lock = threading.Lock()
+
+        # Worker config (used by start())
+        self._worker_config = {
+            "encode": (encode_workers, self._encode_worker),
+            "upload": (upload_workers, self._upload_worker),
+            "thumbnail": (thumbnail_workers, self._thumbnail_worker),
+        }
 
         # Status reporter timer
         self._status_timer: threading.Timer | None = None
         self._last_status = ""
-        self._start_status_timer()
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
+    def start(self) -> None:
+        """Start the pipeline worker threads.
+
+        Raises:
+            RuntimeError: If the pipeline is already running.
+        """
+        with self._state_lock:
+            if self._state != _State.IDLE:
+                raise RuntimeError(f"Pipeline already in state {self._state.value}")
+            self._state = _State.RUNNING
+            self._workers = []
+
+        for name, (count, target) in self._worker_config.items():
+            for _ in range(count):
+                self._add_worker(target)
+
+        self._start_status_timer()
+        logger.info("Pipeline started — %d workers", len(self._workers))
+
     def enqueue(self, task: Task) -> None:
         """Add a task to the pipeline queue (thread-safe).
+
+        If the queue is full (maxsize=100), logs a warning and returns
+        without enqueuing — the task is dropped to prevent unbounded growth.
 
         Args:
             task: The task to enqueue.
@@ -154,11 +193,39 @@ class Pipeline:
         task.status = TaskStatus.PENDING
         self._store.insert_task(task)
         # Push to queue (negate priority because PriorityQueue is min-heap)
-        self._queue.put((-task.priority, task))
-        logger.debug("Enqueued task %s (type=%s, pri=%d)", task.id, task.type.value, task.priority)
+        try:
+            self._queue.put_nowait((-task.priority, task))
+            logger.debug(
+                "Enqueued task %s (type=%s, pri=%d)",
+                task.id, task.type.value, task.priority,
+            )
+        except queue.Full:
+            # Mark the task as FAILED so the orphaned DB row doesn't
+            # linger as PENDING indefinitely (it won't be picked up until
+            # the pipeline restarts).
+            self._store.update_task_status(
+                task.id, TaskStatus.FAILED,
+                f"Queue full (maxsize={self._queue.maxsize})",
+            )
+            logger.warning(
+                "Task queue full (maxsize=%d) — dropping task %s (type=%s)",
+                self._queue.maxsize, task.id, task.type.value,
+            )
 
     def shutdown(self) -> None:
-        """Signal all workers to exit and wait for them to finish."""
+        """Signal all workers to exit and wait for them to finish.
+
+        Idempotent: calling twice is safe and does nothing.
+        """
+        with self._state_lock:
+            if self._state in (_State.STOPPING, _State.STOPPED):
+                return
+            if self._state != _State.RUNNING:
+                raise RuntimeError(
+                    f"Pipeline cannot be shut down from state {self._state.value}"
+                )
+            self._state = _State.STOPPING
+
         self._shutdown.set()
         if self._status_timer is not None:
             self._status_timer.cancel()
@@ -167,12 +234,46 @@ class Pipeline:
         with self._pause_lock:
             self._pause_lock.notify_all()
 
-        # Put sentinel tasks to unblock workers
+        # Put sentinel tasks to unblock workers (use put_nowait to avoid
+        # deadlocking if the queue is already at maxsize during shutdown)
         for _ in range(len(self._workers)):
-            self._queue.put((0, Task(id="__sentinel__", type=TaskKind.ENCODE)))
+            try:
+                self._queue.put_nowait((0, Task(id="__sentinel__", type=TaskKind.ENCODE)))
+            except queue.Full:
+                # Drain one item to make room for the sentinel
+                try:
+                    self._queue.get_nowait()
+                    self._queue.put_nowait((0, Task(id="__sentinel__", type=TaskKind.ENCODE)))
+                except (queue.Empty, queue.Full):
+                    pass
 
         for w in self._workers:
             w.join(timeout=30)
+
+        # If any worker is still alive, SIGKILL tracked ffmpeg children
+        for w in self._workers:
+            if w.is_alive():
+                logger.warning(
+                    "Pipeline worker %s did not exit within 30s — "
+                    "killing tracked child processes", w.name,
+                )
+                for pid in list(_child_pids):
+                    try:
+                        comm_path = f"/proc/{pid}/comm"
+                        with open(comm_path, "r") as fh:
+                            comm = fh.read().strip()
+                    except (OSError, FileNotFoundError):
+                        continue
+                    if comm == "ffmpeg":
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                            os.waitid(os.P_PID, pid, os.WNOHANG)
+                            logger.warning("SIGKILL ffmpeg pid=%d", pid)
+                        except (ProcessLookupError, OSError, ChildProcessError):
+                            pass
+
+        with self._state_lock:
+            self._state = _State.STOPPED
 
         logger.info("Pipeline shutdown complete — %d workers stopped", len(self._workers))
 
@@ -193,6 +294,15 @@ class Pipeline:
             self._paused = False
             self._pause_lock.notify_all()
             logger.info("Pipeline resumed — GPU tasks unblocked")
+
+    def is_queued(self, clip_id: str) -> bool:
+        """Return ``True`` if *clip_id* has a PENDING task in the queue or DB."""
+        # Check in-memory queue
+        for _, task in list(self._queue.queue):
+            if task.payload.get("clip_id") == clip_id:
+                return True
+        # Check Store for PENDING / RUNNING tasks
+        return self._store.has_active_task_for_clip(clip_id)
 
     def get_status(self) -> str:
         """Return a human-readable status string (e.g. ``"Encoding 2/5 …"``)."""
@@ -300,7 +410,10 @@ class Pipeline:
                 probe_data = ffprobe(clip.source_path)
                 fmt = probe_data.get("format", {})
                 clip.duration = float(fmt.get("duration", 0))
-                clip.file_size = clip.source_path.stat().st_size if clip.source_path.is_file() else 0
+                if clip.source_path.is_file():
+                    clip.file_size = clip.source_path.stat().st_size
+                else:
+                    clip.file_size = 0
 
                 video_stream = next(
                     (s for s in probe_data.get("streams", []) if s.get("codec_type") == "video"),
@@ -309,9 +422,18 @@ class Pipeline:
                 if video_stream:
                     clip.video_codec = video_stream.get("codec_name", "")
                     clip.fps = parse_fps(video_stream.get("r_frame_rate", "0/1"))
+                    if clip.fps == 0.0:
+                        clip.fps = 30.0
+                        logger.debug(
+                            "parse_fps returned 0.0 for %s — falling back to 30fps",
+                            clip.stem,
+                        )
                     clip.resolution = (video_stream.get("width", 0), video_stream.get("height", 0))
 
-                audio_streams = [s for s in probe_data.get("streams", []) if s.get("codec_type") == "audio"]
+                audio_streams = [
+                    s for s in probe_data.get("streams", [])
+                    if s.get("codec_type") == "audio"
+                ]
                 clip.has_game_audio = any(s.get("codec_name") != "opus" for s in audio_streams)
                 clip.has_mic_audio = any(s.get("codec_name") == "opus" for s in audio_streams)
 

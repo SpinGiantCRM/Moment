@@ -26,6 +26,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.ui.editor.editor_window import EditorWindow
+from moment.ui.services.async_loader import AsyncDataLoader
+
 if TYPE_CHECKING:
     from moment.core.store import Store
 
@@ -213,11 +216,30 @@ class PlayerPage(QWidget):
         back_btn = QPushButton("← Grid")
         back_btn.clicked.connect(self.back_requested.emit)
 
+        # --- Edit button ---
+        edit_btn = QPushButton("✎ Edit")
+        edit_btn.setObjectName("outline")
+        edit_btn.setToolTip("Open in advanced editor")
+        edit_btn.clicked.connect(self._on_edit_clicked)
+
         # --- Empty state ---
         self._empty_label = QLabel("Select a clip to play")
         self._empty_label.setObjectName("muted")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_label.setStyleSheet("font-size: 16px;")
+
+        # Editor window reference
+        self._editor: EditorWindow | None = None
+
+        # Loading spinner overlay
+        self._spinner_label = QLabel("Loading…")
+        self._spinner_label.setObjectName("pageTitle")
+        self._spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._spinner_label.setStyleSheet("font-size: 20px; color: var(--text-secondary);")
+        self._spinner_label.setVisible(False)
+
+        # Async loader
+        self._loader: AsyncDataLoader | None = None
 
         # --- Controls container (hidden in fullscreen) ---
         self._controls = QWidget()
@@ -227,6 +249,7 @@ class PlayerPage(QWidget):
 
         top_row = QHBoxLayout()
         top_row.addWidget(back_btn)
+        top_row.addWidget(edit_btn)
         top_row.addStretch()
         controls_layout.addLayout(top_row)
         controls_layout.addWidget(self._seek_bar)
@@ -243,9 +266,11 @@ class PlayerPage(QWidget):
         layout.addWidget(self._controls)
         layout.addWidget(self._video_widget, stretch=1)
         layout.addWidget(self._empty_label, stretch=1)
+        layout.addWidget(self._spinner_label, stretch=1)
 
         self._empty_label.setVisible(True)
         self._video_widget.setVisible(False)
+        self._spinner_label.setVisible(False)
 
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -254,7 +279,10 @@ class PlayerPage(QWidget):
     # ==================================================================
 
     def load_clip(self, clip_id: str) -> None:
-        """Load a clip for playback by its database ID.
+        """Load a clip for playback by its database ID asynchronously.
+
+        Shows a loading spinner immediately, cancels any in-flight loader,
+        then loads clip data on a background thread.
 
         Args:
             clip_id: UUID of the clip to load.
@@ -262,53 +290,113 @@ class PlayerPage(QWidget):
         if self._store is None:
             return
 
-        try:
-            clip = self._store.get_clip(clip_id)
-            if clip is None:
-                self._show_empty("Clip not found")
-                return
+        # Cancel any previous loader (also disconnects signals)
+        self._cancel_loader()
 
-            self._current_clip = {
-                "id": clip.id,
-                "title": clip.title or clip.stem,
-                "game": clip.game or "",
-                "file_size": clip.file_size,
-                "duration": clip.duration,
-                "r2_url": clip.r2_url or "",
-                "encoded_path": str(clip.encoded_path) if clip.encoded_path else "",
-                "source_path": str(clip.source_path),
-            }
+        # Show loading spinner
+        self._empty_label.setVisible(False)
+        self._video_widget.setVisible(False)
+        self._spinner_label.setVisible(True)
 
-            # Determine video path (encoded > source)
-            video_path = self._current_clip.get("encoded_path") or self._current_clip.get("source_path", "")
+        # Fire async load
+        self._loader = AsyncDataLoader(self._store.get_clip, clip_id)
+        self._loader.data_ready.connect(self._on_data_ready)
+        self._loader.error_occurred.connect(self._on_load_error)
+        self._loader.start()
 
-            self._empty_label.setVisible(False)
-            self._video_widget.setVisible(True)
+    def _on_data_ready(self, clip: Any) -> None:
+        """Handle successful async clip load."""
+        self._loader = None
+        self._spinner_label.setVisible(False)
 
-            # Stop any previous playback before changing source
-            self._player.stop()
-            self._player.setSource(QUrl.fromLocalFile(video_path))
-            self._player.play()
+        if clip is None:
+            self._show_empty("Clip not found")
+            return
 
-            # Update metadata
-            game = self._current_clip.get("game", "")
-            size = _fmt_size(self._current_clip.get("file_size", 0))
-            duration = _fmt_ms(int(self._current_clip.get("duration", 0) * 1000))
-            self._meta_label.setText(f"{game}  •  {size}  •  {duration}")
+        self._current_clip = {
+            "id": clip.id,
+            "title": clip.title or clip.stem,
+            "game": clip.game or "",
+            "file_size": clip.file_size,
+            "duration": clip.duration,
+            "r2_url": clip.r2_url or "",
+            "encoded_path": str(clip.encoded_path) if clip.encoded_path else "",
+            "source_path": str(clip.source_path),
+            "edit_version": getattr(clip, "edit_version", 0),
+        }
 
-            # Update URL
-            r2_url = self._current_clip.get("r2_url", "")
-            self._url_input.setText(r2_url)
+        video_path = (
+            self._current_clip.get("encoded_path")
+            or self._current_clip.get("source_path", "")
+        )
 
-            self._play_btn.setText("⏸")
-            logger.info("Loaded clip: %s", self._current_clip["title"])
+        self._empty_label.setVisible(False)
+        self._video_widget.setVisible(True)
 
-        except Exception as exc:
-            logger.exception("Failed to load clip %s", clip_id)
-            self._show_empty(f"Error loading clip: {exc}")
+        self._player.stop()
+        self._player.setSource(QUrl.fromLocalFile(video_path))
+        self._player.play()
+
+        game = self._current_clip.get("game", "")
+        size = _fmt_size(self._current_clip.get("file_size", 0))
+        duration = _fmt_ms(int(self._current_clip.get("duration", 0) * 1000))
+        edited = "  •  Edited" if self._current_clip.get("edit_version", 0) > 0 else ""
+        self._meta_label.setText(f"{game}  •  {size}  •  {duration}{edited}")
+
+        r2_url = self._current_clip.get("r2_url", "")
+        self._url_input.setText(r2_url)
+
+        self._play_btn.setText("⏸")
+        logger.info("Loaded clip: %s", self._current_clip["title"])
+
+    def _on_load_error(self, error: str) -> None:
+        """Handle async load failure."""
+        self._loader = None
+        self._spinner_label.setVisible(False)
+        logger.exception("Failed to load clip: %s", error)
+        self._show_empty(f"Error loading clip: {error}")
+
+    def _cancel_loader(self) -> None:
+        """Cancel and disconnect any in-flight async loader."""
+        if self._loader is not None:
+            self._loader.data_ready.disconnect()
+            self._loader.error_occurred.disconnect()
+            self._loader.cancel()
+            self._loader = None
+
+    def hideEvent(self, event) -> None:
+        """Cancel in-flight loaders when the page is hidden."""
+        self._cancel_loader()
+        super().hideEvent(event)
+
+    def _on_edit_clicked(self) -> None:
+        """Open the EditorWindow for the current clip."""
+        if self._store is None or self._current_clip is None:
+            return
+        clip_id = self._current_clip["id"]
+        duration = self._current_clip.get("duration", 0.0)
+
+        self._editor = EditorWindow(
+            clip_id=clip_id,
+            store=self._store,
+            clip_duration=duration,
+            parent=self,
+        )
+        self._editor.close_requested.connect(self._on_editor_closed)
+        self._editor.show()
+
+    def _on_editor_closed(self) -> None:
+        """Handle editor window closing."""
+        if self._editor is not None:
+            self._editor.close_requested.disconnect()
+            self._editor = None
+        # Reload the clip to reflect any edits
+        if self._current_clip is not None:
+            self.load_clip(self._current_clip["id"])
 
     def stop(self) -> None:
-        """Stop playback and release the media player."""
+        """Stop playback, cancel loader, and release the media player."""
+        self._cancel_loader()
         self._player.stop()
         self._player.setSource(QUrl())
 
@@ -438,11 +526,10 @@ class PlayerPage(QWidget):
             self._toggle_mute()
         elif key == Qt.Key.Key_F:
             self._toggle_fullscreen()
+        # Escape is handled context-aware by MainWindow QShortcut
+        # (stop video → close editor → clear search → exit selection → grid)
         elif key == Qt.Key.Key_Escape:
-            if self._fullscreen:
-                self._toggle_fullscreen()
-            else:
-                self.back_requested.emit()
+            return
         elif key >= Qt.Key.Key_0 and key <= Qt.Key.Key_9:
             fraction = (key - Qt.Key.Key_0) / 10.0
             duration = self._player.duration()

@@ -4,27 +4,29 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from moment.core.repositories.base import (
+    _get_or_create_db_key,
+)
+from moment.core.repositories.base import (
+    connect_encrypted as _connect_encrypted,
+)
+
 
 class TestGetOrCreateDbKey:
     def test_returns_none_no_keyring(self) -> None:
         """_get_or_create_db_key returns None when keyring is not installed."""
-        from moment.core.store import _get_or_create_db_key
-
         with patch("builtins.__import__", side_effect=ImportError):
             result = _get_or_create_db_key()
             assert result is None
 
     def test_generates_and_stores_key(self) -> None:
         """_get_or_create_db_key generates a 64-char hex key and stores it."""
-        import sys
-
-        from moment.core.store import _get_or_create_db_key
-
         mock_keyring = MagicMock()
         mock_keyring.get_password.return_value = None  # No existing key
         mock_keyring.set_password.return_value = None
@@ -43,16 +45,16 @@ class TestGetOrCreateDbKey:
 class TestConnectEncrypted:
     def test_raises_runtime_error_no_pysqlcipher3(self) -> None:
         """_connect_encrypted raises RuntimeError when pysqlcipher3 is missing."""
-        import tempfile
-
-        from moment.core.store import _connect_encrypted
-
         fd, db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         try:
-            # Reset the cached import state
-            # Force pysqlcipher3 import to fail
-            with patch("moment.core.store.sqlite3"):
+            # Remove pysqlcipher3 from sys.modules so the import inside
+            # connect_encrypted fails cleanly.
+            modules = {
+                "pysqlcipher3": None,
+                "pysqlcipher3.dbapi2": None,
+            }
+            with patch.dict(sys.modules, modules, clear=False):
                 with pytest.raises(RuntimeError, match="pysqlcipher3 is required"):
                     _connect_encrypted(db_path)
         finally:
@@ -64,26 +66,21 @@ class TestConnectEncrypted:
 
     def test_raises_runtime_error_no_keyring(self) -> None:
         """_connect_encrypted raises RuntimeError when keyring returns None."""
-        import sys
-        import tempfile
-
-        from moment.core.store import _connect_encrypted
-
         fd, db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         try:
-            # Mock pysqlcipher3 and its dbapi2 submodule so
-            # ``import pysqlcipher3.dbapi2`` succeeds.
-            mock_pysqlcipher3 = MagicMock()
-            mock_pysqlcipher3.dbapi2 = MagicMock()
-            mock_pysqlcipher3.dbapi2.connect = MagicMock()
-            with patch.dict(sys.modules, {
-                "pysqlcipher3": mock_pysqlcipher3,
-                "pysqlcipher3.dbapi2": mock_pysqlcipher3.dbapi2,
-            }):
-                # Also un-stub any prior failed import of pysqlcipher3dbapi2
-                sys.modules.pop("pysqlcipher3dbapi2", None)
-                with patch("moment.core.store._get_or_create_db_key", return_value=None):
+            # Make pysqlcipher3 available but keyring fail.
+            mock_sqlcipher = MagicMock()
+            mock_sqlcipher.connect = MagicMock(return_value=MagicMock())
+            modules = {
+                "pysqlcipher3": MagicMock(dbapi2=mock_sqlcipher),
+                "pysqlcipher3.dbapi2": mock_sqlcipher,
+            }
+            with patch.dict(sys.modules, modules, clear=False):
+                with patch(
+                    "moment.core.repositories.base._get_or_create_db_key",
+                    return_value=None,
+                ):
                     with pytest.raises(RuntimeError, match="keyring"):
                         _connect_encrypted(db_path)
         finally:
@@ -108,7 +105,9 @@ class TestStoreOpensWithEncryption:
                 mock_connect.return_value = mock_conn
 
                 store = Store(db_path=db_path)
-                mock_connect.assert_called_once_with(db_path)
+                # _connect_encrypted is called twice: write conn + read conn
+                assert mock_connect.call_count == 2
+                assert any(call.args == (db_path,) for call in mock_connect.call_args_list)
                 store.close()
         finally:
             for sfx in ("", "-wal", "-shm"):

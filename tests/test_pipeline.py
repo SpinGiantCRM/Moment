@@ -24,7 +24,9 @@ from moment.core.uploader import Uploader, UploaderError
 from moment.utils.ffmpeg import parse_fps
 
 
-def _make_clip(store: Store, *, id: str, stem: str = "", source_path: str = "", **kwargs: object) -> Clip:
+def _make_clip(
+    store: Store, *, id: str, stem: str = "", source_path: str = "", **kwargs: object,
+) -> Clip:
     clip = Clip(
         id=id,
         stem=stem or id,
@@ -61,11 +63,13 @@ class TestParseFps:
 class TestInitialization:
     def test_pipeline_creates_workers(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         assert len(p._workers) > 0
         p.shutdown()
 
     def test_paused_initially_false(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         assert not p.paused
         p.shutdown()
 
@@ -74,6 +78,7 @@ class TestInitialization:
             store, Config(store._db_path),
             encode_workers=2, upload_workers=3, thumbnail_workers=1,
         )
+        p.start()
         assert len(p._workers) == 6
         p.shutdown()
 
@@ -86,6 +91,7 @@ class TestInitialization:
             store, Config(store._db_path),
             encoder=encoder, uploader=uploader, thumbnailer=thumbnailer,
         )
+        p.start()
         assert p._encoder is encoder
         assert p._uploader is uploader
         assert p._thumbnailer is thumbnailer
@@ -99,6 +105,7 @@ class TestInitialization:
 class TestEnqueue:
     def test_enqueue_adds_to_store(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         task = Task(id="t1", type=TaskKind.ENCODE, priority=0)
         p.enqueue(task)
         p.shutdown()
@@ -109,6 +116,7 @@ class TestEnqueue:
 
     def test_enqueue_sets_pending_status(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         task = Task(id="t2", type=TaskKind.THUMBNAIL)
         p.enqueue(task)
         assert task.status == TaskStatus.PENDING
@@ -122,12 +130,14 @@ class TestEnqueue:
 class TestPauseResume:
     def test_pause_sets_flag(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         p.pause()
         assert p.paused
         p.shutdown()
 
     def test_resume_clears_flag(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         p.pause()
         p.resume()
         assert not p.paused
@@ -141,12 +151,14 @@ class TestPauseResume:
 class TestGetStatus:
     def test_idle_when_no_work(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         status = p.get_status()
         assert status == "Idle"
         p.shutdown()
 
     def test_paused_status(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         p.pause()
         status = p.get_status()
         assert "(paused)" in status
@@ -154,6 +166,7 @@ class TestGetStatus:
 
     def test_active_tasks_in_status(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         p._inc_counter("encode")
         status = p.get_status()
         assert "Encoding" in status
@@ -167,7 +180,7 @@ class TestGetStatus:
 
 class TestProcessEncode:
     def test_processes_encode_successfully(self, store: Store) -> None:
-        clip = _make_clip(store, id="enc-1", stem="enc_test_1")
+        _ = _make_clip(store, id="enc-1", stem="enc_test_1")
 
         encoder = Encoder(codec="h264")
         encoded: list[str] = []
@@ -176,10 +189,14 @@ class TestProcessEncode:
             encoder=encoder,
             on_clip_encoded=lambda stem: encoded.append(stem),
         )
+        p.start()
 
         with (
             patch.object(encoder, "encode", return_value=Path("/tmp/enc_test_1.mp4")),
-            patch("moment.core.pipeline.ffprobe", return_value={"format": {"duration": "10.0"}, "streams": []}),
+            patch(
+                "moment.core.pipeline.ffprobe",
+                return_value={"format": {"duration": "10.0"}, "streams": []},
+            ),
         ):
             task = Task(
                 id="task-enc-1",
@@ -196,6 +213,7 @@ class TestProcessEncode:
 
     def test_processes_encode_with_missing_clip(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         task = Task(
             id="task-bad",
             type=TaskKind.ENCODE,
@@ -205,7 +223,7 @@ class TestProcessEncode:
         p.shutdown()
 
     def test_processes_encode_failure(self, store: Store) -> None:
-        clip = _make_clip(store, id="enc-fail", stem="enc_fail")
+        _ = _make_clip(store, id="enc-fail", stem="enc_fail")
 
         encoder = Encoder(codec="h264")
         errors: list[tuple[str, str]] = []
@@ -214,10 +232,14 @@ class TestProcessEncode:
             encoder=encoder,
             on_clip_errored=lambda stem, err: errors.append((stem, err)),
         )
+        p.start()
 
         with (
             patch.object(encoder, "encode", side_effect=EncoderError("GPU error")),
-            patch("moment.core.pipeline.ffprobe", return_value={"format": {"duration": "10.0"}, "streams": []}),
+            patch(
+                "moment.core.pipeline.ffprobe",
+                return_value={"format": {"duration": "10.0"}, "streams": []},
+            ),
         ):
             task = Task(id="task-fail", type=TaskKind.ENCODE, payload={"clip_id": "enc-fail"})
             p._process_encode(task)
@@ -234,7 +256,7 @@ class TestProcessEncode:
 
 class TestProcessUpload:
     def test_processes_upload_successfully(self, store: Store) -> None:
-        clip = _make_clip(
+        _ = _make_clip(
             store, id="up-1", stem="up_test_1",
             encoded_path="/tmp/up_test_1.mp4",
         )
@@ -248,6 +270,7 @@ class TestProcessUpload:
             uploader=uploader,
             on_clip_uploaded=lambda stem, url: uploaded.append((stem, url)),
         )
+        p.start()
 
         with patch.object(uploader, "upload", return_value="https://cdn.example.com/up_test_1.mp4"):
             task = Task(
@@ -264,7 +287,7 @@ class TestProcessUpload:
         p.shutdown()
 
     def test_processes_upload_failure(self, store: Store) -> None:
-        clip = _make_clip(store, id="up-fail", stem="up_fail", encoded_path="/tmp/up_fail.mp4")
+        _ = _make_clip(store, id="up-fail", stem="up_fail", encoded_path="/tmp/up_fail.mp4")
         Path("/tmp/up_fail.mp4").write_bytes(b"fake video")
 
         uploader = Uploader(remote="test", bucket="test")
@@ -274,6 +297,7 @@ class TestProcessUpload:
             uploader=uploader,
             on_clip_errored=lambda stem, err: errors.append((stem, err)),
         )
+        p.start()
 
         with patch.object(uploader, "upload", side_effect=UploaderError("Network error")):
             task = Task(
@@ -291,6 +315,7 @@ class TestProcessUpload:
         _make_clip(store, id="up-nofile", stem="up_nofile")
 
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         task = Task(
             id="task-up-nofile",
             type=TaskKind.UPLOAD,
@@ -306,13 +331,14 @@ class TestProcessUpload:
 
 class TestProcessThumbnail:
     def test_processes_thumbnail_successfully(self, store: Store) -> None:
-        clip = _make_clip(store, id="th-1", stem="th_test_1")
+        _ = _make_clip(store, id="th-1", stem="th_test_1")
 
         thumbnailer = Thumbnailer(thumb_dir="/tmp/thumbs")
         p = Pipeline(
             store, Config(store._db_path),
             thumbnailer=thumbnailer,
         )
+        p.start()
 
         with patch.object(thumbnailer, "generate", return_value=Path("/tmp/thumbs/th_test_1.jpg")):
             task = Task(
@@ -328,6 +354,7 @@ class TestProcessThumbnail:
 
     def test_processes_thumbnail_missing_clip(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         task = Task(
             id="task-th-bad",
             type=TaskKind.THUMBNAIL,
@@ -344,6 +371,7 @@ class TestProcessThumbnail:
 class TestShutdown:
     def test_shutdown_stops_workers(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         p.shutdown()
         # All workers should have been joined
         for w in p._workers:
@@ -351,6 +379,7 @@ class TestShutdown:
 
     def test_multiple_shutdowns_not_harmful(self, store: Store) -> None:
         p = Pipeline(store, Config(store._db_path))
+        p.start()
         p.shutdown()
         p.shutdown()  # Should be safe
 
@@ -366,6 +395,7 @@ class TestStatusTimer:
             store, Config(store._db_path),
             on_status=lambda s: statuses.append(s),
         )
+        p.start()
         # Initial status is emitted immediately
         time.sleep(0.2)
         assert len(statuses) >= 1

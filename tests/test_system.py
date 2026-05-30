@@ -16,6 +16,7 @@ from moment.utils.system import (
     get_os_name,
     human_size,
     is_nvidia_gpu,
+    sanitize_stem,
     validate_arg,
 )
 
@@ -103,9 +104,15 @@ class TestNvidiaGPU:
 
 
 class TestGetLocalIP:
-    def test_returns_string_or_none(self) -> None:
+    def test_returns_string(self) -> None:
         ip = get_local_ip()
-        assert ip is None or isinstance(ip, str)
+        assert isinstance(ip, str)
+        assert len(ip) > 0
+
+    def test_cache_returns_same_value(self) -> None:
+        ip1 = get_local_ip()
+        ip2 = get_local_ip()
+        assert ip1 == ip2
 
 
 class TestGetOSName:
@@ -113,6 +120,47 @@ class TestGetOSName:
         name = get_os_name()
         assert isinstance(name, str)
         assert len(name) > 0
+
+
+# ---------------------------------------------------------------------------
+# sanitize_stem
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeStem:
+    def test_ascii_stem_preserved(self) -> None:
+        assert sanitize_stem("my-clip_01") == "my-clip_01"
+
+    def test_cjk_preserved(self) -> None:
+        """CJK characters must survive sanitisation (Spec 15.1)."""
+        assert sanitize_stem("我的游戏片段") == "我的游戏片段"
+
+    def test_cyrillic_preserved(self) -> None:
+        assert sanitize_stem("привет-мир") == "привет-мир"
+
+    def test_path_traversal_removed(self) -> None:
+        # `..` → `_`, slashes → `_`, underscores collapsed; leading `_` may remain
+        result = sanitize_stem("../../../etc/passwd")
+        assert ".." not in result
+        assert "/" not in result
+        assert "etc_passwd" in result or "etc" in result
+
+    def test_leading_dot_stripped(self) -> None:
+        """Leading dots are stripped to prevent hidden files."""
+        assert sanitize_stem(".hidden") == "hidden"
+
+    def test_empty_stem_returns_clip(self) -> None:
+        assert sanitize_stem("..") == "clip"
+        assert sanitize_stem("///") == "clip"
+
+    def test_special_chars_replaced(self) -> None:
+        """Characters outside word/dot/hyphen become underscores."""
+        result = sanitize_stem("clip#$%^&*()name")
+        assert "#" not in result
+        assert "*" not in result
+
+    def test_leading_underscore_stripped(self) -> None:
+        assert sanitize_stem("__clip") == "clip"
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +201,28 @@ class TestValidateArg:
     def test_rejects_path_traversal(self) -> None:
         with pytest.raises(ValueError, match="must match pattern"):
             validate_arg("';../etc/passwd")
+
+    def test_device_context_blocks_slash(self) -> None:
+        """Device names must not contain forward slashes (path traversal)."""
+        assert validate_arg("default_output", context="device") == "default_output"
+        assert validate_arg("Built-in Audio Analog Stereo", context="device") == (
+            "Built-in Audio Analog Stereo"
+        )
+        with pytest.raises(ValueError):
+            validate_arg("USB-Audio, Device/2", context="device")
+
+    def test_filename_context_unicode(self) -> None:
+        """Filename context allows Unicode word characters."""
+        assert validate_arg("我的游戏片段", context="filename") == "我的游戏片段"
+        assert validate_arg("привет-мир_1", context="filename") == "привет-мир_1"
+        with pytest.raises(ValueError):
+            validate_arg("file/name", context="filename")
+
+    def test_special_chars_replaced(self) -> None:
+        r"""Characters outside [\w.-] become underscores."""
+        result = sanitize_stem("clip#$%^&*()name")
+        assert "#" not in result
+        assert "*" not in result
 
     def test_rejects_backticks(self) -> None:
         with pytest.raises(ValueError, match="must match pattern"):

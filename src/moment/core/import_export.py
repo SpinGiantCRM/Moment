@@ -119,31 +119,60 @@ class ImportExport:
         original_filename = src.name
         target_path = src
 
-        # Copy into clips directory
+        # Copy into clips directory (temp file + atomic rename)
         if copy:
+            import tempfile
+
             dest_dir = Path(CLIPS_DIR)
             ensure_dir(dest_dir)
-            dest = dest_dir / src.name
             # Avoid overwriting: append (1), (2), etc.
+            final_dest = dest_dir / src.name
             counter = 1
-            while dest.exists():
-                dest = dest_dir / f"{src.stem} ({counter}){src.suffix}"
+            while final_dest.exists():
+                final_dest = dest_dir / f"{src.stem} ({counter}){src.suffix}"
                 counter += 1
-            shutil.copy2(src, dest)
-            target_path = dest
-            logger.info("Copied %s → %s", src, dest)
+
+            # Copy to temp file first, then atomic rename after validation
+            fd, tmp_name = tempfile.mkstemp(
+                dir=str(dest_dir), suffix=".tmp",
+            )
+            os.close(fd)
+            tmp_path = Path(tmp_name)
+            try:
+                shutil.copy2(src, tmp_path)
+                logger.info("Copied %s → %s (temp)", src, tmp_path)
+                target_path = tmp_path
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
         # Probe metadata
         probe_data: dict = {}
         try:
             probe_data = ffprobe(target_path)
         except FFmpegError as exc:
-            if copy and target_path != src:
+            if copy:
                 try:
                     os.unlink(target_path)
                 except OSError:
                     pass
             raise ImportError(f"ffprobe failed for {target_path}: {exc}") from exc
+
+        # Atomic rename: temp → final destination (validated)
+        if copy and target_path != src:
+            try:
+                os.rename(target_path, final_dest)
+                target_path = final_dest
+                logger.info("Renamed temp → %s", final_dest)
+            except OSError as exc:
+                try:
+                    os.unlink(target_path)
+                except OSError:
+                    pass
+                raise ImportError(f"Failed to rename temp file: {exc}") from exc
 
         fmt = probe_data.get("format", {})
         duration = float(fmt.get("duration", 0))
@@ -153,7 +182,7 @@ class ImportExport:
             None,
         )
         if video_stream is None:
-            if copy and target_path != src:
+            if copy:
                 try:
                     os.unlink(target_path)
                 except OSError:
@@ -163,6 +192,11 @@ class ImportExport:
         video_codec = video_stream.get("codec_name", "")
         fps_str = video_stream.get("r_frame_rate", "0/1")
         fps = parse_fps(fps_str)
+        if fps == 0.0:
+            fps = 30.0
+            logger.debug(
+                "parse_fps returned 0.0 for %s — falling back to 30fps", stem,
+            )
         resolution = (video_stream.get("width", 0), video_stream.get("height", 0))
 
         audio_streams = [s for s in probe_data.get("streams", []) if s.get("codec_type") == "audio"]
@@ -359,9 +393,9 @@ class ImportExport:
         # Fallback: subprocess call to file(1)
         if mime_type is None:
             try:
-                import subprocess  # nosec B404 — required for external tool invocation
+                from moment.utils.subprocess import ExternalCommandRunner
 
-                result = subprocess.run(  # nosec
+                result = ExternalCommandRunner().run(
                     ["file", "--mime-type", "-b", str(path)],
                     capture_output=True,
                     text=True,

@@ -172,7 +172,9 @@ class AudioMixer(QWidget):
         self._game_value_label = QLabel(f"{self._game_vol}%")
         self._game_value_label.setObjectName("cardMeta")
         self._game_value_label.setFixedWidth(_VALUE_WIDTH)
-        self._game_value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._game_value_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
         game_row.addWidget(self._game_value_label)
 
         self._game_mute_btn = QPushButton("🔊")
@@ -205,7 +207,9 @@ class AudioMixer(QWidget):
         self._mic_value_label = QLabel(f"{self._mic_vol}%")
         self._mic_value_label.setObjectName("cardMeta")
         self._mic_value_label.setFixedWidth(_VALUE_WIDTH)
-        self._mic_value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._mic_value_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
         mic_row.addWidget(self._mic_value_label)
 
         self._mic_mute_btn = QPushButton("🎤")

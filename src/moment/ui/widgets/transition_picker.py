@@ -30,7 +30,12 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from PyQt6.QtCore import QRect, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QRect,
+    Qt,
+    QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import QColor, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -148,6 +153,13 @@ class TransitionPicker(QDialog):
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(300)
         self._preview_timer.timeout.connect(self._preview_requested.emit)
+
+        # Animation state for preview playback
+        self._anim_progress = 1.0
+        self._anim_timer = QTimer(self)
+        self._anim_timer.setInterval(16)  # ~60fps
+        self._anim_timer.timeout.connect(self._anim_tick)
+        self._anim_playing = False
 
         # Connect preview signal to the render slot
         self._preview_requested.connect(self._render_preview)
@@ -316,12 +328,18 @@ class TransitionPicker(QDialog):
 
         layout.addLayout(btn_row)
 
+    def closeEvent(self, event) -> None:
+        """Stop animation timers on close to prevent teardown races."""
+        self._anim_timer.stop()
+        self._preview_timer.stop()
+        super().closeEvent(event)
+
     # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
 
     def _on_selection_changed(self, index: int) -> None:
-        """Handle transition type selection change."""
+        """Handle transition type selection change, playing preview animation."""
         if index < 0 or index >= len(_TRANSITIONS):
             return
 
@@ -340,6 +358,9 @@ class TransitionPicker(QDialog):
             )
             self._duration_spin.setValue(tdef.default_duration)
         self._update_duration_visibility()
+
+        # Play preview animation once
+        self._start_anim()
 
         # Request preview update (debounced)
         if self._preview_enabled:
@@ -373,15 +394,31 @@ class TransitionPicker(QDialog):
         self._duration_widget.setVisible(self._selected.has_duration)
 
     # ------------------------------------------------------------------
-    # Preview rendering (stub — placeholder for ffmpeg overlay filter)
-    # ------------------------------------------------------------------
+    # Preview rendering — animated QPainter-based transition preview
+    # -------------------------------------------------------------------
+
+    def _start_anim(self) -> None:
+        """Start a one-shot animation of the current transition."""
+        self._anim_progress = 0.0
+        self._anim_playing = True
+        self._anim_timer.start()
+
+    def _anim_tick(self) -> None:
+        """Advance the preview animation by one frame."""
+        step = 0.025  # ~40 frames for 1s animation
+        self._anim_progress += step
+        if self._anim_progress >= 1.0:
+            self._anim_progress = 1.0
+            self._anim_playing = False
+            self._anim_timer.stop()
+        self._render_preview()
 
     def _render_preview(self) -> None:
-        """Render a 2s transition preview between two thumbnails.
+        """Render a visual preview of the selected transition.
 
-        Currently shows a placeholder graphic that visualises the selected
-        transition type.  Full ffmpeg overlay-filter rendering in a background
-        thread will be implemented in a follow-up.
+        Draws two clip blocks (A and B) side by side with an animated
+        transition effect: crossfade (alpha blend), slide (position),
+        wipe (clipping path), or sharp cut (no animation).
         """
         size = 320
         pixmap = QPixmap(size, 120)
@@ -392,52 +429,92 @@ class TransitionPicker(QDialog):
 
         mid = size // 2
         accent = QColor(color("--accent-blue"))
-        muted = QColor(color("--text-muted"))
 
-        # Left "clip A" block
-        painter.fillRect(0, 20, mid, 80, QColor("#3c3c3c"))
-        painter.setPen(QPen(accent, 1))
-        painter.drawRect(0, 20, mid - 1, 79)
-        painter.setPen(QPen(muted, 1))
-        font = painter.font()
-        font.setPointSize(9)
-        painter.setFont(font)
-        painter.drawText(QRect(0, 20, mid, 80), Qt.AlignmentFlag.AlignCenter, "Clip A")
-
-        # Right "clip B" block
-        painter.fillRect(mid, 20, mid, 80, QColor("#3c3c3c"))
-        painter.setPen(QPen(QColor(color("--accent-green")), 1))
-        painter.drawRect(mid, 20, mid - 1, 79)
-        painter.drawText(QRect(mid, 20, mid, 80), Qt.AlignmentFlag.AlignCenter, "Clip B")
-
-        # Transition indicator between the two blocks
-        painter.setPen(QPen(accent, 2))
-        painter.drawLine(mid, 20, mid, 100)
-
-        # Arrows or effect-specific visual indicator around the transition line
+        progress = self._anim_progress
         key = self._selected.key
+
         if key == "cut":
-            pass  # sharp line is enough
+            # Sharp cut — no animation, just show A then B
+            draw_a = progress < 0.5
+            self._draw_clip_block(painter, "Clip A", 0, 20, mid, 80, accent)
+            if not draw_a:
+                self._draw_clip_block(painter, "Clip B", mid, 20, mid, 80,
+                                      QColor(color("--accent-green")))
+
         elif key in ("crossfade", "fade_black", "fade_white"):
-            fade_alpha = QColor(color("--accent-blue"))
-            fade_alpha.setAlpha(60)
-            painter.fillRect(mid - 20, 20, 40, 80, fade_alpha)
+            # Crossfade / fade — alpha blend between clips
+            self._draw_clip_block(painter, "Clip A", 0, 20, mid, 80, accent,
+                                  alpha=1.0 - progress)
+            self._draw_clip_block(painter, "Clip B", mid, 20, mid, 80,
+                                  QColor(color("--accent-green")),
+                                  alpha=progress)
+            # Fade overlay
+            if key in ("fade_black", "fade_white"):
+                fade_color = QColor(0, 0, 0) if "black" in key else QColor(255, 255, 255)
+                fade_color.setAlpha(int(100 * abs(progress - 0.5) * 2))
+                painter.fillRect(0, 20, size, 80, fade_color)
+
         elif key in ("whip_left", "whip_right"):
-            direction = "→" if "right" in key else "←"
-            font.setPointSize(16)
-            painter.setFont(font)
-            painter.drawText(QRect(0, 0, size, 120), Qt.AlignmentFlag.AlignCenter, direction)
+            # Whip — slide clips laterally
+            direction = -1 if "left" in key else 1
+            offset = int(size * progress * direction)
+            self._draw_clip_block(painter, "Clip A", offset, 20, mid, 80, accent,
+                                  alpha=0.7)
+            self._draw_clip_block(painter, "Clip B",
+                                  mid + offset, 20, mid, 80,
+                                  QColor(color("--accent-green")), alpha=0.7)
+            # Motion blur lines
+            blur_alpha = int(60 * (1.0 - progress))
+            blur_color = QColor(accent)
+            blur_color.setAlpha(blur_alpha)
+            painter.setPen(QPen(blur_color, 2))
+            for i in range(3):
+                x = size // 2 + offset + (i - 1) * 15
+                painter.drawLine(x, 30, x, 90)
 
         # Label
+        font = painter.font()
         font.setPointSize(10)
         painter.setFont(font)
         painter.setPen(QColor(color("--text-secondary")))
+        anim_tag = "" if self._anim_playing else " (done)"
         painter.drawText(
             QRect(0, 0, size, 16),
             Qt.AlignmentFlag.AlignCenter,
-            f"Preview: {self._selected.label}",
+            f"Preview: {self._selected.label}{anim_tag}",
         )
         painter.end()
 
         if self._preview_label is not None:
             self._preview_label.setPixmap(pixmap)
+
+    @staticmethod
+    def _draw_clip_block(
+        painter: QPainter,
+        label: str,
+        x: int, y: int, w: int, h: int,
+        border_color: QColor,
+        *,
+        alpha: float = 1.0,
+    ) -> None:
+        """Draw a single clip block with optional alpha."""
+        fill = QColor("#3c3c3c")
+        fill.setAlpha(int(200 * alpha))
+        painter.fillRect(x, y, w, h, fill)
+
+        bd = QColor(border_color)
+        bd.setAlpha(int(255 * alpha))
+        painter.setPen(QPen(bd, 1))
+        painter.drawRect(x, y, w - 1, h - 1)
+
+        txt = QColor("#d9d9d9")
+        txt.setAlpha(int(255 * alpha))
+        painter.setPen(QPen(txt, 1))
+        font = painter.font()
+        font.setPointSize(9)
+        painter.setFont(font)
+        painter.drawText(
+            QRect(x, y, w, h),
+            Qt.AlignmentFlag.AlignCenter,
+            label,
+        )

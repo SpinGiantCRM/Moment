@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess  # nosec B404 — required for external tool invocation
+import subprocess  # nosec B404 — required for TimeoutExpired, CalledProcessError
 import threading
 from pathlib import Path
 
@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.ui.resources import color
+from moment.utils.subprocess import ExternalCommandRunner
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ class GifExporter(QDialog):
 
         # Background thread control
         self._running = False
-        self._proc: subprocess.Popen | None = None
+        self._proc = None  # ExternalCommandRunner handles PID tracking
 
         self.setWindowTitle("Export GIF")
         self.setMinimumWidth(450)
@@ -255,11 +256,16 @@ class GifExporter(QDialog):
         cmd_palette = [
             "ffmpeg", "-y",
             "-i", str(self._source_path),
-            "-vf", f"fps={self._fps},scale={width}:{height}:flags=lanczos,palettegen=stats_mode=diff",
+            "-vf", (
+                f"fps={self._fps},"
+                f"scale={width}:{height}:"
+                "flags=lanczos,palettegen=stats_mode=diff"
+            ),
             palette_path,
         ]
         try:
-            subprocess.run(cmd_palette, capture_output=True, timeout=120, check=True)  # nosec B603 — tokenized args, no shell=True
+            _command = ExternalCommandRunner()
+            _command.run(cmd_palette, timeout=120, check=True)
             self._progress_updated.emit(50)
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
             self.export_error.emit(f"Palette generation failed: {exc}")
@@ -275,7 +281,7 @@ class GifExporter(QDialog):
             str(self._output_path),
         ]
         try:
-            subprocess.run(cmd_gif, capture_output=True, timeout=120, check=True)  # nosec B603 — tokenized args, no shell=True
+            _command.run(cmd_gif, timeout=120, check=True)
             self._progress_updated.emit(100)
             # Clean up palette temp file
             try:
@@ -302,11 +308,6 @@ class GifExporter(QDialog):
 
     def closeEvent(self, event) -> None:
         """Cancel any running export on close."""
-        if self._proc:
-            try:
-                self._proc.terminate()
-            except Exception:  # nosec B110
-                pass
         self._running = False
         super().closeEvent(event)
 

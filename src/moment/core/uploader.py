@@ -10,18 +10,20 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import subprocess  # nosec B404 — required for external tool invocation
+import subprocess  # nosec B404 — required for CalledProcessError exception type
 import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from moment.utils.subprocess import _sandbox_preexec
+from moment.utils.subprocess import ExternalCommandRunner
 
 if TYPE_CHECKING:
     from moment.core.config import Config
 
 logger = logging.getLogger(__name__)
+
+_command = ExternalCommandRunner()
 
 # Retry configuration
 _RETRY_DELAYS: list[float] = [5.0, 30.0, 300.0]  # seconds
@@ -185,12 +187,11 @@ class Uploader:
         self._ensure_rclone()
         dest = f"{self._remote}:{self._bucket}/{existing_remote_path}"
         try:
-            subprocess.run(  # nosec B603
+            _command.run(
                 ["rclone", "delete", dest],
                 capture_output=True,
                 text=True,
                 check=True,
-                preexec_fn=_sandbox_preexec,
             )
             logger.debug("Deleted old remote file")
         except subprocess.CalledProcessError as exc:
@@ -209,25 +210,23 @@ class Uploader:
         """Execute ``rclone copy``."""
         cmd = ["rclone", "copy", str(path), dest, "--progress"]
         logger.debug("Running rclone copy")
-        subprocess.run(  # nosec B603 — tokenized args, no shell=True
+        _command.run(
             cmd,
             capture_output=True,
             text=True,
             check=True,
             timeout=600,
-            preexec_fn=_sandbox_preexec,
         )
 
     def _verify_upload(self, dest: str) -> bool:
         """Check that the file exists on the remote."""
         try:
-            result = subprocess.run(  # nosec B603
+            result = _command.run(
                 ["rclone", "lsf", dest],
                 capture_output=True,
                 text=True,
                 check=True,
                 timeout=30,
-                preexec_fn=_sandbox_preexec,
             )
             return result.stdout.strip() != ""
         except subprocess.CalledProcessError:

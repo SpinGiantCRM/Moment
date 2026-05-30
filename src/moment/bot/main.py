@@ -16,7 +16,7 @@ import time
 
 from moment.core.config import Config
 from moment.core.discord_bot import _get_discord_token
-from moment.core.store import Store, set_store_config
+from moment.core.store import Store
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +41,9 @@ def run_bot(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    # Bootstrap store + config (order matters: Config first, then inject into Store)
+    # Bootstrap store + config
     config = Config()
-    set_store_config(config)
-    store = Store()
+    store = Store(config=config)
 
     # Check token exists (env var or keyring — see discord_bot._get_discord_token)
     token = _get_discord_token()

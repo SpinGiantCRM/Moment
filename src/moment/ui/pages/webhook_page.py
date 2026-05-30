@@ -98,9 +98,10 @@ class WebhookPage(QWidget):
         self._table = QTableWidget(0, 4)
         self._table.setHorizontalHeaderLabels(["Name", "URL", "Enabled", "Actions"])
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self._table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        resize = QHeaderView.ResizeMode.ResizeToContents
+        self._table.horizontalHeader().setSectionResizeMode(0, resize)
+        self._table.horizontalHeader().setSectionResizeMode(2, resize)
+        self._table.horizontalHeader().setSectionResizeMode(3, resize)
         self._table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.verticalHeader().setVisible(False)
@@ -232,9 +233,10 @@ class WebhookPage(QWidget):
 
         self._log_table = QTableWidget(0, 4)
         self._log_table.setHorizontalHeaderLabels(["Timestamp", "Status", "Code", "Details"])
-        self._log_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self._log_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self._log_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        resize = QHeaderView.ResizeMode.ResizeToContents
+        self._log_table.horizontalHeader().setSectionResizeMode(0, resize)
+        self._log_table.horizontalHeader().setSectionResizeMode(1, resize)
+        self._log_table.horizontalHeader().setSectionResizeMode(2, resize)
         self._log_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self._log_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self._log_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -516,7 +518,7 @@ class WebhookPage(QWidget):
     # ==================================================================
 
     @staticmethod
-    def _wh_dict_to_obj(d: dict) -> "Webhook":
+    def _wh_dict_to_obj(d: dict) -> "Webhook":  # noqa: F821
         """Convert a webhook dict back to a Webhook object for save."""
         from moment.core.models import Webhook
         return Webhook(

@@ -55,8 +55,8 @@ _COLOUR_TOKENS: dict[str, str] = {
 
     # Text
     "--text-primary":       "#d9d9d9",
-    "--text-secondary":     "#a1a1aa",
-    "--text-muted":         "#757575",
+    "--text-secondary":     "#ababab",
+    "--text-muted":         "#9a9a9a",
 
     # Accents
     "--accent-blue":        "#60a5fa",
@@ -261,6 +261,11 @@ QPushButton:disabled {{
     color: var(--text-muted);
 }}
 
+QPushButton:focus {{
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 1px;
+}}
+
 QPushButton#accent {{
     background-color: var(--accent-blue);
     color: #ffffff;
@@ -297,6 +302,11 @@ QToolButton:pressed {{
     background-color: var(--bg-active);
 }}
 
+QToolButton:focus {{
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 1px;
+}}
+
 /* ---- Floating toolbar islands ---------------------------------------------- */
 
 QFrame#toolbarIsland {{
@@ -321,6 +331,7 @@ QLineEdit {{
 
 QLineEdit:focus {{
     border-color: var(--accent-blue);
+    outline: 1px solid var(--accent-blue);
 }}
 
 QLineEdit:disabled {{
@@ -520,6 +531,11 @@ QSlider::handle:horizontal {{
     width: 12px;
     height: 12px;
     margin: -4px 0;
+}}
+
+QSlider::handle:horizontal:focus {{
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
 }}
 
 QSlider::handle:horizontal:hover {{

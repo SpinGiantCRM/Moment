@@ -1,7 +1,10 @@
 """Toast notification system — non-blocking popups stacked bottom-right.
 
-Uses QPropertyAnimation for slide-in/out.  Max 3 visible at a time;
+On X11: Uses QPropertyAnimation for slide-in/out.  Max 3 visible at a time;
 the 4th replaces the oldest.  Hover pauses the auto-dismiss timer.
+
+On Wayland: Delegates to ``notify-send`` for desktop-native notifications
+(Qt overlay windows render as broken full-screen on Wayland).
 
 Access the global singleton via ``toast_manager``::
 
@@ -12,6 +15,8 @@ Access the global singleton via ``toast_manager``::
 from __future__ import annotations
 
 import logging
+import os
+import subprocess  # nosec B404 — required for notify-send CLI
 
 from PyQt6.QtCore import (
     QEasingCurve,
@@ -87,6 +92,9 @@ class ToastWidget(QFrame):
         self.setFixedWidth(_TOAST_WIDTH)
         self.setMinimumHeight(52)
         self.setObjectName("toastWidget")
+        # Screen reader support
+        self.setAccessibleName(f"{toast_type.title()} notification")
+        self.setAccessibleDescription(f"{title}. {body}" if body else title)
         self.setStyleSheet(f"""
             #toastWidget {{
                 background-color: {color('--bg-surface')};
@@ -130,7 +138,7 @@ class ToastWidget(QFrame):
             self._body_label = QLabel(body)
             self._body_label.setObjectName("toastBody")
             self._body_label.setWordWrap(True)
-            self._body_label.setStyleSheet("font-size: 12px; color: #a1a1aa;")
+            self._body_label.setStyleSheet("font-size: 12px; color: #ababab;")
             text_layout.addWidget(self._body_label)
 
         layout.addLayout(text_layout, 1)
@@ -138,9 +146,10 @@ class ToastWidget(QFrame):
         # Dismiss button
         close_btn = QPushButton("×")
         close_btn.setFixedSize(20, 20)
+        close_btn.setAccessibleName("Dismiss notification")
         close_btn.setStyleSheet("""
             QPushButton {
-                background: transparent; border: none; color: #757575;
+                background: transparent; border: none; color: #9a9a9a;
                 font-size: 16px; font-weight: bold; padding: 0;
             }
             QPushButton:hover { color: #d9d9d9; }
@@ -179,7 +188,10 @@ class ToastWidget(QFrame):
 
     def _stop_animation(self) -> None:
         """Stop any in-progress slide animation."""
-        if self._slide_anim is not None and self._slide_anim.state() == QPropertyAnimation.State.Running:
+        if (
+            self._slide_anim is not None
+            and self._slide_anim.state() == QPropertyAnimation.State.Running
+        ):
             self._slide_anim.stop()
 
     def slide_out(self) -> None:
@@ -259,6 +271,7 @@ class ToastManager(QObject):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._toasts: list[ToastWidget] = []
+        self._dismissing: list[ToastWidget] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -284,16 +297,22 @@ class ToastManager(QObject):
             logger.warning("Unknown toast type %r, defaulting to 'info'", toast_type)
             toast_type = "info"
 
+        # Wayland: use notify-send instead of Qt overlay windows
+        if _is_wayland():
+            self._show_wayland_notification(toast_type, title, body)
+            return
+
         duration_ms = duration or int(_TOAST_PRESETS[toast_type]["duration_ms"])
 
         toast = ToastWidget(toast_type, title, body, duration_ms)
         toast.dismissed.connect(self._on_dismissed)
 
-        # Enforce max visible — dismiss oldest
+        # Enforce max visible — pop oldest immediately so
+        # _calc_position doesn’t count stale toasts in the height stack
         if len(self._toasts) >= _MAX_VISIBLE:
-            oldest = self._toasts[0]
+            oldest = self._toasts.pop(0)
+            self._dismissing.append(oldest)
             oldest._dismiss()
-            # It will be removed via _on_dismissed; add new one now anyway
 
         self._toasts.append(toast)
 
@@ -336,10 +355,52 @@ class ToastManager(QObject):
     # Slots
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _show_wayland_notification(toast_type: str, title: str, body: str) -> None:
+        """Send a desktop notification via ``notify-send`` on Wayland.
+
+        Maps toast types to notification urgency levels.
+        """
+        urgency_map = {
+            "success": "low",
+            "info": "normal",
+            "warning": "normal",
+            "error": "critical",
+            "copy_success": "low",
+        }
+        icon_map = {
+            "success": "dialog-information",
+            "info": "dialog-information",
+            "warning": "dialog-warning",
+            "error": "dialog-error",
+            "copy_success": "dialog-information",
+        }
+
+        urgency = urgency_map.get(toast_type, "normal")
+        icon = icon_map.get(toast_type, "dialog-information")
+
+        try:
+            subprocess.run(  # nosec B603
+                [
+                    "notify-send",
+                    "--urgency", urgency,
+                    "--icon", icon,
+                    "--app-name", "Moment",
+                    title,
+                    body,
+                ],
+                capture_output=True,
+                timeout=5,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            logger.debug("notify-send unavailable: %s", exc)
+
     def _on_dismissed(self, toast: ToastWidget) -> None:
         """Remove *toast* from the stack and re-layout remaining toasts."""
         if toast in self._toasts:
             self._toasts.remove(toast)
+        elif toast in self._dismissing:
+            self._dismissing.remove(toast)
         self._layout_all()
 
 
@@ -348,3 +409,8 @@ class ToastManager(QObject):
 # ---------------------------------------------------------------------------
 
 toast_manager = ToastManager()
+
+
+def _is_wayland() -> bool:
+    """Return ``True`` if the session is running under a Wayland compositor."""
+    return bool(os.environ.get("WAYLAND_DISPLAY", ""))

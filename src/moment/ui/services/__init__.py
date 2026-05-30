@@ -1,5 +1,7 @@
-"""UI services — global hotkey manager (kglobalaccel + QShortcut)."""
+"""UI services — async data loading + global hotkey manager."""
 
 from __future__ import annotations
 
-# Import is deferred to avoid D-Bus/import errors on module load
+from moment.ui.services.async_loader import AsyncDataLoader
+
+__all__ = ["AsyncDataLoader"]
