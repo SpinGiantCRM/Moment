@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from moment.ui.main_window import MainWindow
 
@@ -139,7 +139,10 @@ class TestMainWindowBatchAction:
         store = MagicMock()
         window = MainWindow(store=store)
         window._grid_page.refresh = MagicMock()
-        window._on_batch_action("Delete", ["clip-1", "clip-2"])
+        # Mock QMessageBox.question to return Yes so delete proceeds
+        from PyQt6.QtWidgets import QMessageBox
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+            window._on_batch_action("Delete", ["clip-1", "clip-2"])
         assert store.delete_clip.call_count == 2
         window._grid_page.refresh.assert_called_once()
 

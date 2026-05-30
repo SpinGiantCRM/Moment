@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
+import pytest
+
 from moment.ui.widgets.toast import (
     _MAX_VISIBLE,
     _TOAST_PRESETS,
@@ -150,6 +154,12 @@ class TestToastManagerInit:
 
 class TestToastManagerShow:
     """Tests for show_toast()."""
+
+    @pytest.fixture(autouse=True)
+    def _no_wayland(self) -> None:
+        """Ensure _is_wayland returns False so toasts are added to the list."""
+        with patch("moment.ui.widgets.toast._is_wayland", return_value=False):
+            yield
 
     def test_show_toast_adds_to_list(self, qtbot) -> None:
         """show_toast creates a ToastWidget and adds it."""

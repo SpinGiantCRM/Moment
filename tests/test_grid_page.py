@@ -66,14 +66,13 @@ class TestGridPageRefresh:
         assert not page._empty_widget.isHidden()
 
     def test_refresh_empty_clips(self, qapp) -> None:
-        store = MagicMock()
-        store.list_clips.return_value = []
-        page = GridPage(store=store)
-        page.refresh()
+        """Empty state shown when _on_data_ready receives an empty list."""
+        page = GridPage()
+        page._on_data_ready([])
         assert not page._empty_widget.isHidden()
 
     def test_refresh_with_clips(self, qapp) -> None:
-        """Refresh populates grid when clips exist."""
+        """Grid populated when _on_data_ready receives clips."""
         from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 
         clip = Clip(
@@ -97,15 +96,14 @@ class TestGridPageRefresh:
              patch("moment.ui.widgets.clip_delegate.ClipDelegate.sizeHint",
                    return_value=QSize(260, 190)):
             page = GridPage(store=store)
-            page.refresh()
+            page._on_data_ready([clip])
             assert page._empty_widget.isHidden()
             assert not page._list_view.isHidden()
 
     def test_refresh_store_error(self, qapp) -> None:
-        store = MagicMock()
-        store.list_clips.side_effect = RuntimeError("fail")
-        page = GridPage(store=store)
-        page.refresh()
+        """Error state shown when _on_load_error is called."""
+        page = GridPage()
+        page._on_load_error("fail")
         assert not page._error_widget.isHidden()
 
     def test_sort_combo_has_options(self, qapp) -> None:

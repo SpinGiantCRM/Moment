@@ -69,25 +69,29 @@ class TestGridPage:
     def test_refresh_empty_store(self, qapp_session: QApplication) -> None:
         from moment.ui.pages.grid_page import GridPage
 
-        store = MagicMock()
-        store.list_clips.return_value = []
+        page = GridPage()
+        page._on_data_ready([])
 
-        page = GridPage(store=store)
-        page.show()
-        page.refresh()
-
-        # Empty state should be visible
-        assert page._empty_widget.isVisible()
+        # Empty state should not be hidden
+        assert not page._empty_widget.isHidden()
 
     def test_refresh_with_clips(self, qapp_session: QApplication, mock_store: MagicMock) -> None:
+        from moment.core.models import Clip, ClipStatus
+
+        clip = Clip(
+            id="test-id", stem="test_clip",
+            source_path=__import__("pathlib").Path("/tmp/test.mkv"),
+            duration=30.0, title="Test Clip", game="CS2",
+            status=ClipStatus.DONE,
+        )
+
         from moment.ui.pages.grid_page import GridPage
 
-        page = GridPage(store=mock_store)
-        page.show()
-        page.refresh()
+        page = GridPage()
+        page._on_data_ready([clip])
 
-        # Grid should be visible, empty state hidden
-        assert page._list_view.isVisible()
+        # Grid should not be hidden after data loaded
+        assert not page._list_view.isHidden()
 
     def test_search_changes_trigger_timer(self, qapp_session: QApplication) -> None:
         from moment.ui.pages.grid_page import GridPage
@@ -115,16 +119,20 @@ class TestGridPage:
         page._search_input.setFocus()
         assert page._search_input is not None
 
-    def test_key_press_escape(self, qapp_session: QApplication) -> None:
+    def test_key_press_escape_does_not_clear_search(self, qapp_session: QApplication) -> None:
+        """Escape key does not clear search in GridPage directly
+        (handled by MainWindow global shortcut instead).
+        """
         from PyQt6.QtTest import QTest
 
         from moment.ui.pages.grid_page import GridPage
 
         page = GridPage()
-        # QTest.keyPress + text() don't depend on visibility, so no show() needed
         page._search_input.setText("test")
         QTest.keyPress(page, Qt.Key.Key_Escape)
-        assert page._search_input.text() == ""
+        # GridPage's keyPressEvent defers Escape to MainWindow,
+        # so search text should remain unchanged
+        assert page._search_input.text() == "test"
 
     def test_show_empty_message(self, qapp_session: QApplication) -> None:
         from moment.ui.pages.grid_page import GridPage

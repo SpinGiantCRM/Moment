@@ -192,15 +192,17 @@ class TestAppManagerInitMocks:
         mock_tray.return_value = mock_tray_inst
 
         # Mock QApplication to avoid real GUI creation
-        with patch("moment.ui.app.QApplication"):
-            with patch("moment.ui.app.stylesheet", return_value=""):
-                with patch("moment.ui.app.app_font", return_value=MagicMock()):
-                    with patch("moment.ui.app.load_icon", return_value=MagicMock()):
-                        with patch("moment.ui.app.sys.excepthook"):
-                            mgr.init()
-                            # settings_requested should be connected
-                            # We verify tray was created
-                            assert mock_tray.called
+        # Also mock _detect_high_contrast to avoid MagicMock vs int comparison
+        with patch("moment.ui.app.QApplication"), \
+             patch("moment.ui.app.stylesheet", return_value=""), \
+             patch("moment.ui.app.app_font", return_value=MagicMock()), \
+             patch("moment.ui.app.load_icon", return_value=MagicMock()), \
+             patch("moment.ui.app.sys.excepthook"), \
+             patch.object(AppManager, "_detect_high_contrast", return_value=False):
+            mgr.init()
+            # settings_requested should be connected
+            # We verify tray was created
+            assert mock_tray.called
 
 
 class TestAppManagerToggleWindow:
@@ -267,8 +269,10 @@ class TestAppManagerInitServices:
     @patch("moment.core.config.Config")
     @patch("moment.core.store.Store")
     @patch("moment.utils.logging.setup_logging")
+    @patch("moment.ui.app.AppManager._init_gsr")
+    @patch("moment.ui.app.AppManager._init_pipeline")
     def test_init_services_success(
-        self, mock_log, mock_store_cls, mock_config_cls,
+        self, mock_pipeline, mock_gsr, mock_log, mock_store_cls, mock_config_cls,
     ):
         from moment.ui.app import AppManager, _parse_args
         mgr = AppManager(_parse_args([]))

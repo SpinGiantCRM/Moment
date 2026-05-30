@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
+from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtWidgets import QMessageBox
 
 from moment.core.models import EditProfile
 from moment.ui.editor.editor_window import EditorWindow
@@ -88,10 +90,15 @@ class TestEditorWindowAutoSave:
 class TestEditorWindowClose:
     def test_close_event_saves_and_emits(self, qapp, mock_store):
         window = EditorWindow(clip_id="test", store=mock_store)
+        # Make window dirty first so closeEvent triggers save
+        window._dirty = True
         fired = []
         window.close_requested.connect(lambda: fired.append(True))
-        from PyQt6.QtGui import QCloseEvent
-        window.closeEvent(QCloseEvent())
+        with patch(
+            "moment.ui.editor.editor_window.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.Save,
+        ):
+            window.closeEvent(QCloseEvent())
         mock_store.save_edit_profile.assert_called_once()
         assert len(fired) == 1
 

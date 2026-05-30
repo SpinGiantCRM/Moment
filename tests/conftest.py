@@ -15,6 +15,10 @@ from PyQt6.QtWidgets import QApplication
 
 from moment.core.store import Store
 
+# Force offscreen platform for all tests (prevents Wayland/X11 crashes
+# in headless/CI environments when tests create QApplication).
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
 # ---------------------------------------------------------------------------
 # Test Fernet key for webhook tests (bypasses keyring requirement)
 # ---------------------------------------------------------------------------
@@ -39,7 +43,6 @@ def _make_test_conn(db_path: str) -> sqlite3.Connection:
 @pytest.fixture(scope="session")
 def qapp() -> QApplication:
     """Session-scoped QApplication for UI tests using offscreen platform."""
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance()
     if app is None:
         app = QApplication([])

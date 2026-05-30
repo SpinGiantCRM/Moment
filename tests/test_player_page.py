@@ -103,10 +103,9 @@ class TestPlayerPageLoad:
         page.load_clip("any-id")  # should not raise
 
     def test_load_clip_not_found(self, qapp) -> None:
-        store = MagicMock()
-        store.get_clip.return_value = None
-        page = PlayerPage(store=store)
-        page.load_clip("missing-id")
+        """Empty label shown when _on_data_ready receives None."""
+        page = PlayerPage()
+        page._on_data_ready(None)
         assert not page._empty_label.isHidden()
 
     def test_load_clip_with_valid_data(self, qapp) -> None:
@@ -130,7 +129,7 @@ class TestPlayerPageLoad:
         page._player.setSource = MagicMock()
         page._player.play = MagicMock()
 
-        page.load_clip("player-1")
+        page._on_data_ready(clip)
 
         page._player.stop.assert_called_once()
         page._player.play.assert_called_once()
@@ -138,8 +137,7 @@ class TestPlayerPageLoad:
         assert not page._video_widget.isHidden()
 
     def test_load_clip_error(self, qapp) -> None:
-        store = MagicMock()
-        store.get_clip.side_effect = RuntimeError("fail")
-        page = PlayerPage(store=store)
-        page.load_clip("any-id")
+        """Empty label shown when _on_load_error is called."""
+        page = PlayerPage()
+        page._on_load_error("fail")
         assert not page._empty_label.isHidden()
