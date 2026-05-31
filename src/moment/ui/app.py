@@ -9,19 +9,23 @@ the QApplication with the dark QSS theme.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import os
 import sys
+import threading
 import traceback
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QSettings, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import QApplication, QStyleFactory
 
 from moment import __version__
+from moment.core.updater import check_for_updates
 from moment.ui.resources import app_font, load_icon, stylesheet
 from moment.ui.tray import TrayIcon
 from moment.utils.subprocess import ExternalCommandRunner
@@ -163,6 +167,9 @@ class AppManager(QObject):
     # Initialisation
     # ------------------------------------------------------------------
 
+    # ---- Update checker signal (thread-safe bridge for background thread → UI) ----
+    _update_check_result = pyqtSignal(object)
+
     def __init__(self, args: argparse.Namespace | None = None) -> None:
         """Args:
             args: Parsed CLI arguments.  If ``None``, parses ``sys.argv``.
@@ -181,6 +188,7 @@ class AppManager(QObject):
         self._overlay = None
         self._game_monitor = None
         self._bookmarker = None
+        self._update_timer: QTimer | None = None
 
     @property
     def app(self) -> QApplication | None:
@@ -248,6 +256,9 @@ class AppManager(QObject):
         self._gsr_import_success.connect(self._on_gsr_import_toast_success)
         self._gsr_import_error.connect(self._on_gsr_import_toast_error)
 
+        # Update checker signal
+        self._update_check_result.connect(self._on_update_check_result)
+
         # --- Init core services (best-effort — GUI works without them) ---
         self._init_services()
 
@@ -266,6 +277,9 @@ class AppManager(QObject):
         # --- Post-init ---
         if self._args.settings:
             self._on_settings()
+
+        # Start auto-update checker (async, non-blocking)
+        self._start_update_checker()
 
         logger.info("Moment v%s ready (PID %d)", __version__, os.getpid())
 
@@ -989,6 +1003,82 @@ class AppManager(QObject):
             toast_manager.show_toast(toast_type, message)
         except Exception as exc:
             logger.exception("EventBus toast error: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Auto-update checker
+    # ------------------------------------------------------------------
+
+    def _start_update_checker(self) -> None:
+        """Check PyPI for updates (non-blocking) and schedule periodic re-checks.
+
+        Uses QSettings to cache the last-check timestamp so checks are
+        at most once per 24 h.  The async HTTP request runs in a worker
+        thread so the UI never blocks.
+        """
+        settings = QSettings("moment", "moment")
+        last_check = settings.value("update/last_check", 0, type=int)
+        now_sec = int(datetime.now(timezone.utc).timestamp())
+
+        # Only check once per 24 h
+        if now_sec - last_check < 86400:
+            logger.debug("Update check skipped — last check was < 24 h ago")
+        else:
+            # Run the async check in the background; signal result to UI thread
+            async def _check() -> None:
+                try:
+                    result = await check_for_updates(__version__)
+                    self._update_check_result.emit(result)
+                except Exception as exc:
+                    logger.debug("Update check failed: %s", exc)
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # No running event loop — schedule via QTimer
+                def _run_check() -> None:
+                    asyncio.run(_check())
+                QTimer.singleShot(0, _run_check)
+            else:
+                asyncio.ensure_future(_check())
+
+        # Schedule next check in 24 h
+        if self._update_timer is None:
+            self._update_timer = QTimer(self)
+            self._update_timer.setInterval(24 * 60 * 60 * 1000)  # 24 h in ms
+            self._update_timer.timeout.connect(self._start_update_checker)
+            self._update_timer.start()
+
+    def _on_update_check_result(self, result: object) -> None:
+        """Handle the result of an update check — show a toast if newer."""
+        if not isinstance(result, dict):
+            return
+
+        # Persist last-check timestamp regardless of outcome
+        try:
+            settings = QSettings("moment", "moment")
+            settings.setValue(
+                "update/last_check",
+                int(datetime.now(timezone.utc).timestamp()),
+            )
+        except Exception:
+            pass
+
+        available = bool(result.get("available", False))
+        if not available:
+            return
+
+        latest = result.get("latest_version", "")
+        current = result.get("current_version", __version__)
+
+        try:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(
+                "info",
+                f"Update available: v{latest}",
+                f"You have v{current} — download at pypi.org/project/moment-clips",
+            )
+        except Exception as exc:
+            logger.exception("Toast error in _on_update_check_result: %s", exc)
 
     # ------------------------------------------------------------------
     # Game state → Pipeline pause/resume
