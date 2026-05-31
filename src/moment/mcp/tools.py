@@ -29,7 +29,8 @@ from pathlib import Path
 from typing import Any
 
 from moment.core.config import Config
-from moment.core.models import ClipStatus, GameProfile
+from moment.core.models import ClipStatus, GameProfile, Task, TaskKind
+from moment.core.pipeline import Pipeline
 from moment.core.store import Store
 from moment.utils.system import validate_arg
 
@@ -39,6 +40,7 @@ _HOME = os.path.expanduser("~")
 
 # Lazy store singleton — created on first tool invocation
 _store: Store | None = None
+_pipeline: Pipeline | None = None
 
 _WEBHOOK_MIN_INTERVAL: float = 60.0  # seconds between test_webhook calls per URL
 
@@ -50,6 +52,19 @@ def _get_store() -> Store:
         config = Config()
         _store = Store(config=config)
     return _store
+
+
+def _get_pipeline() -> Pipeline:
+    """Return the global (lazy) Pipeline singleton.
+
+    Pipeline workers are started on first access.
+    """
+    global _pipeline
+    if _pipeline is None:
+        config = Config()
+        _pipeline = Pipeline(store=_get_store(), config=config)
+        _pipeline.start()
+    return _pipeline
 
 
 # ---------------------------------------------------------------------------
@@ -306,8 +321,17 @@ def enqueue_encode(clip_id: str) -> dict[str, str]:
     clip = store.get_clip(clip_id)
     if clip is None:
         return {"error": f"Clip {clip_id} not found"}
-    logger.info("Encode requested for %s via MCP", clip_id)
-    return {"status": "queued", "clip_id": clip_id}
+
+    pipeline = _get_pipeline()
+    task = Task(
+        id=str(_uuid.uuid4()),
+        type=TaskKind.ENCODE,
+        priority=2,
+        payload={"clip_id": clip_id},
+    )
+    pipeline.enqueue(task)
+    logger.info("Encode task %s enqueued for %s via MCP", task.id, clip_id)
+    return {"status": "queued", "clip_id": clip_id, "task_id": task.id}
 
 
 def enqueue_upload(clip_id: str) -> dict[str, str]:
@@ -322,8 +346,17 @@ def enqueue_upload(clip_id: str) -> dict[str, str]:
         return {"error": f"Clip {clip_id} not found"}
     if not clip.encoded_path:
         return {"error": "Clip has no encoded file to upload"}
-    logger.info("Upload requested for %s via MCP", clip_id)
-    return {"status": "queued", "clip_id": clip_id}
+
+    pipeline = _get_pipeline()
+    task = Task(
+        id=str(_uuid.uuid4()),
+        type=TaskKind.UPLOAD,
+        priority=1,
+        payload={"clip_id": clip_id, "path": str(clip.encoded_path)},
+    )
+    pipeline.enqueue(task)
+    logger.info("Upload task %s enqueued for %s via MCP", task.id, clip_id)
+    return {"status": "queued", "clip_id": clip_id, "task_id": task.id}
 
 
 def save_game_profile(profile_json: str) -> dict[str, str]:
