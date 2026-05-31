@@ -443,7 +443,7 @@ class StatsPage(QWidget):
         title_row.addWidget(title)
         title_row.addStretch()
 
-        self._refresh_btn = QPushButton("↻ Refresh")
+        self._refresh_btn = QPushButton("Refresh")
         self._refresh_btn.clicked.connect(self.refresh)
         title_row.addWidget(self._refresh_btn)
         content_layout.addLayout(title_row)
@@ -454,10 +454,10 @@ class StatsPage(QWidget):
         # --- Metric cards ---
         metrics_grid = QGridLayout()
         metrics_grid.setSpacing(12)
-        self._card_total = _MetricCard("🎬", "Total Clips")
-        self._card_storage = _MetricCard("💾", "Storage Used")
-        self._card_today = _MetricCard("📤", "Uploads Today")
-        self._card_week = _MetricCard("📅", "Uploads This Week")
+        self._card_total = _MetricCard("—", "Total Clips")
+        self._card_storage = _MetricCard("—", "Storage Used")
+        self._card_today = _MetricCard("—", "Uploads Today")
+        self._card_week = _MetricCard("—", "Uploads This Week")
         metrics_grid.addWidget(self._card_total, 0, 0)
         metrics_grid.addWidget(self._card_storage, 0, 1)
         metrics_grid.addWidget(self._card_today, 1, 0)

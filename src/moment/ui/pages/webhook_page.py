@@ -69,7 +69,7 @@ class WebhookPage(QWidget):
         title_row.addWidget(title)
         title_row.addStretch()
 
-        self._refresh_btn = QPushButton("↻ Refresh")
+        self._refresh_btn = QPushButton("Refresh")
         self._refresh_btn.clicked.connect(self.refresh)
         title_row.addWidget(self._refresh_btn)
         layout.addLayout(title_row)
@@ -316,7 +316,7 @@ class WebhookPage(QWidget):
                 url_text = url_text[:47] + "..."
             self._table.setItem(i, 1, QTableWidgetItem(url_text))
 
-            enabled_item = QTableWidgetItem("✅" if wh["enabled"] else "⏸")
+            enabled_item = QTableWidgetItem("On" if wh["enabled"] else "Off")
             self._table.setItem(i, 2, enabled_item)
 
             actions_widget = QWidget()
@@ -460,7 +460,7 @@ class WebhookPage(QWidget):
             ts = entry.delivered_at.strftime("%Y-%m-%d %H:%M:%S") if entry.delivered_at else "—"
             self._log_table.setItem(i, 0, QTableWidgetItem(ts))
 
-            status_item = QTableWidgetItem("✅" if entry.success else "❌")
+            status_item = QTableWidgetItem("Success" if entry.success else "Error")
             self._log_table.setItem(i, 1, status_item)
 
             self._log_table.setItem(i, 2, QTableWidgetItem(str(entry.status_code)))

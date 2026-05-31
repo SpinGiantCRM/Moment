@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 _TOAST_PRESETS: dict[str, dict[str, str | int]] = {
     "success":      {"accent": "--accent-green",  "icon": "✓", "duration_ms": 5000},
     "info":         {"accent": "--accent-blue",   "icon": "ℹ", "duration_ms": 4000},
-    "warning":      {"accent": "--accent-orange", "icon": "⚠", "duration_ms": 6000},
+    "warning":      {"accent": "--accent-orange", "icon": "!", "duration_ms": 6000},
     "error":        {"accent": "--accent-red",    "icon": "✗", "duration_ms": 8000},
     "copy_success": {"accent": "--accent-green",  "icon": "✓", "duration_ms": 1500},
 }

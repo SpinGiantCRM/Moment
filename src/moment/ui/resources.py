@@ -42,25 +42,25 @@ _ICONS = _ASSETS / "icons"
 _COLOUR_TOKENS: dict[str, str] = {
     # Backgrounds
     "--bg-window":          "#0f0f0f",
-    "--bg-surface":         "#1a1a1a",
+    "--bg-surface":         "#1e1e1e",
     "--bg-elevated":        "#252525",
     "--bg-inset":           "#141414",
-    "--bg-hover":           "#2e2e2e",
+    "--bg-hover":           "#2d2d2d",
     "--bg-active":          "#3a3a3a",
     "--bg-sidebar":         "#121212",
 
     # Borders
     "--border-window":      "#1f1f1f",
     "--border-menu":        "#3a3a3a",
-    "--border-focus":       "#5865f2",
+    "--border-focus":       "#4a9eff",
 
     # Text
-    "--text-primary":       "#e4e4e4",
+    "--text-primary":       "#e0e0e0",
     "--text-secondary":     "#999999",
     "--text-muted":         "#666666",
 
     # Accents
-    "--accent-blue":        "#5865f2",
+    "--accent-blue":        "#4a9eff",
     "--accent-green":       "#3ba55c",
     "--accent-orange":      "#faa61a",
     "--accent-red":         "#ed4245",

@@ -147,7 +147,7 @@ class PlayerPage(QWidget):
         transport_layout.setContentsMargins(12, 6, 12, 6)
         transport_layout.setSpacing(8)
 
-        self._play_btn = QPushButton("▶")
+        self._play_btn = QPushButton("Play")
         self._play_btn.setFixedSize(36, 36)
         self._play_btn.setStyleSheet(
             "QPushButton {"
@@ -188,7 +188,7 @@ class PlayerPage(QWidget):
         )
         transport_layout.addWidget(self._volume_slider)
 
-        self._mute_btn = QPushButton("🔊")
+        self._mute_btn = QPushButton("Mute")
         self._mute_btn.setFixedSize(32, 32)
         self._mute_btn.setStyleSheet(
             "QPushButton {"
@@ -265,7 +265,7 @@ class PlayerPage(QWidget):
         url_row.addWidget(copy_btn)
 
         # --- Back button ---
-        back_btn = QPushButton("← Back")
+        back_btn = QPushButton("Back")
         back_btn.setStyleSheet(
             "QPushButton {"
             "   background-color: transparent;"
@@ -282,7 +282,7 @@ class PlayerPage(QWidget):
         back_btn.clicked.connect(self.back_requested.emit)
 
         # --- Edit button ---
-        edit_btn = QPushButton("✎ Edit")
+        edit_btn = QPushButton("Edit")
         edit_btn.setToolTip("Open in advanced editor")
         edit_btn.setStyleSheet(
             "QPushButton {"
@@ -432,7 +432,7 @@ class PlayerPage(QWidget):
         r2_url = self._current_clip.get("r2_url", "")
         self._url_input.setText(r2_url)
 
-        self._play_btn.setText("⏸")
+        self._play_btn.setText("Pause")
         logger.info("Loaded clip: %s", self._current_clip["title"])
 
     def _on_load_error(self, error: str) -> None:
@@ -494,16 +494,16 @@ class PlayerPage(QWidget):
         """Toggle between play and pause."""
         if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.pause()
-            self._play_btn.setText("▶")
+            self._play_btn.setText("Play")
         else:
             self._player.play()
-            self._play_btn.setText("⏸")
+            self._play_btn.setText("Pause")
 
     def _toggle_mute(self) -> None:
         """Toggle mute on the audio output."""
         muted = self._audio_output.isMuted()
         self._audio_output.setMuted(not muted)
-        self._mute_btn.setText("🔇" if not muted else "🔊")
+        self._mute_btn.setText("Unmute" if not muted else "Mute")
 
     def _copy_url(self) -> None:
         """Copy the R2 URL to the clipboard."""

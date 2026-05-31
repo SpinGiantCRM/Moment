@@ -177,7 +177,7 @@ class AudioMixer(QWidget):
         )
         game_row.addWidget(self._game_value_label)
 
-        self._game_mute_btn = QPushButton("🔊")
+        self._game_mute_btn = QPushButton("Mute")
         self._game_mute_btn.setFixedSize(_BTN_SIZE, _BTN_SIZE)
         self._game_mute_btn.setToolTip("Mute game audio")
         self._game_mute_btn.clicked.connect(self._toggle_game_mute)
@@ -212,7 +212,7 @@ class AudioMixer(QWidget):
         )
         mic_row.addWidget(self._mic_value_label)
 
-        self._mic_mute_btn = QPushButton("🎤")
+        self._mic_mute_btn = QPushButton("Mute")
         self._mic_mute_btn.setFixedSize(_BTN_SIZE, _BTN_SIZE)
         self._mic_mute_btn.setToolTip("Mute mic audio")
         self._mic_mute_btn.clicked.connect(self._toggle_mic_mute)
@@ -241,23 +241,23 @@ class AudioMixer(QWidget):
     def _toggle_game_mute(self) -> None:
         self._game_muted = not self._game_muted
         if self._game_muted:
-            self._game_mute_btn.setText("🔇")
+            self._game_mute_btn.setText("Unmute")
             self._game_mute_btn.setStyleSheet(
                 f"color: {color('--accent-red')}; font-size: 14px;"
             )
         else:
-            self._game_mute_btn.setText("🔊")
+            self._game_mute_btn.setText("Mute")
             self._game_mute_btn.setStyleSheet("")
         self._emit_volumes()
 
     def _toggle_mic_mute(self) -> None:
         self._mic_muted = not self._mic_muted
         if self._mic_muted:
-            self._mic_mute_btn.setText("🔇")
+            self._mic_mute_btn.setText("Unmute")
             self._mic_mute_btn.setStyleSheet(
                 f"color: {color('--accent-red')}; font-size: 14px;"
             )
         else:
-            self._mic_mute_btn.setText("🎤")
+            self._mic_mute_btn.setText("Mute")
             self._mic_mute_btn.setStyleSheet("")
         self._emit_volumes()

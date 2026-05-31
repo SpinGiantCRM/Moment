@@ -1,9 +1,10 @@
-"""Main window — QMainWindow with left sidebar nav, page stack, and status bar.
+"""Main window — QMainWindow with left sidebar nav, top toolbar, page stack, and status bar.
 
 Manages navigation between pages (Grid, Player, Stats, Trash, Webhooks)
 via a ``QStackedWidget``.  The left sidebar provides icon+label nav
-buttons inspired by Medal.tv's desktop aesthetic.  The status bar
-shows pipeline state.
+buttons inspired by Medal.tv's desktop aesthetic.  A top toolbar panel
+(ONLYOFFICE-style) shows context-sensitive action groups above the page
+stack.  The status bar shows pipeline state.
 """
 
 from __future__ import annotations
@@ -19,10 +20,12 @@ from PyQt6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -49,14 +52,14 @@ _PAGE_STATS = 3
 _PAGE_TRASH = 4
 _PAGE_WEBHOOK = 5
 
-# Sidebar navigation items: (icon, label, page_index)
-_NAV_ITEMS: list[tuple[str, str, int]] = [
-    ("📁", "Library", _PAGE_GRID),
-    ("⏺", "Record", _PAGE_RECORD),
-    ("▶", "Player", _PAGE_PLAYER),
-    ("📊", "Stats", _PAGE_STATS),
-    ("🗑", "Trash", _PAGE_TRASH),
-    ("🔗", "Webhooks", _PAGE_WEBHOOK),
+# Sidebar navigation items: (label, page_index) — no emoji, text-only
+_NAV_ITEMS: list[tuple[str, int]] = [
+    ("Library", _PAGE_GRID),
+    ("Record", _PAGE_RECORD),
+    ("Player", _PAGE_PLAYER),
+    ("Stats", _PAGE_STATS),
+    ("Trash", _PAGE_TRASH),
+    ("Webhooks", _PAGE_WEBHOOK),
 ]
 
 
@@ -133,6 +136,10 @@ class MainWindow(QMainWindow):
         self._processing_banner.setVisible(False)
         right_area.addWidget(self._processing_banner)
 
+        # Top toolbar panel (ONLYOFFICE-style ribbon)
+        self._toolbar_panel = self._build_toolbar_panel()
+        right_area.addWidget(self._toolbar_panel)
+
         # Page stack
         self._stack = QStackedWidget()
         right_area.addWidget(self._stack, stretch=1)
@@ -183,8 +190,8 @@ class MainWindow(QMainWindow):
         banner_layout.setContentsMargins(16, 8, 16, 8)
         banner_layout.setSpacing(8)
 
-        icon_label = QLabel("⚠")
-        icon_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold;")
+        icon_label = QLabel("!")
+        icon_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold; background: transparent;")
         banner_layout.addWidget(icon_label)
 
         msg_label = QLabel("Service unavailable — database could not be opened.  "
@@ -254,12 +261,12 @@ class MainWindow(QMainWindow):
             _PAGE_WEBHOOK: "Webhooks",
         }
 
-        for icon, label, idx in _NAV_ITEMS:
-            # Build a two-line button: icon (big) + label (small)
-            btn = QPushButton(f"{icon}\n{label}")
+        for label, idx in _NAV_ITEMS:
+            # Text-only button (no emoji icons)
+            btn = QPushButton(label)
             btn.setObjectName("sidebarNav")
             btn.setCheckable(True)
-            btn.setFixedSize(68, 52)
+            btn.setFixedSize(68, 36)
             btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             btn.clicked.connect(lambda checked, i=idx: self._switch_page(i))
             btn.setAccessibleName(a11y_labels.get(idx, label))
@@ -269,8 +276,8 @@ class MainWindow(QMainWindow):
 
         # Tab order: nav buttons in a logical chain
         for i in range(len(_NAV_ITEMS) - 1):
-            _, _, curr_idx = _NAV_ITEMS[i]
-            _, _, next_idx = _NAV_ITEMS[i + 1]
+            _, curr_idx = _NAV_ITEMS[i]
+            _, next_idx = _NAV_ITEMS[i + 1]
             self.setTabOrder(
                 self._nav_buttons[curr_idx],
                 self._nav_buttons[next_idx],
@@ -328,6 +335,158 @@ class MainWindow(QMainWindow):
         self._stack.addWidget(self._webhook_page)
 
     # ==================================================================
+    # Top toolbar panel (ONLYOFFICE-style)
+    # ==================================================================
+
+    def _build_toolbar_panel(self) -> QWidget:
+        """Build the context-sensitive top toolbar panel."""
+        panel = QFrame()
+        panel.setObjectName("toolbarPanel")
+        panel.setStyleSheet("""
+            QFrame#toolbarPanel {
+                background-color: var(--bg-surface);
+                border-bottom: 1px solid var(--border-window);
+                padding: 6px 12px;
+                min-height: 40px;
+            }
+        """)
+        self._toolbar_layout = QHBoxLayout(panel)
+        self._toolbar_layout.setContentsMargins(12, 4, 12, 4)
+        self._toolbar_layout.setSpacing(8)
+
+        # Global search bar (always visible, filters grid when active)
+        self._toolbar_search = QLineEdit()
+        self._toolbar_search.setPlaceholderText("Search clips…")
+        self._toolbar_search.setClearButtonEnabled(True)
+        self._toolbar_search.setFixedWidth(240)
+        self._toolbar_search.setVisible(False)
+        self._toolbar_layout.addWidget(self._toolbar_search)
+
+        # Sort dropdown
+        self._toolbar_sort = QComboBox()
+        self._toolbar_sort.addItems(["Newest first", "Oldest first", "Largest file",
+                                      "Smallest file", "Longest", "Shortest", "A-Z", "Z-A"])
+        self._toolbar_sort.setVisible(False)
+        self._toolbar_layout.addWidget(self._toolbar_sort)
+
+        # Action group separator
+        self._toolbar_sep = QFrame()
+        self._toolbar_sep.setFrameShape(QFrame.Shape.VLine)
+        self._toolbar_sep.setStyleSheet("color: var(--border-menu);")
+        self._toolbar_sep.setVisible(False)
+        self._toolbar_layout.addWidget(self._toolbar_sep)
+
+        # Page-specific action buttons container
+        self._toolbar_actions: list[QPushButton] = []
+
+        self._toolbar_layout.addStretch()
+        return panel
+
+    def _clear_toolbar_actions(self) -> None:
+        """Remove all page-specific toolbar action buttons."""
+        for btn in self._toolbar_actions:
+            self._toolbar_layout.removeWidget(btn)
+            btn.deleteLater()
+        self._toolbar_actions.clear()
+
+    def _add_toolbar_action(self, text: str, callback, obj_name: str = "") -> QPushButton:
+        """Add a button to the toolbar and return it."""
+        btn = QPushButton(text)
+        if obj_name:
+            btn.setObjectName(obj_name)
+        btn.clicked.connect(callback)
+        # Insert before the stretch
+        self._toolbar_layout.insertWidget(
+            self._toolbar_layout.count() - 1, btn,
+        )
+        self._toolbar_actions.append(btn)
+        return btn
+
+    def _update_toolbar(self, index: int) -> None:
+        """Update the toolbar panel for the given page index."""
+        self._clear_toolbar_actions()
+
+        if index == _PAGE_GRID:
+            self._toolbar_search.setVisible(True)
+            self._toolbar_sort.setVisible(True)
+            self._toolbar_sep.setVisible(True)
+
+            # Wire search directly to grid proxy filter (bypass debounce since
+            # toolbar text IS the authoritative search input)
+            try:
+                self._toolbar_search.textChanged.disconnect()
+            except TypeError:
+                pass
+            self._toolbar_search.textChanged.connect(
+                self._grid_page._proxy_model.set_filter_text
+            )
+
+            # Wire sort to grid page
+            try:
+                self._toolbar_sort.currentTextChanged.disconnect()
+            except TypeError:
+                pass
+            self._toolbar_sort.currentTextChanged.connect(
+                self._grid_page._on_sort_changed
+            )
+
+            # Refresh button
+            self._add_toolbar_action(
+                "Refresh", self._grid_page.refresh,
+            )
+
+        elif index == _PAGE_RECORD:
+            self._toolbar_search.setVisible(False)
+            self._toolbar_sort.setVisible(False)
+            self._toolbar_sep.setVisible(False)
+
+            self._add_toolbar_action(
+                "Save 15s", lambda: self._recording_page.save_clip.emit(15),
+            )
+            self._add_toolbar_action(
+                "Save 30s", lambda: self._recording_page.save_clip.emit(30),
+            )
+            self._add_toolbar_action(
+                "Save 60s", lambda: self._recording_page.save_clip.emit(60),
+            )
+
+        elif index == _PAGE_PLAYER:
+            self._toolbar_search.setVisible(False)
+            self._toolbar_sort.setVisible(False)
+            self._toolbar_sep.setVisible(False)
+
+            self._add_toolbar_action(
+                "Back", self._player_page.back_requested.emit,
+            )
+
+        elif index == _PAGE_STATS:
+            self._toolbar_search.setVisible(False)
+            self._toolbar_sort.setVisible(False)
+            self._toolbar_sep.setVisible(False)
+
+            self._add_toolbar_action(
+                "Refresh", self._stats_page.refresh,
+            )
+
+        elif index == _PAGE_TRASH:
+            self._toolbar_search.setVisible(False)
+            self._toolbar_sort.setVisible(False)
+            self._toolbar_sep.setVisible(False)
+
+            self._add_toolbar_action(
+                "Refresh", self._trash_page.refresh,
+            )
+
+        elif index == _PAGE_WEBHOOK:
+            self._toolbar_search.setVisible(False)
+            self._toolbar_sort.setVisible(False)
+            self._toolbar_sep.setVisible(False)
+
+            self._add_toolbar_action(
+                "Refresh", self._webhook_page.refresh,
+            )
+
+    # ==================================================================
     # Page navigation
     # ==================================================================
 
@@ -338,6 +497,9 @@ class MainWindow(QMainWindow):
             btn.setChecked(i == index)
 
         self._stack.setCurrentIndex(index)
+
+        # Update toolbar for the new page
+        self._update_toolbar(index)
 
         # Refresh pages when switching to them
         if index == _PAGE_RECORD:
@@ -944,7 +1106,7 @@ class MainWindow(QMainWindow):
                 return
             if player._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
                 player._player.pause()
-                player._play_btn.setText("▶")
+                player._play_btn.setText("Play")
                 return
             # Check if editor window is open
             if player._editor is not None and player._editor.isVisible():
@@ -953,8 +1115,8 @@ class MainWindow(QMainWindow):
 
         # 3. Grid page: clear search first, then exit selection mode
         if current_idx == _PAGE_GRID and self._grid_page is not None:
-            if self._grid_page._search_input.text():
-                self._grid_page._search_input.clear()
+            if self._toolbar_search.text():
+                self._toolbar_search.clear()
                 return
             if self._grid_page._batch_bar.isVisible():
                 self._grid_page._exit_selection_mode()
@@ -964,8 +1126,9 @@ class MainWindow(QMainWindow):
         self._switch_page(_PAGE_GRID)
 
     def _focus_grid_search(self) -> None:
-        """Set keyboard focus on the grid search bar after the window is shown."""
-        self._grid_page.focus_search()
+        """Set keyboard focus on the toolbar search bar."""
+        self._toolbar_search.setFocus()
+        self._toolbar_search.selectAll()
 
     def focus_search(self) -> None:
         """Convenience alias for ``_focus_grid_search``."""

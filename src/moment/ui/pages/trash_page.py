@@ -345,7 +345,7 @@ class TrashPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        icon = QLabel("🗑")
+        icon = QLabel("Trash")
         icon.setObjectName("pageTitle")
         icon.setStyleSheet("font-size: 48px;")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)

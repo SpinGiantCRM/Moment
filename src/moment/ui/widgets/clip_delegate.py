@@ -100,7 +100,7 @@ def _placeholder_thumb(
             painter.drawText(
                 QRectF(0, 0, size.width(), size.height() - 16),
                 Qt.AlignmentFlag.AlignCenter,
-                "🎬",
+                "—",
             )
 
         painter.end()
@@ -278,7 +278,7 @@ class ClipDelegate(QStyledItemDelegate):
             font3 = painter.font()
             font3.setPointSize(8)
             painter.setFont(font3)
-            painter.drawText(status_rect, Qt.AlignmentFlag.AlignLeft, "✎ Edited")
+            painter.drawText(status_rect, Qt.AlignmentFlag.AlignLeft, "Edited")
 
         painter.restore()
 

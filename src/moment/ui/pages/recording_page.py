@@ -165,7 +165,7 @@ class RecordingPage(QWidget):
         layout.addWidget(subtitle)
 
         # Clean pill-shaped Record button (Medal-inspired)
-        self._record_btn = QPushButton("●  Start Recording")
+        self._record_btn = QPushButton("Start Recording")
         self._record_btn.setFixedSize(200, 48)
         self._record_btn.setStyleSheet(
             "QPushButton {"
@@ -276,7 +276,7 @@ class RecordingPage(QWidget):
         btn_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
         btn_row.setSpacing(12)
 
-        self._stop_btn = QPushButton("■  Stop")
+        self._stop_btn = QPushButton("Stop")
         self._stop_btn.setFixedSize(120, 40)
         self._stop_btn.setStyleSheet(
             "QPushButton {"

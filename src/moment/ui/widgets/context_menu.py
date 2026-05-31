@@ -101,7 +101,7 @@ class ContextMenuBuilder:
 
         # --- Row 5: Protect, Delete ---
         protect_text = (
-            "🔒 Unprotect" if self._clip.protect_from_retention else "Protect from Retention"
+            "Unprotect" if self._clip.protect_from_retention else "Protect from Retention"
         )
         protect_action = self._add_action(menu, protect_text)
         protect_action.triggered.connect(lambda: self.protect_triggered.emit(self._clip.id))

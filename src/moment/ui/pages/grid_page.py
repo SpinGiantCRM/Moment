@@ -208,7 +208,7 @@ class GridPage(QWidget):
         self._sort_combo.currentTextChanged.connect(self._on_sort_changed)
 
         # --- Refresh button ---
-        self._refresh_btn = QPushButton("↻")
+        self._refresh_btn = QPushButton("Refresh")
         self._refresh_btn.setToolTip("Refresh clip list")
         self._refresh_btn.clicked.connect(self.refresh)
         self._refresh_btn.setFixedSize(28, 28)
@@ -281,8 +281,11 @@ class GridPage(QWidget):
         layout.setContentsMargins(16, 12, 16, 16)
         layout.setSpacing(8)
 
-        # Title row (search + sort toolbar, no page title since sidebar has it)
+        # Title row (search + sort toolbar moved to main window ONLYOFFICE-style panel)
+        # The toolbar_island is kept but hidden — the main window now provides
+        # a shared top toolbar panel with search, sort, and page actions.
         toolbar_row = QHBoxLayout()
+        toolbar.setVisible(False)  # Hidden: now in main window toolbar panel
         toolbar_row.addWidget(toolbar)
         toolbar_row.addStretch()
         layout.addLayout(toolbar_row)
@@ -486,7 +489,7 @@ class GridPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        icon = QLabel("🎬")
+        icon = QLabel("—")
         icon.setObjectName("pageTitle")
         icon.setStyleSheet("font-size: 48px;")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -517,7 +520,7 @@ class GridPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        icon = QLabel("⚠")
+        icon = QLabel("!")
         icon.setObjectName("pageTitle")
         icon.setStyleSheet("font-size: 48px; color: var(--accent-red);")
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
