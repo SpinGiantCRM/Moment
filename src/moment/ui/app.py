@@ -556,6 +556,12 @@ class AppManager(QObject):
 
             window = MainWindow(self._store)
 
+            # Pass core service references for action handlers
+            window._pipeline = self._pipeline
+            window._gsr_controller = self._gsr_controller
+            window._config = self._config
+            window._app_manager = self
+
             # Load minimize-to-tray preference
             minimize_tray = True
             if self._config is not None:

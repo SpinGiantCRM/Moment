@@ -8,13 +8,17 @@ a search bar, and sort controls.  The status bar shows pipeline state.
 from __future__ import annotations
 
 import logging
+import os
+import shutil
+import uuid
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import (
     QApplication,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -29,7 +33,10 @@ from PyQt6.QtWidgets import (
 )
 
 if TYPE_CHECKING:
+    from moment.core.config import Config
+    from moment.core.pipeline import Pipeline
     from moment.core.store import Store
+    from moment.core.gsr_controller import GSRController
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +72,13 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self._store = store
         self._minimize_to_tray = True
+
+        # Core service references (set by AppManager after construction)
+        self._pipeline: "Pipeline | None" = None
+        self._gsr_controller: "GSRController | None" = None
+        self._config: "Config | None" = None
+        self._app_manager = None  # AppManager reference
+        self._recording_controller = None  # RecorderController (lazy init)
 
         # Window properties
         self.setWindowTitle("moment")
@@ -284,6 +298,7 @@ class MainWindow(QMainWindow):
         self._grid_page.clip_activated.connect(self._on_clip_activated)
         self._grid_page.batch_action_requested.connect(self._on_batch_action)
         self._grid_page.selection_changed.connect(self._on_grid_selection_changed)
+        self._grid_page.empty_action_requested.connect(self._on_empty_action)
         self._stack.addWidget(self._grid_page)
 
         # Player
@@ -361,23 +376,332 @@ class MainWindow(QMainWindow):
         """Handle batch operations from the grid page."""
         logger.info("Batch action '%s' on %d clips", action, len(clip_ids))
 
-        if action == "Delete" and self._store is not None:
-            reply = QMessageBox.question(
-                self, "Delete Clips",
-                f"Delete {len(clip_ids)} clip(s)?\n\nThey will be moved to Trash.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Cancel,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
+        if self._store is None:
+            logger.warning("Cannot perform batch action: store unavailable")
+            return
 
+        if action == "Delete":
+            self._batch_delete(clip_ids)
+        elif action == "Favorite":
+            self._batch_favorite(clip_ids)
+        elif action == "Tag":
+            self._batch_tag(clip_ids)
+        elif action == "Re-encode":
+            self._batch_reencode(clip_ids)
+        elif action == "Re-upload":
+            self._batch_reupload(clip_ids)
+        elif action == "Export":
+            self._batch_export(clip_ids)
+        elif action == "Move to folder":
+            self._batch_move_to_folder(clip_ids)
+
+    # ------------------------------------------------------------------
+    # Batch action implementations
+    # ------------------------------------------------------------------
+
+    def _batch_delete(self, clip_ids: list[str]) -> None:
+        """Soft-delete selected clips."""
+        reply = QMessageBox.question(
+            self, "Delete Clips",
+            f"Delete {len(clip_ids)} clip(s)?\n\nThey will be moved to Trash.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        for clip_id in clip_ids:
+            try:
+                self._store.delete_clip(clip_id, soft=True)
+            except Exception as exc:
+                logger.warning("Failed to delete clip %s: %s", clip_id, exc)
+        self._grid_page.refresh()
+        self._update_status("Deleted %d clips" % len(clip_ids))
+
+    def _batch_favorite(self, clip_ids: list[str]) -> None:
+        """Toggle the favorite flag on selected clips."""
+        toggled = 0
+        for clip_id in clip_ids:
+            try:
+                clip = self._store.get_clip(clip_id)
+                if clip is not None:
+                    clip.favorite = not clip.favorite
+                    self._store.update_clip(clip)
+                    toggled += 1
+            except Exception as exc:
+                logger.warning("Failed to toggle favorite for %s: %s", clip_id, exc)
+        self._grid_page.refresh()
+        self._update_status(f"Favorited {toggled} clip(s)")
+
+    def _batch_tag(self, clip_ids: list[str]) -> None:
+        """Open tag dialog and apply tags to selected clips."""
+        from moment.ui.widgets.tag_dialog import TagDialog
+
+        # Pre-populate with tags from the first selected clip
+        current_tags: list[str] = []
+        if clip_ids:
+            try:
+                first_clip = self._store.get_clip(clip_ids[0])
+                if first_clip is not None:
+                    current_tags = list(first_clip.tags)
+            except Exception as exc:
+                logger.warning("Could not read tags from clip %s: %s", clip_ids[0], exc)
+
+        dlg = TagDialog(current_tags, parent=self)
+        if dlg.exec() != TagDialog.DialogCode.Accepted:
+            return
+
+        new_tags = dlg.tags()
+        applied = 0
+        for clip_id in clip_ids:
+            try:
+                self._store.set_tags(clip_id, new_tags)
+                applied += 1
+            except Exception as exc:
+                logger.warning("Failed to tag clip %s: %s", clip_id, exc)
+        self._grid_page.refresh()
+        self._update_status(f"Tagged {applied} clip(s)")
+
+    def _batch_reencode(self, clip_ids: list[str]) -> None:
+        """Re-enqueue selected clips for encoding."""
+        if self._pipeline is None:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(
+                "warning", "Pipeline unavailable",
+                "Cannot re-encode — pipeline is not running.",
+            )
+            return
+
+        from moment.core.models import Task, TaskKind
+
+        enqueued = 0
+        for clip_id in clip_ids:
+            try:
+                task = Task(
+                    id=str(uuid.uuid4()),
+                    type=TaskKind.ENCODE,
+                    priority=10,
+                    payload={"clip_id": clip_id},
+                )
+                self._pipeline.enqueue(task)
+                enqueued += 1
+            except Exception as exc:
+                logger.warning("Failed to enqueue encode for %s: %s", clip_id, exc)
+        self._update_status(f"Re-encoding {enqueued} clip(s)")
+
+    def _batch_reupload(self, clip_ids: list[str]) -> None:
+        """Re-enqueue selected clips for upload."""
+        if self._pipeline is None:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(
+                "warning", "Pipeline unavailable",
+                "Cannot re-upload — pipeline is not running.",
+            )
+            return
+
+        from moment.core.models import Task, TaskKind
+
+        enqueued = 0
+        for clip_id in clip_ids:
+            try:
+                clip = self._store.get_clip(clip_id)
+                if clip is None or clip.encoded_path is None:
+                    logger.warning(
+                        "Cannot re-upload %s: clip not found or not encoded", clip_id,
+                    )
+                    continue
+
+                task = Task(
+                    id=str(uuid.uuid4()),
+                    type=TaskKind.UPLOAD,
+                    priority=1,
+                    payload={
+                        "clip_id": clip_id,
+                        "path": str(clip.encoded_path),
+                    },
+                )
+                self._pipeline.enqueue(task)
+                enqueued += 1
+            except Exception as exc:
+                logger.warning("Failed to enqueue upload for %s: %s", clip_id, exc)
+        self._update_status(f"Re-uploading {enqueued} clip(s)")
+
+    def _batch_export(self, clip_ids: list[str]) -> None:
+        """Export selected clips to a user-chosen directory."""
+        if len(clip_ids) == 1:
+            # Single clip: use Save File dialog
+            clip = self._store.get_clip(clip_ids[0])
+            if clip is None:
+                return
+            src = clip.encoded_path or clip.source_path
+            dest, _ = QFileDialog.getSaveFileName(
+                self, "Export Clip", str(src.name), "Video Files (*.mp4 *.mkv)",
+            )
+            if not dest:
+                return
+            try:
+                shutil.copy2(str(src), dest)
+                self._update_status(f"Exported to {os.path.basename(dest)}")
+            except OSError as exc:
+                logger.exception("Export failed: %s", exc)
+                QMessageBox.warning(
+                    self, "Export Failed", f"Could not export clip: {exc}",
+                )
+        else:
+            # Multiple clips: choose directory
+            dest_dir = QFileDialog.getExistingDirectory(
+                self, "Export Clips to…",
+            )
+            if not dest_dir:
+                return
+            exported = 0
+            errors = 0
             for clip_id in clip_ids:
                 try:
-                    self._store.delete_clip(clip_id, soft=True)
-                except Exception as exc:
-                    logger.warning("Failed to delete clip %s: %s", clip_id, exc)
-            self._grid_page.refresh()
-            self._update_status("Deleted %d clips" % len(clip_ids))
+                    clip = self._store.get_clip(clip_id)
+                    if clip is None:
+                        errors += 1
+                        continue
+                    src = clip.encoded_path or clip.source_path
+                    shutil.copy2(str(src), os.path.join(dest_dir, str(src.name)))
+                    exported += 1
+                except OSError as exc:
+                    logger.exception("Export failed for %s: %s", clip_id, exc)
+                    errors += 1
+            msg = f"Exported {exported} clip(s)"
+            if errors:
+                msg += f" — {errors} failed"
+            self._update_status(msg)
+
+    def _batch_move_to_folder(self, clip_ids: list[str]) -> None:
+        """Move selected clips to a user-chosen folder."""
+        folder_path = QFileDialog.getExistingDirectory(
+            self, "Move Clips to Folder…",
+        )
+        if not folder_path:
+            return
+
+        moved = 0
+        for clip_id in clip_ids:
+            try:
+                clip = self._store.get_clip(clip_id)
+                if clip is not None:
+                    clip.folder = folder_path
+                    self._store.update_clip(clip)
+                    moved += 1
+            except Exception as exc:
+                logger.warning("Failed to move clip %s: %s", clip_id, exc)
+        self._grid_page.refresh()
+        self._update_status(f"Moved {moved} clip(s) to folder")
+
+    # ------------------------------------------------------------------
+    # Empty state action handler
+    # ------------------------------------------------------------------
+
+    def _on_empty_action(self, action: str) -> None:
+        """Handle actions from the empty/error state buttons."""
+        logger.debug("Empty-state action: %s", action)
+
+        if action == "View Shortcuts":
+            self._show_shortcuts_dialog()
+        elif action == "Capture Settings":
+            self._open_capture_settings()
+        elif action == "Reset Database":
+            self._confirm_reset_database()
+        elif action == "Open Config Folder":
+            self._open_config_folder()
+
+    def _show_shortcuts_dialog(self) -> None:
+        """Display keyboard shortcut reference."""
+        QMessageBox.information(
+            self, "Keyboard Shortcuts",
+            "Moment Keyboard Shortcuts\n\n"
+            "Ctrl+F   — Focus search bar\n"
+            "Ctrl+A   — Select all clips\n"
+            "Ctrl+B   — Enter batch selection mode\n"
+            "Ctrl+C   — Copy selected clip URL\n"
+            "Esc      — Back / clear selection / exit fullscreen\n"
+            "F5       — Refresh current page\n"
+            "Del      — Delete selected clips\n\n"
+            "Global Hotkeys (when configured):\n"
+            "F8       — Save replay / open overlay",
+        )
+
+    def _open_capture_settings(self) -> None:
+        """Open the settings dialog, falling back to an info message."""
+        try:
+            from moment.ui.dialogs.settings_dialog import SettingsDialog
+
+            dlg = SettingsDialog(self._config)
+            dlg.exec()
+        except Exception as exc:
+            logger.exception("Could not open settings dialog: %s", exc)
+            QMessageBox.information(
+                self, "Capture Settings",
+                "Capture settings can be configured in the Settings dialog "
+                "(accessible from the system tray icon menu).",
+            )
+
+    def _confirm_reset_database(self) -> None:
+        """Confirm and reset the database."""
+        if self._store is None:
+            return
+
+        reply = QMessageBox.warning(
+            self, "Reset Database",
+            "This will permanently delete ALL clips, tags, webhooks, "
+            "and settings from the database.\n\n"
+            "This action cannot be undone.\n\n"
+            "Are you sure you want to continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Second confirmation
+        from PyQt6.QtWidgets import QInputDialog
+
+        text, ok = QInputDialog.getText(
+            self, "Reset Database — Final Confirmation",
+            "Type DELETE to confirm:",
+        )
+        if not ok or text.strip() != "DELETE":
+            return
+
+        try:
+            self._store.close()
+            db_path = os.path.join(
+                self._config.get_path("db_dir") if self._config
+                else os.path.expanduser("~/.config/moment"),
+                "clips.db",
+            )
+            if os.path.isfile(db_path):
+                os.remove(db_path)
+                logger.info("Database file removed: %s", db_path)
+            # Also remove WAL/SHM files
+            for suffix in ("-wal", "-shm"):
+                wal_path = db_path + suffix
+                if os.path.isfile(wal_path):
+                    os.remove(wal_path)
+
+            QMessageBox.information(
+                self, "Database Reset",
+                "Database has been reset. Please restart Moment "
+                "to create a fresh database.",
+            )
+            self._update_status("Database reset — restart required")
+        except Exception as exc:
+            logger.exception("Database reset failed: %s", exc)
+            QMessageBox.critical(
+                self, "Reset Failed",
+                f"Could not reset the database: {exc}",
+            )
+
+    def _open_config_folder(self) -> None:
+        """Open the Moment config directory in the system file manager."""
+        config_dir = os.path.expanduser("~/.config/moment")
+        QDesktopServices.openUrl(QUrl.fromLocalFile(config_dir))
 
     def _on_grid_selection_changed(self, count: int) -> None:
         """Handle grid selection changes — update status bar."""
@@ -514,16 +838,75 @@ class MainWindow(QMainWindow):
     def _on_start_recording(self) -> None:
         """Handle start-recording from the recording page."""
         logger.info("Start recording requested")
+
+        # Initialise RecordingController if not already running
+        if self._gsr_controller is None and self._config is not None:
+            try:
+                from moment.core.recorder_controller import RecorderController
+
+                self._recording_controller = RecorderController(
+                    output_dir=self._config.get_path("recordings_dir"),
+                    default_fps=int(
+                        self._config.get_gsr_setting("replay_fps") or 60
+                    ),
+                    default_duration=int(
+                        self._config.get_gsr_setting("replay_duration") or 30
+                    ),
+                )
+                self._recording_controller.start_recording()
+                logger.info("RecordingController started")
+            except Exception as exc:
+                logger.exception("Failed to start RecordingController: %s", exc)
+                from moment.ui.widgets.toast import toast_manager
+                toast_manager.show_toast(
+                    "error", "Recording failed", str(exc),
+                )
+                return
+        elif self._gsr_controller is not None:
+            # GSR instant replay is already running — just update UI
+            logger.info("GSR instant replay already active")
+
         self._recording_page.set_recording()
 
     def _on_stop_recording(self) -> None:
         """Handle stop-recording from the recording page."""
         logger.info("Stop recording requested")
+
+        if self._recording_controller is not None:
+            try:
+                self._recording_controller.stop_recording()
+            except Exception as exc:
+                logger.warning("Error stopping recording: %s", exc)
+
         self._recording_page.set_ready()
 
     def _on_recording_save_clip(self, duration: int) -> None:
         """Handle save-clip from the recording page."""
         logger.info("Save %ds clip requested from recording page", duration)
+
+        saved = False
+
+        # Try GSR controller first (instant replay mode)
+        if self._gsr_controller is not None:
+            try:
+                self._gsr_controller.save_replay()
+                saved = True
+            except Exception as exc:
+                logger.exception("GSR save_replay failed: %s", exc)
+
+        # Fall back to RecordingController (manual recording mode)
+        if not saved and self._recording_controller is not None:
+            try:
+                self._recording_controller.save_replay(duration)
+                saved = True
+            except Exception as exc:
+                logger.exception("RecordingController save_replay failed: %s", exc)
+
+        if saved:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(
+                "success", "Clip saved", f"{duration}s replay saved",
+            )
 
     def _on_trash_changed(self) -> None:
         """Handle trash change — refresh grid."""

@@ -168,6 +168,7 @@ class GridPage(QWidget):
     clip_activated = pyqtSignal(str)
     batch_action_requested = pyqtSignal(str, list)
     selection_changed = pyqtSignal(int)
+    empty_action_requested = pyqtSignal(str)
 
     # Cards per row for dynamic sizing
     CARDS_PER_ROW = 4
@@ -503,12 +504,10 @@ class GridPage(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         shortcuts_btn = QPushButton("View Shortcuts")
-        shortcuts_btn.setEnabled(False)
-        shortcuts_btn.setToolTip("Coming soon")
+        shortcuts_btn.clicked.connect(lambda: self.empty_action_requested.emit("View Shortcuts"))
         btn_layout.addWidget(shortcuts_btn)
         capture_btn = QPushButton("Capture Settings")
-        capture_btn.setEnabled(False)
-        capture_btn.setToolTip("Coming soon")
+        capture_btn.clicked.connect(lambda: self.empty_action_requested.emit("Capture Settings"))
         btn_layout.addWidget(capture_btn)
         layout.addLayout(btn_layout)
 
@@ -537,12 +536,10 @@ class GridPage(QWidget):
         btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         reset_btn = QPushButton("Reset Database")
         reset_btn.setObjectName("danger")
-        reset_btn.setEnabled(False)
-        reset_btn.setToolTip("Coming soon")
+        reset_btn.clicked.connect(lambda: self.empty_action_requested.emit("Reset Database"))
         btn_layout.addWidget(reset_btn)
         config_btn = QPushButton("Open Config Folder")
-        config_btn.setEnabled(False)
-        config_btn.setToolTip("Coming soon")
+        config_btn.clicked.connect(lambda: self.empty_action_requested.emit("Open Config Folder"))
         btn_layout.addWidget(config_btn)
         layout.addLayout(btn_layout)
 

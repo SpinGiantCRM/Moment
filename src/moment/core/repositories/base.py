@@ -52,9 +52,10 @@ def _get_or_create_db_key() -> bytes | None:
 
 def connect_encrypted(db_path: str) -> sqlite3.Connection:
     """Open an encrypted SQLite connection via sqlcipher3."""
-
+    try:
         import sqlcipher3.dbapi2 as sqlcipher  # type: ignore[import-untyped]
-
+    except ImportError:
+        raise ImportError(
             "sqlcipher3 is required — install with: pip install moment"
         ) from None
 
