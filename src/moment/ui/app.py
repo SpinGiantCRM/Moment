@@ -266,6 +266,28 @@ class AppManager(QObject):
         # --- Init core services (best-effort — GUI works without them) ---
         self._init_services()
 
+        # --- Startup banner (log diagnostic info) ---
+        try:
+            from moment.utils.logging import startup_banner
+            startup_banner(config=self._config)
+        except Exception as exc:
+            logger.debug("Startup banner logging skipped: %s", exc)
+
+        # --- Install crash dump handler (alongside the GUI excepthook) ---
+        try:
+            from moment.utils.logging import CrashDump
+            self._crash_dump = CrashDump()
+            # Wire into the existing excepthook chain — our hook logs first,
+            # then falls through to the GUI dialog via _global_excepthook
+            _existing_hook = sys.excepthook
+            def _chained_excepthook(et, ev, tb):
+                self._crash_dump.excepthook(et, ev, tb)
+                _existing_hook(et, ev, tb)
+            sys.excepthook = _chained_excepthook
+        except Exception as exc:
+            logger.debug("Crash dump handler install failed: %s", exc)
+            self._crash_dump = None
+
         # --- Tray icon ---
         self._tray = TrayIcon()
         self._tray.show()

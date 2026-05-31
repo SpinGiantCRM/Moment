@@ -43,19 +43,19 @@ class TestGetOrCreateDbKey:
 
 
 class TestConnectEncrypted:
-    def test_raises_runtime_error_no_pysqlcipher3(self) -> None:
-        """_connect_encrypted raises RuntimeError when pysqlcipher3 is missing."""
+    def test_raises_import_error_no_sqlcipher3(self) -> None:
+        """_connect_encrypted raises ImportError when sqlcipher3 is missing."""
         fd, db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         try:
-            # Remove pysqlcipher3 from sys.modules so the import inside
+            # Remove sqlcipher3 from sys.modules so the import inside
             # connect_encrypted fails cleanly.
             modules = {
-                "pysqlcipher3": None,
-                "pysqlcipher3.dbapi2": None,
+                "sqlcipher3": None,
+                "sqlcipher3.dbapi2": None,
             }
             with patch.dict(sys.modules, modules, clear=False):
-                with pytest.raises(RuntimeError, match="pysqlcipher3 is required"):
+                with pytest.raises(ImportError, match="sqlcipher3"):
                     _connect_encrypted(db_path)
         finally:
             for sfx in ("", "-wal", "-shm"):
@@ -69,12 +69,12 @@ class TestConnectEncrypted:
         fd, db_path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         try:
-            # Make pysqlcipher3 available but keyring fail.
+            # Make sqlcipher3 available but keyring fail.
             mock_sqlcipher = MagicMock()
             mock_sqlcipher.connect = MagicMock(return_value=MagicMock())
             modules = {
-                "pysqlcipher3": MagicMock(dbapi2=mock_sqlcipher),
-                "pysqlcipher3.dbapi2": mock_sqlcipher,
+                "sqlcipher3": MagicMock(dbapi2=mock_sqlcipher),
+                "sqlcipher3.dbapi2": mock_sqlcipher,
             }
             with patch.dict(sys.modules, modules, clear=False):
                 with patch(

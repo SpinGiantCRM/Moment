@@ -68,9 +68,11 @@ def connect_encrypted(db_path: str) -> sqlite3.Connection:
 
     try:
         conn = sqlcipher.connect(db_path, check_same_thread=False)
-        conn.execute(f"PRAGMA key = \"x'{key.hex()}'\"")
+        # key is bytes of a hex string (e.g. b"a1b2c3d4...");
+        # decode back to hex string for the PRAGMA.
+        conn.execute(f"PRAGMA key = \"x'{key.decode()}'\"")
         conn.execute("SELECT count(*) FROM sqlite_master")
-        logger.info("Opened encrypted database with pysqlcipher3")
+        logger.info("Opened encrypted database with sqlcipher3")
         return conn
     except Exception as exc:
         raise RuntimeError(f"Failed to open encrypted database: {exc}") from exc

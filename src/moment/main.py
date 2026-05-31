@@ -7,6 +7,7 @@ Usage::
     moment --help      print this help
     moment import <path> [--profile game|archive|streaming] [--re-encode] [--game <name>]
     moment export <clip_id> [output]
+    moment diagnose    print diagnostic report
     moment bot         start the Discord bot
     moment mcp         start the MCP server
 """
@@ -38,6 +39,9 @@ def main() -> None:
     if argv and argv[0] == "export":
         sys.exit(_cmd_export(argv[1:]))
 
+    if argv and argv[0] == "diagnose":
+        sys.exit(_cmd_diagnose(argv[1:]))
+
     if argv and argv[0] == "bot":
         from moment.bot.main import run_bot
 
@@ -58,6 +62,114 @@ def main() -> None:
     from moment.ui.app import main as gui_main
 
     gui_main()
+
+
+# ---------------------------------------------------------------------------
+# Diagnose subcommand
+# ---------------------------------------------------------------------------
+
+
+def _cmd_diagnose(argv: list[str]) -> int:
+    """Handle ``moment diagnose`` — print diagnostic report."""
+    parser = argparse.ArgumentParser(
+        prog="moment diagnose",
+        description="Print a detailed diagnostic report for troubleshooting",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output the report as JSON (default: human-readable text)",
+    )
+    parser.add_argument(
+        "--clip-id",
+        type=str,
+        default=None,
+        help="Include diagnostic info for a specific clip (by UUID)",
+    )
+    parser.add_argument(
+        "--tail",
+        type=int,
+        default=40,
+        help="Number of recent log lines to include (default: 40, 0 to skip)",
+    )
+
+    args = parser.parse_args(argv)
+
+    try:
+        from moment.utils.logging import diagnose as gather_diagnose
+
+        config = _get_config()
+        report = gather_diagnose(config=config, tail_lines=args.tail)
+    except Exception as exc:
+        print(f"Error gathering diagnostic report: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        import json as json_mod
+        print(json_mod.dumps(report, indent=2, default=str))
+        return 0
+
+    # Human-readable output
+    print("=" * 60)
+    print("  Moment Diagnostic Report")
+    print("=" * 60)
+    print(f"  Version:  {report.get('moment_version', '?')}")
+    print(f"  Python:   {report.get('python_version', '?').split()[0]}")
+    print(f"  Platform: {report.get('os_name', '?')} ({report.get('architecture', '?')})")
+    print(f"  PID:      {report.get('pid', '?')}")
+    print(f"  CWD:      {report.get('cwd', '?')}")
+    print()
+    print("  GPU:")
+    print(f"    NVIDIA:  {report.get('nvidia_gpu', '?')}")
+    print(f"    FFmpeg:  {report.get('ffmpeg_path', '?') or 'not found'}")
+    print(f"    FFprobe: {report.get('ffprobe_path', '?') or 'not found'}")
+    print()
+    print("  Paths:")
+    print(f"    Config DB:  {report.get('config_db', '?')}")
+    print(f"    Data dir:   {report.get('data_dir', '?')}")
+    print(f"    Encode dir: {report.get('encode_dir', '?')}")
+    print(f"    Log file:   {report.get('log_path', '?')}")
+    print()
+    print(f"  Disk ({report.get('data_dir', '?')}):")
+    print(f"    Free:  {report.get('disk_free_human', '?')}")
+    print(f"    Used:  {report.get('disk_used_human', '?')}")
+    print()
+    print(f"  Storage providers: {report.get('storage_providers', [])}")
+    print(f"  Settings count:    {report.get('settings_count', '?')}")
+    print()
+
+    if args.clip_id:
+        try:
+            store = _get_store(config)
+            clip = store.get_clip(args.clip_id)
+            if clip:
+                print(f"  Clip {args.clip_id}:")
+                print(f"    Stem:      {clip.stem}")
+                print(f"    Status:    {clip.status.name if hasattr(clip.status, 'name') else clip.status}")
+                print(f"    Duration:  {clip.duration:.1f}s")
+                print(f"    Size:      {clip.file_size} bytes")
+                print(f"    Codec:     {clip.video_codec}")
+                print(f"    FPS:       {clip.fps}")
+                print(f"    Source:    {clip.source_path}")
+                print(f"    Encoded:   {clip.encoded_path}")
+                print()
+            else:
+                print(f"  Clip not found: {args.clip_id}")
+                print()
+        except Exception as exc:
+            print(f"  Error loading clip {args.clip_id}: {exc}")
+            print()
+
+    # Log tail
+    log_tail = report.get("log_tail", "")
+    if log_tail and log_tail != "<unavailable>":
+        print("  Recent log lines:")
+        for line in log_tail.splitlines():
+            print(f"    {line}")
+        print()
+
+    print("=" * 60)
+    return 0
 
 
 # ---------------------------------------------------------------------------
