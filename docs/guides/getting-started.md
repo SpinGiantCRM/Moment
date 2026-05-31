@@ -1,177 +1,248 @@
 # Getting Started with Moment
 
-## Requirements
+This guide walks you through your first Moment session — from launching the app to capturing and sharing your first clip.
 
-- Python 3.11+
-- PyQt6
-- ffmpeg with NVENC (`h264_nvenc`, `hevc_nvenc` or `av1_nvenc`)
-- rclone with a remote configured
-- `sqlcipher` system library (install via your package manager)
-- `gpu-screen-recorder` for capture support
-- NVIDIA GPU for NVENC (software fallback available)
+> **Installation first:** If you haven't installed Moment yet, see the [README](../../README.md#installation) for setup instructions.
 
-Install system deps:
+---
+
+## First Launch
 
 ```bash
-# Debian/Ubuntu
-sudo apt install libsqlcipher-dev
-
-# Arch
-sudo pacman -S sqlcipher
+moment
 ```
 
-## Installation
+On first launch, Moment:
 
-### pipx (recommended for users)
+1. Creates `~/.config/moment/clips.db` — your encrypted clip database
+2. Opens the **Grid** page (empty — you haven't captured anything yet)
+3. Starts in the system tray (look for the Moment icon)
 
-```bash
-pipx install "moment[bot,mcp]"
-```
+> **Trouble launching?** If you see an error about `sqlcipher3`, make sure `libsqlcipher-dev` (or `sqlcipher` on Arch) is installed. See [Troubleshooting](#troubleshooting).
 
-### From Source (for development)
+---
 
-```bash
-git clone https://github.com/SpinGiantCRM/moment.git
-cd moment
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[bot,mcp]"
-```
+## Configure Recording
 
-### Desktop Integration
+Before you can capture clips, you need to enable **GPU Screen Recorder (GSR)** replay mode.
 
-Register the app launcher icon:
+### Step 1: Open Settings
 
-```bash
-cd moment
-./install/install.sh             # user-local
-sudo ./install/install.sh --system  # system-wide
-```
+Press **F10** or right-click the tray icon and select **Settings**.
 
-This installs the desktop file (`moment.desktop`), SVG icon, and rendered PNGs at 48/64/128/256px. It does NOT install the Python package.
+### Step 2: Enable Instant Replay
 
-### Arch Linux (AUR)
+In Settings → **Recording** tab:
 
-A PKGBUILD is included in the repository.
+| Setting | Recommended Value | Description |
+|---------|-------------------|-------------|
+| Enable GSR Replay | ✅ On | Start GSR in replay mode at launch |
+| Replay Duration | 30 seconds | How much buffer to keep before the save |
+| Quality | High | Video quality setting |
+| FPS | 60 | Capture frame rate |
+| Capture Monitor | Auto | Select display if you have multiple monitors |
 
-## Quick Start
+Click **Apply**.
 
-### Launch the GUI
+> GSR replay must be enabled *before* you start your game. It runs continuously in the background, keeping a rolling buffer.
 
-```bash
-moment                    # Full GUI
-moment --minimized        # Start in system tray only
-moment --settings         # Open settings on launch
-```
+---
 
-### First-Time Setup
+## Capture Your First Clip
 
-1. **Start Moment** — it will create `~/.config/moment/clips.db` (encrypted SQLite)
-2. **Open Settings** (F10 or tray menu) to configure:
-   - **Recording:** Enable GSR replay, set duration, quality, FPS
-   - **Upload:** Set rclone remote and bucket
-   - **General:** Toggle autostart, minimize-to-tray
+### Method 1: Hotkey (GSR Replay Enabled)
 
-### Record Your First Clip
-
-1. **Enable instant replay** in Settings → Recording
-2. **Press F8** to save a 30-second replay (or F9 for 60 seconds)
-3. The clip appears in the Grid page after encoding completes
-
-### View Your Clips
-
-- **Grid:** Browse all clips with search and filters
-- **Player:** Click a clip to play, trim, favorite, or share
-- **Stats:** See aggregate statistics and per-game breakdown
-- **Trash:** Recover or permanently delete soft-deleted clips
-
-## Configuration
-
-### Hotkeys
+1. Launch your game
+2. When something cool happens, press **F8** to save a 30-second replay
+3. Moment encodes the clip (NVENC hardware acceleration) and shows a toast notification
 
 | Hotkey | Action |
 |--------|--------|
-| F8 | Save 30s replay |
-| F9 | Save 60s replay |
-| F10 | Open settings |
-| Ctrl+B | Batch select mode |
-| Escape | Back to grid |
+| F8 | Save a 30-second replay |
+| F9 | Save a 60-second replay |
 
-### Storage
+### Method 2: Manual Recording
 
-Moment uses rclone for cloud upload. Configure a remote:
+In Settings → Recording, set **Post-Capture Action** to "Show recording page" and use the on-screen record button.
 
-```bash
-rclone config             # Set up your cloud provider
-rclone config show        # Verify configuration
+### What Happens Next
+
+After saving a clip, Moment runs a pipeline:
+
+```
+GSR writes MKV → Clip detected → Encode (NVENC → MP4) → Generate thumbnail
+                                                        → Optionally upload to cloud
+                                                        → Appears in Grid
 ```
 
-Then configure in Moment Settings → Upload:
-- **Remote name:** e.g., `r2`, `b2`, `s3`
-- **Bucket/path:** e.g., `moment/clips`
+The clip appears in the **Grid** page once encoding completes (usually a few seconds).
 
-### Discord Bot
+---
+
+## Find and Manage Clips
+
+### Grid Page
+
+Opened by default. Browse all clips with:
+
+- **Search** by game name, date, or filename
+- **Filter** by game or date range
+- **Sort** by newest, oldest, or longest
+- **Batch select** with Ctrl+B for multi-clip operations
+
+### Player Page
+
+Click any clip to open the player:
+
+- **Play / Pause** — video preview
+- **Trim** — cut start/end points
+- **Favorite** ⭐ — star your best clips
+- **Share** — copy shareable URL (if upload is configured)
+- **Delete** — moves to Trash (soft delete)
+
+### Stats Page
+
+See aggregate statistics:
+
+- Total clips, total duration
+- Per-game breakdown
+- Encoding time / upload success rate
+
+### Trash Page
+
+Recover or permanently delete soft-deleted clips. Empty Trash to free disk space.
+
+---
+
+## Configure Cloud Upload
+
+Moment uses **rclone** to upload clips to cloud storage.
+
+### Step 1: Install rclone
 
 ```bash
-keyring set moment discord_bot_token   # Store your bot token
-moment bot                              # Start the bot
+# See https://rclone.org/install/ for all platforms
+sudo -v ; curl https://rclone.org/install.sh | sudo bash
 ```
 
-### MCP Server (AI Agent Access)
+### Step 2: Configure a Remote
 
 ```bash
-moment mcp                          # stdio mode
-moment mcp --http                   # HTTP on 127.0.0.1:8742
-moment mcp --http --port 9000 --api-token "secret"  # Auth enabled
+rclone config
 ```
+
+Follow the interactive setup for your provider (Backblaze B2, Cloudflare R2, AWS S3, etc.).
+
+### Step 3: Enable Upload in Moment
+
+1. Open **Settings** (F10)
+2. Go to **Upload** tab
+3. Set **Remote name** to your rclone remote (e.g., `r2`, `b2`, `s3`)
+4. Set **Bucket/path** (e.g., `moment/clips`)
+5. Click **Apply**
+
+When Upload is enabled, every new clip is automatically uploaded after encoding.
+
+---
+
+## Hotkeys Reference
+
+| Hotkey | Context | Action |
+|--------|---------|--------|
+| F8 | Anywhere (GSR running) | Save 30s replay |
+| F9 | Anywhere (GSR running) | Save 60s replay |
+| F10 | Anywhere | Open settings |
+| Escape | Player / Settings | Back to Grid |
+| Ctrl+B | Grid | Toggle batch selection mode |
+
+---
 
 ## Directory Layout
 
 | Path | Purpose |
 |------|---------|
-| `~/.config/moment/` | Config and database |
-| `~/.config/moment/clips.db` | Encrypted SQLite database |
-| `~/.local/share/moment/` | Application data |
-| `~/.local/share/moment/encoded/` | Encoded MP4 files |
-| `~/.local/share/moment/thumbnails/` | Thumbnail JPEGs |
-| `~/Videos/Moment/` | Raw GSR recordings |
+| `~/.config/moment/` | Configuration and database |
+| `~/.config/moment/clips.db` | Encrypted SQLite database (AES-256) |
+| `~/.local/share/moment/encoded/` | Encoded MP4 clips |
+| `~/.local/share/moment/thumbnails/` | Thumbnail JPEGs (lazy-loaded cache) |
+| `~/Videos/Moment/` | Raw GSR recordings (MKV before encoding) |
+
+---
+
+## Discord Bot
+
+```bash
+# Store your bot token (one time)
+keyring set moment discord_bot_token
+
+# Start the bot
+moment bot
+```
+
+Slash commands: `/clip`, `/search`, `/recent`, `/stats`.
+
+---
+
+## MCP Server (AI Agent Access)
+
+```bash
+moment mcp                          # stdio mode (for AI agents)
+moment mcp --http                   # HTTP on 127.0.0.1:8742
+moment mcp --http --port 9000 --api-token "secret"  # With auth
+```
+
+---
 
 ## Troubleshooting
 
-### "sqlcipher3 not found"
+### "sqlcipher3 is not installed"
 
 ```bash
-# Install system dependencies
-sudo apt install libsqlcipher-dev   # Debian/Ubuntu
-sudo pacman -S sqlcipher            # Arch
+# Install the system library first:
+sudo apt install libsqlcipher-dev    # Debian/Ubuntu
+sudo pacman -S sqlcipher             # Arch
+sudo dnf install libsqlcipher-devel  # Fedora
 
-# Reinstall moment
+# Then reinstall Moment:
 pip install --force-reinstall sqlcipher3
 ```
 
 ### "Database could not be opened"
 
 ```bash
-# Check file exists and has correct permissions
-ls -la ~/.config/moment/clips.db
-# If it's plaintext SQLite, delete and restart:
-rm ~/.config/moment/clips.db
+# Check permissions
+ls -la ~/.config/moment/
+# Expected: encrypted SQLite (binary, not plaintext)
+
+# If it's damaged, rename and restart:
+mv ~/.config/moment/clips.db ~/.config/moment/clips.db.bak
 moment
 ```
 
-### "No video encoder available"
+### "No NVENC encoder found"
 
 ```bash
-# Check available NVENC encoders
+# Check available encoders
 ffmpeg -encoders | grep nvenc
-# Fallback to software encoding
+
+# If empty, use software fallback:
 ffmpeg -encoders | grep libx264
 ```
 
-## See Also
+### Moment doesn't show in app launcher
 
-- `AGENTS.md` — AI agent briefing
-- `ARCHITECTURE.md` — System architecture
-- `SECURITY.md` — Security model and encryption
-- `docs/storage-providers.md` — Cloud storage configuration
-- `CONTRIBUTING.md` — How to contribute
+```bash
+# Install desktop integration (standalone):
+curl -fsSL https://raw.githubusercontent.com/SpinGiantCRM/moment/main/install/install.sh | bash
+```
+
+---
+
+## What's Next?
+
+- **Per-game profiles:** Configure different recording settings per game
+- **Webhooks:** Get Discord notifications when friends share clips
+- **Video editor:** Trim, split, merge, add filters and overlays
+- **GIF export:** Create optimized GIFs from your clips
+- **`AGENTS.md`** — AI agent briefing for the full project picture
+- **`ARCHITECTURE.md`** — Deep dive into system internals

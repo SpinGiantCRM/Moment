@@ -16,57 +16,75 @@ GPU-accelerated game clip manager for Linux. Capture, edit, and share your gamin
 - Keyboard-first UI in ONLYOFFICE Modern Dark style
 - MCP server for AI agent integration
 
-## Requirements
-
-- Python 3.11+
-- PyQt6
-- ffmpeg with NVENC (`h264_nvenc`, `hevc_nvenc` or `av1_nvenc`)
-- rclone with a remote configured (see [storage providers](docs/storage-providers.md))
-- `sqlcipher` system library (for sqlcipher3)
-- `gpu-screen-recorder` for capture
-- NVIDIA GPU for NVENC (software fallback via libx264 available)
-
 ## Installation
 
-### From Source (dev)
+### 1. System Dependencies
+
+Required system libraries for Moment's encrypted database:
 
 ```bash
-git clone https://github.com/SpinGiantCRM/moment.git
-cd moment
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[bot,mcp]"
+# Debian / Ubuntu / Pop!_OS
+sudo apt install libsqlcipher-dev ffmpeg
+
+# Arch / Manjaro / EndeavourOS
+sudo pacman -S sqlcipher ffmpeg
+
+# Fedora
+sudo dnf install libsqlcipher-devel ffmpeg
 ```
 
-### From PyPI (user)
+Optional but recommended for full features:
 
 ```bash
-pip install "moment[bot,mcp]"
+# GPU screen recorder (capture)
+# See: https://git.dec05eba.com/gpu-screen-recorder/about/
+# or install from AUR / Flathub
+
+# rclone (cloud upload)
+# See: https://rclone.org/install/
+
+# librsvg or ImageMagick (desktop icons — needed for install.sh PNG generation)
+sudo apt install librsvg2-bin      # Debian/Ubuntu
+sudo pacman -S librsvg             # Arch
 ```
 
-### With pipx (isolated, recommended for users)
+### 2. Install the Python Package
 
 ```bash
+# Recommended — isolated install (no venv needed)
 pipx install "moment[bot,mcp]"
-```
 
-**Note:** On newer distros (Arch, Fedora 38+) you may need `--break-system-packages` or `PIP_REQUIRE_VIRTUALENV=false` when using pip outside a venv. Prefer pipx in that case.
-
-### Desktop Integration
-
-After installation, register the app icon and desktop entry:
-
-```bash
-# Installs desktop file + SVG + PNG icons (48/64/128/256px)
+# OR from source (for development):
 git clone https://github.com/SpinGiantCRM/moment.git
 cd moment
-./install/install.sh             # user-local install
-# Or: sudo ./install/install.sh --system
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[bot,mcp]"
+
+# OR with pip (system-wide, not isolated):
+pip install --user "moment[bot,mcp]"
 ```
 
-### Arch Linux (AUR)
+### 3. Desktop Integration (Optional)
 
-A PKGBUILD is available in the repository. Submit to AUR at v1.0.
+Registers the app launcher icon so Moment appears in your application menu:
+
+```bash
+# Standalone — works without cloning the repo:
+curl -fsSL https://raw.githubusercontent.com/SpinGiantCRM/moment/main/install/install.sh | bash
+
+# Or from a local repo clone:
+cd moment
+./install/install.sh
+```
+
+This installs the `.desktop` file, SVG icon, and PNG icons at 48/64/128/256px.
+
+### 4. Verify
+
+```bash
+moment --help        # Should show usage info
+moment --settings    # Opens the settings dialog
+```
 
 ## Quick Start
 
@@ -81,14 +99,13 @@ moment mcp              # Start MCP server for AI agent access
 
 ## Documentation
 
+- [Getting Started Guide](docs/guides/getting-started.md) — from zero to your first clip
 - [AI Agent Briefing](AGENTS.md) — what you need to know before coding
 - [Architecture Overview](ARCHITECTURE.md) — system architecture, request flows, thread model
 - [Security Model](SECURITY.md) — encryption, credentials, authentication
 - [Contributing](CONTRIBUTING.md) — how to contribute
-- [Getting Started](docs/guides/getting-started.md) — quick start guide
 - [Storage Providers](docs/storage-providers.md) — configure rclone for Backblaze B2, Cloudflare R2, AWS S3, and more
 - [Database Schema](docs/database/schema.md) — full table reference
-- [Request Flows](docs/architecture/request-flow.md) — detailed request flow diagrams
 - [Truth](TRUTH.md) — complete feature inventory with current and striving states
 
 ## License
