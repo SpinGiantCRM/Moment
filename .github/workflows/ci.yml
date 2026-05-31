@@ -43,13 +43,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies (Qt)
+      - name: Install system dependencies (Qt + SQLite encryption)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             libegl1 \
             libxkbcommon0 \
             libfontconfig1 \
+            libsqlcipher-dev \
             xvfb
 
       - uses: actions/setup-python@v5
@@ -74,6 +75,39 @@ jobs:
         with:
           name: coverage-py${{ matrix.python-version }}
           path: coverage.xml
+
+  # ---------------------------------------------------------------------------
+  # Smoketest — verifies the installed package works end-to-end
+  # ---------------------------------------------------------------------------
+  smoketest:
+    name: "Smoketest"
+    runs-on: ubuntu-24.04
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsqlcipher-dev
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install via pipx (recommended user method)
+        run: |
+          pip install pipx
+          pipx install ".[mcp]"
+
+      - name: Smoke test — --version
+        run: pipx run --spec "." moment --version
+
+      - name: Smoke test — --help
+        run: pipx run --spec "." moment --help | head -10
+
+      - name: Smoke test — MCP subcommand
+        run: pipx run --spec "." moment mcp --help | head -10
 
   # ---------------------------------------------------------------------------
   # Security — bandit scan
