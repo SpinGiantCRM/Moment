@@ -42,7 +42,7 @@ moment-bot = "moment.bot.main:run_bot"
 moment-mcp = "moment.mcp.main:run_mcp"
 
 [build-system]
-requires = ["setuptools>=75.0"]
+requires = ["setuptools>=64.0,<75.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
