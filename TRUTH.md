@@ -250,7 +250,7 @@ Moment is a desktop application that wraps `gpu-screen-recorder` as a thin subpr
 ### 7.3 Build System
 - pyproject.toml with setuptools
 - Makefile with dev commands
-- `pip install moment[bot,mcp,encryption]` extras
+- `pip install moment-clips[bot,mcp,encryption]` extras
 
 ---
 

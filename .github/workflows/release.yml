@@ -60,7 +60,7 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     environment:
       name: pypi
-      url: https://pypi.org/project/moment/
+      url: https://pypi.org/project/moment-clips/
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -115,13 +115,12 @@ jobs:
             **Recommended — pipx (isolated):**
 
             ```bash
-            pipx install "moment==${{ steps.version.outputs.version }}[mcp,bot]"
-            ```
+pipx install "moment-clips==${{ steps.version.outputs.version }}[mcp,bot]"
 
-            **pip (system-wide):**
+**pip (system-wide):**
 
-            ```bash
-            pip install "moment==${{ steps.version.outputs.version }}[mcp,bot]"
+```bash
+pip install "moment-clips==${{ steps.version.outputs.version }}[mcp,bot]"
             ```
 
             **Desktop integration (icons + .desktop):**

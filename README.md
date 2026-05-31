@@ -52,7 +52,7 @@ sudo pacman -S librsvg             # Arch
 
 ```bash
 # Recommended — isolated install (no venv needed)
-pipx install "moment[bot,mcp]"
+pipx install "moment-clips[bot,mcp]"
 
 # OR from source (for development):
 git clone https://github.com/SpinGiantCRM/moment.git
@@ -61,7 +61,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[bot,mcp]"
 
 # OR with pip (system-wide, not isolated):
-pip install --user "moment[bot,mcp]"
+pip install --user "moment-clips[bot,mcp]"
 ```
 
 ### 3. Desktop Integration (Optional)
