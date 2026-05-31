@@ -8,6 +8,7 @@ crossed handles turn red and disable Apply.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -17,6 +18,9 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QVBoxLayout,
 )
+
+if TYPE_CHECKING:
+    from PyQt6.QtMultimedia import QMediaPlayer
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +44,18 @@ class TrimDialog(QDialog):
         start: float = 0.0,
         end: float | None = None,
         parent=None,
+        player: "QMediaPlayer | None" = None,
     ) -> None:
         """Args:
             duration: Total clip duration in seconds.
             start: Initial trim start in seconds.
             end: Initial trim end in seconds (defaults to *duration*).
             parent: Parent widget.
+            player: Optional QMediaPlayer for Mark In/Out buttons to
+                read the current playback position from.
         """
         super().__init__(parent)
+        self._player: Any | None = player
         self._duration = max(duration, 0.1)
         self._start = max(start, 0.0)
         self._end = min(end if end is not None else self._duration, self._duration)
@@ -131,12 +139,48 @@ class TrimDialog(QDialog):
         self._apply_btn.setEnabled(valid)
 
     def _mark_in(self) -> None:
-        """Set the In point (placeholder — uses current position)."""
-        logger.debug("Mark In at %.1fs", self._start)
+        """Set the In point from the current playback position.
+
+        Reads ``self._player.position()`` (milliseconds), converts to
+        seconds, clamps to the valid range, and updates the timeline
+        handle and labels.  No-op if no player is available.
+        """
+        if self._player is None:
+            logger.debug("Mark In: no player available")
+            return
+        if self._player.duration() <= 0:
+            logger.debug("Mark In: no media loaded")
+            return
+
+        pos_s = self._player.position() / 1000.0
+        # Clamp: 0.0 ≤ pos < out point (leave a tiny gap so handles don't cross)
+        pos_s = max(0.0, min(pos_s, self._end - 0.01))
+
+        self._timeline.set_range(pos_s, self._end)
+        self._on_trim_changed(pos_s, self._end)
+        logger.debug("Mark In at %.1fs", pos_s)
 
     def _mark_out(self) -> None:
-        """Set the Out point (placeholder — uses current position)."""
-        logger.debug("Mark Out at %.1fs", self._end)
+        """Set the Out point from the current playback position.
+
+        Reads ``self._player.position()`` (milliseconds), converts to
+        seconds, clamps to the valid range, and updates the timeline
+        handle and labels.  No-op if no player is available.
+        """
+        if self._player is None:
+            logger.debug("Mark Out: no player available")
+            return
+        if self._player.duration() <= 0:
+            logger.debug("Mark Out: no media loaded")
+            return
+
+        pos_s = self._player.position() / 1000.0
+        # Clamp: in point < pos ≤ duration
+        pos_s = max(self._start + 0.01, min(pos_s, self._duration))
+
+        self._timeline.set_range(self._start, pos_s)
+        self._on_trim_changed(self._start, pos_s)
+        logger.debug("Mark Out at %.1fs", pos_s)
 
     def _preview(self) -> None:
         """Preview the trimmed region."""
