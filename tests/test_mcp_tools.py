@@ -428,14 +428,14 @@ class TestRegisterTools:
         from moment.mcp.tools import register_all_tools
         register_all_tools(mock_server, allow_mutations=False)
         # Check that tool() was called (read tools)
-        assert mock_server.tool.call_count == 6
+        assert mock_server.tool.call_count == 7
 
     def test_register_with_mutations(self):
         mock_server = MagicMock()
         from moment.mcp.tools import register_all_tools
         register_all_tools(mock_server, allow_mutations=True)
-        # 6 read + 4 mutation = 10
-        assert mock_server.tool.call_count == 10
+        # 7 read + 6 mutation = 13
+        assert mock_server.tool.call_count == 13
 
 
 # ---------------------------------------------------------------------------

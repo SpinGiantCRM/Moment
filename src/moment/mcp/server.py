@@ -44,6 +44,8 @@ _MUTATION_TOOL_NAMES: set[str] = {
     "enqueue_upload",
     "save_game_profile",
     "test_webhook",
+    "delete_clip",
+    "import_clip",
 }
 
 

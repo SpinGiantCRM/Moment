@@ -10,12 +10,15 @@ They run in-process within the MCP server.
     - ``get_stats`` — aggregate library statistics
     - ``list_game_profiles`` — per-game recording profiles
     - ``list_webhooks`` — webhook configurations
+    - ``export_clip`` — export a clip to a file or return its path
 
 **Mutation tools** (behind ``--allow-mutations`` flag):
     - ``enqueue_encode`` — re-encode a clip
     - ``enqueue_upload`` — re-upload a clip
     - ``save_game_profile`` — upsert a game profile
     - ``test_webhook`` — test-fire a webhook
+    - ``delete_clip`` — soft-delete (trash) or permanent-delete a clip
+    - ``import_clip`` — import a video file into the library
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import uuid as _uuid
 from pathlib import Path
 from typing import Any
@@ -485,6 +489,145 @@ def test_webhook(webhook_id: str, *, _url_hash: str | None = None) -> dict[str, 
 
 
 # ---------------------------------------------------------------------------
+# CRUD tools (delete, import, export)
+# ---------------------------------------------------------------------------
+
+
+def delete_clip(clip_id: str, *, permanent: bool = False) -> dict[str, str]:
+    """Soft-delete (trash) or permanently delete a clip by ID.
+
+    Requires mutation-scoped token.
+
+    Args:
+        clip_id: UUID of the clip to delete.
+        permanent: If ``True``, permanently remove from the database.
+            If ``False`` (default), soft-delete to trash.
+
+    Returns:
+        Dict with ``status`` and ``clip_id``, or ``error`` on failure.
+    """
+    scope_error = _check_mutation_allowed()
+    if scope_error is not None:
+        return {"error": scope_error}
+
+    store = _get_store()
+    clip = store.get_clip(clip_id)
+    if clip is None:
+        return {"error": f"Clip {clip_id} not found"}
+
+    try:
+        store.delete_clip(clip_id, soft=not permanent)
+    except Exception as exc:
+        logger.exception("Failed to delete clip %s: %s", clip_id, exc)
+        return {"error": f"Delete failed: {exc}"}
+
+    action = "trashed" if not permanent else "deleted"
+    logger.info("Clip %s %s via MCP", clip_id, action)
+    return {"status": action, "clip_id": clip_id}
+
+
+def import_clip(
+    file_path: str,
+    *,
+    profile: str = "game",
+    re_encode: bool = False,
+    game: str | None = None,
+    tags: list[str] | None = None,
+) -> dict[str, str]:
+    """Import a video file into the clip library.
+
+    Requires mutation-scoped token.
+
+    Args:
+        file_path: Absolute path to the video file.
+        profile: Encoding preset (``"game"``, ``"archive"``, ``"streaming"``).
+        re_encode: If ``True``, also re-encode after import.
+        game: Optional game name tag.
+        tags: Optional list of tags.
+
+    Returns:
+        Dict with ``status``, ``clip_id``, and ``title``, or ``error`` on failure.
+    """
+    scope_error = _check_mutation_allowed()
+    if scope_error is not None:
+        return {"error": scope_error}
+
+    from moment.core.import_export import ImportExport
+
+    src = Path(file_path)
+    if not src.is_file():
+        return {"error": f"File not found: {file_path}"}
+
+    if profile not in ("game", "archive", "streaming"):
+        return {"error": f"Invalid profile '{profile}' — must be game, archive, or streaming"}
+
+    store = _get_store()
+    importer = ImportExport(store)
+
+    try:
+        clip = importer.import_file(
+            src,
+            copy=True,
+            profile=profile,
+            re_encode=re_encode,
+            game=game,
+            tags=tags,
+        )
+    except Exception as exc:
+        logger.exception("Failed to import %s via MCP: %s", file_path, exc)
+        return {"error": f"Import failed: {exc}"}
+
+    logger.info("Imported clip %s (%s) via MCP", clip.id, clip.title or clip.stem)
+    return {
+        "status": "imported",
+        "clip_id": clip.id,
+        "title": clip.title or clip.stem,
+    }
+
+
+def export_clip(clip_id: str, output_path: str | None = None) -> dict[str, str]:
+    """Export a clip — copy to a destination or return its file path.
+
+    Read-only (no mutation token required).
+
+    Args:
+        clip_id: UUID of the clip to export.
+        output_path: Optional destination path.  If a directory, the file
+            is placed inside with its original name.  If omitted, returns
+            the file path in the response.
+
+    Returns:
+        Dict with ``status`` and ``file_path`` (always the source file path),
+        and ``output_path`` if a destination was provided.  Returns
+        ``error`` on failure.
+    """
+    store = _get_store()
+    clip = store.get_clip(clip_id)
+    if clip is None:
+        return {"error": f"Clip {clip_id} not found"}
+
+    src = clip.encoded_path or clip.source_path
+    if src is None or not src.is_file():
+        return {"error": f"Clip {clip_id} has no exportable file"}
+
+    result: dict[str, str] = {"status": "ok", "file_path": str(src)}
+
+    if output_path is not None:
+        dest = Path(output_path)
+        try:
+            if dest.is_dir():
+                dest = dest / src.name
+            shutil.copy2(str(src), str(dest))
+        except OSError as exc:
+            logger.exception("Export failed for %s: %s", clip_id, exc)
+            return {"error": f"Export failed: {exc}"}
+        result["output_path"] = str(dest)
+        logger.info("Exported clip %s to %s via MCP", clip_id, dest)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Registration hook
 # ---------------------------------------------------------------------------
 
@@ -514,6 +657,7 @@ def _register_read_tools(server: Any) -> None:
     server.tool()(get_stats)
     server.tool()(list_game_profiles)
     server.tool()(list_webhooks)
+    server.tool()(export_clip)
 
 
 def _register_mutation_tools(server: Any) -> None:
@@ -522,3 +666,5 @@ def _register_mutation_tools(server: Any) -> None:
     server.tool()(enqueue_upload)
     server.tool()(save_game_profile)
     server.tool()(test_webhook)
+    server.tool()(delete_clip)
+    server.tool()(import_clip)
