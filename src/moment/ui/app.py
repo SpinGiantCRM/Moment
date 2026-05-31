@@ -131,9 +131,9 @@ def _global_excepthook(exc_type, exc_value, exc_tb) -> None:
         )
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
-    except Exception:  # nosec B110
+    except Exception:
+            logger.debug("Error dialog failed in global excepthook")  # nosec B110
             # If even the dialog fails, just log and continue
-            pass
 
 
 # ===========================================================================
@@ -801,7 +801,7 @@ class AppManager(QObject):
                 from moment.ui.widgets.toast import toast_manager
                 toast_manager.show_toast("error", "Screenshot failed", str(exc))
             except Exception:
-                pass
+                logger.debug("Screenshot error toast fallback failed")
 
     def _bookmark(self) -> None:
         """Record a bookmark with timestamp. If GSR is running, save a replay too."""
@@ -828,7 +828,7 @@ class AppManager(QObject):
                 from moment.ui.widgets.toast import toast_manager
                 toast_manager.show_toast("error", "Bookmark failed", str(exc))
             except Exception:
-                pass
+                logger.debug("Bookmark error toast fallback failed")
 
     def _copy_last_url(self) -> None:
         """Copy the most recently uploaded clip's R2 URL to clipboard.
@@ -872,7 +872,7 @@ class AppManager(QObject):
                 from moment.ui.widgets.toast import toast_manager
                 toast_manager.show_toast("error", "Copy failed", str(exc))
             except Exception:
-                pass
+                logger.debug("Copy URL error toast fallback failed")
 
     # ------------------------------------------------------------------
     # GSR import toast slots (runs on main thread via signal bridge)
@@ -1079,7 +1079,7 @@ class AppManager(QObject):
                     logger.debug("Update check failed: %s", exc)
 
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
             except RuntimeError:
                 # No running event loop — schedule via QTimer
                 def _run_check() -> None:
@@ -1108,7 +1108,7 @@ class AppManager(QObject):
                 int(datetime.now(timezone.utc).timestamp()),
             )
         except Exception:
-            pass
+            logger.debug("Failed to persist update check timestamp")
 
         available = bool(result.get("available", False))
         if not available:

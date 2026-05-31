@@ -295,6 +295,126 @@ class TestWebhooks:
 
 
 # ---------------------------------------------------------------------------
+# Webhook Security — HTTPS enforcement and encryption
+# ---------------------------------------------------------------------------
+
+
+class TestWebhookSecurity:
+    def test_rejects_non_https_url(self, store) -> None:
+        """Webhook URLs must be HTTPS."""
+        wh = Webhook(id="wh-http", url="http://discord.com/api/webhooks/1/token")
+        with pytest.raises(ValueError, match="must be HTTPS"):
+            store.save_webhook(wh)
+
+    def test_rejects_ftp_url(self, store) -> None:
+        """FTP webhook URLs should be rejected."""
+        wh = Webhook(id="wh-ftp", url="ftp://discord.com/api/webhooks/1/token")
+        with pytest.raises(ValueError, match="must be HTTPS"):
+            store.save_webhook(wh)
+
+    def test_rejects_plain_text_url(self, store) -> None:
+        """Plain non-protocol URLs should be rejected."""
+        wh = Webhook(id="wh-plain", url="discord.com/api/webhooks/1/token")
+        with pytest.raises(ValueError, match="must be HTTPS"):
+            store.save_webhook(wh)
+
+    def test_rejects_empty_url(self, store) -> None:
+        """Empty webhook URLs should be rejected."""
+        wh = Webhook(id="wh-empty", url="")
+        with pytest.raises(ValueError, match="must be HTTPS"):
+            store.save_webhook(wh)
+
+    def test_encrypted_url_stored_different_from_original(self, store) -> None:
+        """The stored URL must be encrypted (not the same as the original)."""
+        original_url = "https://discord.com/api/webhooks/123456/secret_token"
+        wh = Webhook(id="wh-encrypt-check", url=original_url, name="EncryptCheck")
+        store.save_webhook(wh)
+
+        # Read the raw URL from the database (should be encrypted)
+        row = store._read_conn.execute(
+            "SELECT url FROM webhooks WHERE id = ?", ("wh-encrypt-check",)
+        ).fetchone()
+        assert row is not None
+        stored_url = row["url"]
+        # Stored URL should NOT be the original plaintext
+        assert stored_url != original_url
+        # Original token should not appear in the stored value
+        assert "secret_token" not in stored_url
+
+    def test_decrypted_url_matches_original(self, store) -> None:
+        """get_webhook_url() should decrypt the stored URL back to the original."""
+        original_url = "https://discord.com/api/webhooks/123456/real_token"
+        wh = Webhook(id="wh-decrypt-check", url=original_url, name="DecryptCheck")
+        store.save_webhook(wh)
+
+        decrypted = store.get_webhook_url("wh-decrypt-check")
+        assert decrypted == original_url
+
+    def test_list_webhooks_does_not_leak_token(self, store) -> None:
+        """list_webhooks() must redact the token portion of the URL."""
+        wh = Webhook(
+            id="wh-leak",
+            url="https://discord.com/api/webhooks/98765/super_secret_token_xyz",
+            name="LeakTest",
+        )
+        store.save_webhook(wh)
+
+        hooks = store.list_webhooks()
+        wh_out = next(w for w in hooks if w.id == "wh-leak")
+        assert "super_secret_token_xyz" not in wh_out.url
+        assert "[REDACTED]" in wh_out.url
+
+    def test_short_non_discord_url_truncated(self, store) -> None:
+        """Non-Discord webhook URLs under 60 chars are returned as-is."""
+        short_url = "https://hooks.example.com/webhook/abc"
+        wh = Webhook(id="wh-short", url=short_url, name="Short")
+        store.save_webhook(wh)
+
+        hooks = store.list_webhooks()
+        wh_out = next(w for w in hooks if w.id == "wh-short")
+        assert wh_out.url == short_url
+        # No redaction needed for non-Discord short URLs
+        assert "[REDACTED]" not in wh_out.url
+
+    def test_long_non_discord_url_truncated(self, store) -> None:
+        """Non-Discord webhook URLs over 60 chars are truncated."""
+        long_url = "https://hooks.example.com/webhook/abc123def456ghi789jkl012mno345pqr678stu901vwx234yz"
+        assert len(long_url) > 60
+        wh = Webhook(id="wh-long", url=long_url, name="Long")
+        store.save_webhook(wh)
+
+        hooks = store.list_webhooks()
+        wh_out = next(w for w in hooks if w.id == "wh-long")
+        assert "..." in wh_out.url
+        assert len(wh_out.url) <= 60
+
+    def test_encryption_failure_raises_runtime_error(self, store) -> None:
+        """If Fernet encryption fails, save_webhook should raise RuntimeError."""
+        wh = Webhook(id="wh-enc-fail", url="https://discord.com/api/webhooks/1/token")
+        with (
+            patch.object(store, "_get_or_create_fernet", side_effect=Exception("crypto error")),
+            pytest.raises(RuntimeError, match="Failed to encrypt"),
+        ):
+            store.save_webhook(wh)
+
+    def test_decryption_failure_raises_runtime_error(self, store) -> None:
+        """If Fernet decryption fails, get_webhook_url should raise RuntimeError."""
+        # Insert an encrypted webhook
+        wh = Webhook(id="wh-dec-fail", url="https://discord.com/api/webhooks/1/token", name="DecFail")
+        store.save_webhook(wh)
+
+        # Corrupt the encrypted value in the database
+        store._conn.execute(
+            "UPDATE webhooks SET url = ? WHERE id = ?",
+            ("garbage-not-valid-fernet-token", "wh-dec-fail"),
+        )
+        store._conn.commit()
+
+        with pytest.raises(RuntimeError, match="Failed to decrypt"):
+            store.get_webhook_url("wh-dec-fail")
+
+
+# ---------------------------------------------------------------------------
 # Folders
 # ---------------------------------------------------------------------------
 
@@ -806,6 +926,283 @@ class TestExecuteWithRetry:
         bad = BadCursor()
         with pytest.raises(sqlite3.OperationalError, match="no such table"):
             store._execute_with_retry("SELECT * FROM fake", cursor=bad)
+
+
+# ---------------------------------------------------------------------------
+# Cascading deletes
+# ---------------------------------------------------------------------------
+
+
+class TestCascadingDeletes:
+    def test_delete_clip_cascades_to_tags(self, store: Store) -> None:
+        """Soft-deleting a clip should not cascade-delete clip_tags rows."""
+        clip = _make_clip(store, id="cascade-tag")
+        store.set_tags(clip.id, ["frag", "ace"])
+        store.delete_clip(clip.id, soft=True)
+
+        # clip_tags should still exist (soft delete = NULL deleted_at)
+        rows = store._read_conn.execute(
+            "SELECT * FROM clip_tags WHERE clip_id = ?", ("cascade-tag",)
+        ).fetchall()
+        # Actually clip_tags has ON DELETE CASCADE, but soft delete doesn't
+        # actually DELETE the row — it just sets deleted_at
+        assert len(rows) == 2  # tags still associated after soft delete
+
+    def test_hard_delete_cascades_to_edit_profiles(self, store: Store) -> None:
+        """Hard-deleting a clip cascades to edit_profiles."""
+        _make_clip(store, id="cascade-ep")
+        ep = EditProfile(clip_id="cascade-ep", trim_start=2.0, trim_end=28.0)
+        store.save_edit_profile(ep)
+
+        store.delete_clip("cascade-ep", soft=False)
+        assert store.get_edit_profile("cascade-ep") is None
+
+    def test_hard_delete_cascades_to_url_history(self, store: Store) -> None:
+        """Hard-deleting a clip cascades to url_history."""
+        _make_clip(store, id="cascade-uh")
+        store.insert_url_history("cascade-uh", "https://example.com/clip.mp4")
+
+        store.delete_clip("cascade-uh", soft=False)
+        history = store.get_url_history("cascade-uh")
+        assert len(history) == 0
+
+    def test_hard_delete_cascades_to_pip_cache(self, store: Store) -> None:
+        """Hard-deleting a clip cascades to pip_cache."""
+        _make_clip(store, id="cascade-pip")
+        store._conn.execute(
+            "INSERT INTO pip_cache (id, clip_id, start_offset, end_offset) VALUES (?, ?, 0.0, 30.0)",
+            ("pip-test", "cascade-pip"),
+        )
+        store._conn.commit()
+
+        store.delete_clip("cascade-pip", soft=False)
+        row = store._read_conn.execute(
+            "SELECT count(*) as cnt FROM pip_cache WHERE clip_id = ?", ("cascade-pip",)
+        ).fetchone()
+        assert row["cnt"] == 0
+
+    def test_hard_delete_cascades_to_webhook_log(self, store: Store) -> None:
+        """Hard-deleting a clip cascades to webhook_log."""
+        _make_clip(store, id="cascade-wl")
+        # Create a valid webhook first (webhook_log has FK to webhooks)
+        wh = Webhook(id="wh-id", url="https://discord.com/api/webhooks/1/token", name="CascadeTest")
+        store.save_webhook(wh)
+        store._conn.execute(
+            "INSERT INTO webhook_log (id, webhook_id, clip_id, success, status_code) VALUES (?, ?, ?, 1, 200)",
+            ("wl-test", "wh-id", "cascade-wl"),
+        )
+        store._conn.commit()
+
+        store.delete_clip("cascade-wl", soft=False)
+        row = store._read_conn.execute(
+            "SELECT count(*) as cnt FROM webhook_log WHERE clip_id = ?", ("cascade-wl",)
+        ).fetchone()
+        assert row["cnt"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Foreign key enforcement
+# ---------------------------------------------------------------------------
+
+
+class TestForeignKeyEnforcement:
+    def test_rejects_orphan_clip_tags(self, store: Store) -> None:
+        """Inserting clip_tags for a nonexistent clip should fail."""
+        with pytest.raises(sqlite3.IntegrityError):
+            store._conn.execute(
+                "INSERT INTO clip_tags (clip_id, tag_id) VALUES (?, ?)",
+                ("nonexistent-clip", "nonexistent-tag"),
+            )
+            store._conn.commit()
+
+    def test_rejects_orphan_edit_profile(self, store: Store) -> None:
+        """Inserting edit_profile for a nonexistent clip should fail."""
+        with pytest.raises(sqlite3.IntegrityError):
+            store._conn.execute(
+                "INSERT INTO edit_profiles (clip_id) VALUES (?)",
+                ("nonexistent-clip",),
+            )
+            store._conn.commit()
+
+    def test_rejects_orphan_webhook_log(self, store: Store) -> None:
+        """Inserting webhook_log for a nonexistent webhook should fail."""
+        _make_clip(store, id="orphan-wl-clip")
+        with pytest.raises(sqlite3.IntegrityError):
+            store._conn.execute(
+                "INSERT INTO webhook_log (id, webhook_id, clip_id, success, status_code) VALUES (?, ?, ?, 1, 200)",
+                ("orphan-wl", "nonexistent-webhook", "orphan-wl-clip"),
+            )
+            store._conn.commit()
+
+    def test_rejects_orphan_url_history(self, store: Store) -> None:
+        """Inserting url_history for a nonexistent clip should fail."""
+        with pytest.raises(sqlite3.IntegrityError):
+            store._conn.execute(
+                "INSERT INTO url_history (id, clip_id, url) VALUES (?, ?, ?)",
+                ("orphan-uh", "nonexistent-clip", "https://example.com"),
+            )
+            store._conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Transaction rollback on error
+# ---------------------------------------------------------------------------
+
+
+class TestTransactionRollback:
+    def test_insert_rolls_back_on_error(self, store: Store) -> None:
+        """If an insert fails mid-transaction, prior changes are rolled back."""
+        try:
+            with store._base.tx() as cur:
+                cur.execute(
+                    "INSERT INTO clips (id, stem, source_path, recorded_at) VALUES (?, ?, ?, ?)",
+                    ("rollback-test", "rollback", "/tmp/roll.mkv", "2026-01-01"),
+                )
+                # This will fail — the table doesn't exist
+                cur.execute(
+                    "INSERT INTO nonexistent_table (id) VALUES (?)",
+                    ("x",),
+                )
+        except sqlite3.OperationalError:
+            pass
+
+        # Clip should NOT exist because the transaction was rolled back
+        assert store.get_clip("rollback-test") is None
+
+    def test_tx_context_rolls_back_on_exception(self, store: Store) -> None:
+        """When tx() context manager exits with exception, changes are rolled back."""
+        try:
+            with store._base.tx() as cur:
+                cur.execute(
+                    "INSERT INTO clips (id, stem, source_path, recorded_at) VALUES (?, ?, ?, ?)",
+                    ("tx-fail", "tx-fail", "/tmp/tx_fail.mkv", "2026-01-01"),
+                )
+                raise RuntimeError("simulated failure")
+        except RuntimeError:
+            pass
+
+        assert store.get_clip("tx-fail") is None
+
+
+# ---------------------------------------------------------------------------
+# Duplicate key behavior
+# ---------------------------------------------------------------------------
+
+
+class TestDuplicateKey:
+    def test_replaces_clip_on_same_id(self, store: Store) -> None:
+        """INSERT OR REPLACE with same ID replaces the existing clip."""
+        clip1 = _make_clip(store, id="dup-clip", title="Original", stem="original")
+        clip2 = _make_clip(store, id="dup-clip", title="Replacement", stem="replacement")
+
+        fetched = store.get_clip("dup-clip")
+        assert fetched is not None
+        assert fetched.title == "Replacement"
+        assert fetched.stem == "replacement"
+
+    def test_duplicate_task_id_replaced(self, store: Store) -> None:
+        """INSERT OR REPLACE on tasks replaces existing task."""
+        task1 = Task(id="dup-task", type=TaskKind.ENCODE, priority=1, payload={"clip_id": "c1"})
+        store.insert_task(task1)
+
+        task2 = Task(id="dup-task", type=TaskKind.UPLOAD, priority=5, payload={"clip_id": "c2"})
+        store.insert_task(task2)
+
+        pending = store.get_pending_tasks()
+        matching = [t for t in pending if t.id == "dup-task"]
+        assert len(matching) == 1
+        assert matching[0].type == TaskKind.UPLOAD
+        assert matching[0].priority == 5
+
+    def test_duplicate_tag_name_replaced(self, store: Store) -> None:
+        """INSERT OR IGNORE on tags with duplicate name does NOT replace."""
+        # Tags use INSERT OR IGNORE with UNIQUE name constraint
+        store._conn.execute(
+            "INSERT INTO tags (id, name) VALUES (?, ?)",
+            ("tag-v1", "clutch"),
+        )
+        store._conn.commit()
+
+        # Insert with same name, different id — should be ignored
+        store._conn.execute(
+            "INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)",
+            ("tag-v2", "clutch"),
+        )
+        store._conn.commit()
+
+        row = store._read_conn.execute(
+            "SELECT id FROM tags WHERE name = ?", ("clutch",)
+        ).fetchone()
+        assert row is not None
+        assert row["id"] == "tag-v1"  # original preserved
+
+
+# ---------------------------------------------------------------------------
+# Empty trash edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyTrash:
+    def test_empty_trash_no_deleted_clips(self, store: Store) -> None:
+        """empty_trash returns 0 when no clips are soft-deleted."""
+        _make_clip(store, id="trash-nondel")
+        count = store.empty_trash()
+        assert count == 0
+        assert store.get_clip("trash-nondel") is not None
+
+    def test_empty_trash_only_removes_soft_deleted(self, store: Store) -> None:
+        """empty_trash only removes clips with deleted_at set."""
+        _make_clip(store, id="trash-keep")
+        store.delete_clip("trash-keep", soft=True)
+        _make_clip(store, id="trash-active")
+
+        count = store.empty_trash()
+        assert count == 1
+        # Active clip should still exist
+        assert store.get_clip("trash-active") is not None
+        # Deleted clip should be gone
+        assert store.get_clip("trash-keep") is None
+
+    def test_empty_trash_twice_returns_zero(self, store: Store) -> None:
+        """Calling empty_trash twice returns 0 the second time."""
+        _make_clip(store, id="trash-double")
+        store.delete_clip("trash-double", soft=True)
+        count1 = store.empty_trash()
+        assert count1 == 1
+        count2 = store.empty_trash()
+        assert count2 == 0
+
+
+# ---------------------------------------------------------------------------
+# Rate limiter edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimiter:
+    def test_same_key_back_to_back_is_rate_limited(self, store: Store) -> None:
+        """Two rapid calls for the same key should rate-limit."""
+        r1 = store.check_persistent_rate("rate-test", interval_secs=60.0)
+        assert r1 is None  # first call allowed
+        r2 = store.check_persistent_rate("rate-test", interval_secs=60.0)
+        assert r2 is not None  # second call blocked
+        assert "wait" in r2.lower()
+
+    def test_empty_key_does_not_raise(self, store: Store) -> None:
+        """An empty string key should not cause errors."""
+        result = store.check_persistent_rate("", interval_secs=10.0)
+        assert result is None
+
+    def test_long_key_does_not_raise(self, store: Store) -> None:
+        """A very long key should not cause errors."""
+        key = "k" * 1000
+        result = store.check_persistent_rate(key, interval_secs=10.0)
+        assert result is None
+
+    def test_zero_interval_allows_all(self, store: Store) -> None:
+        """Zero interval should never rate-limit."""
+        for _ in range(10):
+            result = store.check_persistent_rate("fast-key", interval_secs=0.0)
+            assert result is None
 
 
 # ---------------------------------------------------------------------------

@@ -103,7 +103,7 @@ class Screenshot:
 
         try:
             find_ffmpeg()
-        except FFmpegError as exc:
+        except (FFmpegError, FileNotFoundError) as exc:
             raise ScreenshotError(f"ffmpeg not available: {exc}") from exc
 
         cmd = [

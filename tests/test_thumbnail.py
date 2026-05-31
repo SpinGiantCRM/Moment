@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -216,3 +216,113 @@ class TestDefaultDir:
         t = Thumbnailer(config=None)
         result = str(t._thumb_dir)
         assert result.startswith("/"), f"Expected absolute path, got: {result!r}"
+
+
+# ---------------------------------------------------------------------------
+# Batch generation
+# ---------------------------------------------------------------------------
+
+class TestBatch:
+    def test_generate_batch_empty(self, thumbnailer: Thumbnailer) -> None:
+        """generate_batch with empty list is a no-op."""
+        thumbnailer.generate_batch([])  # should not raise
+
+    def test_generate_batch_skips_cached(self, clip: Clip, thumbnailer: Thumbnailer) -> None:
+        """generate_batch skips clips that are already cached."""
+        thumb_path = thumbnailer._thumb_dir / f"{clip.stem}.jpg"
+        with thumbnailer._lock:
+            thumbnailer._cache[clip.stem] = thumb_path
+
+        with patch.object(thumbnailer._executor, "submit") as mock_submit:
+            thumbnailer.generate_batch([clip])
+            mock_submit.assert_not_called()
+
+    def test_generate_batch_submits_new_clips(self, clip: Clip, thumbnailer: Thumbnailer) -> None:
+        """generate_batch submits clips not yet in cache or in-flight."""
+        with patch.object(thumbnailer._executor, "submit") as mock_submit:
+            thumbnailer.generate_batch([clip])
+            mock_submit.assert_called_once()
+
+    def test_batch_with_callback(self, clip: Clip, thumbnailer: Thumbnailer) -> None:
+        """generate_batch with callback registers callbacks."""
+        calls: list[tuple[str, Path | None]] = []
+
+        def cb(stem: str, path: Path | None) -> None:
+            calls.append((stem, path))
+
+        thumbnailer.generate_batch([clip], callback=cb)
+        assert clip.stem in thumbnailer._callbacks
+
+
+# ---------------------------------------------------------------------------
+# Shutdown
+# ---------------------------------------------------------------------------
+
+class TestShutdown:
+    def test_shutdown_no_wait(self, thumbnailer: Thumbnailer) -> None:
+        """shutdown(wait=False) does not block."""
+        thumbnailer.shutdown(wait=False)
+
+    def test_shutdown_idempotent(self, thumbnailer: Thumbnailer) -> None:
+        """Shutdown twice should not raise."""
+        thumbnailer.shutdown()
+        thumbnailer.shutdown()  # no-op on second call
+
+
+# ---------------------------------------------------------------------------
+# Config integration
+# ---------------------------------------------------------------------------
+
+class TestConfigIntegration:
+    def test_config_based_thumb_dir(self, tmp_path: Path) -> None:
+        """Thumbnailer uses Config.thumb_dir if provided."""
+        config = MagicMock()
+        config.get_path.return_value = str(tmp_path / "custom_thumbs")
+        t = Thumbnailer(config=config)
+        assert str(t._thumb_dir) == str(tmp_path / "custom_thumbs")
+
+    def test_config_based_cache_size(self, tmp_path: Path) -> None:
+        """Thumbnailer reads cache size from Config."""
+        config = MagicMock()
+        config.get_path.return_value = str(tmp_path / "thumbs")
+        config.get.return_value = 123
+        t = Thumbnailer(config=config, thumb_dir=str(tmp_path / "thumbs"))
+        assert t._max_cache == 123
+
+    def test_progress_callback_error_handled(self, thumbnailer: Thumbnailer, clip: Clip) -> None:
+        """Progress callback exception is caught and logged."""
+        calls: list[tuple[int, int, str]] = []
+
+        def bad_cb(current: int, total: int, cid: str) -> None:
+            if current == 1:
+                raise RuntimeError("callback error")
+            calls.append((current, total, cid))
+
+        thumbnailer._on_progress = bad_cb
+        thumbnailer._total_count = 2
+
+        # First call raises (current=1 after increment), should be caught
+        with thumbnailer._count_lock:
+            thumbnailer._completed_count = 0  # _mark_completed will increment to 1
+        thumbnailer._mark_completed(clip)
+        assert len(calls) == 0  # callback raised, call returned empty
+
+    def test_dispatch_callbacks_error_handled(self, thumbnailer: Thumbnailer) -> None:
+        """Callback dispatch error is logged but doesn't crash."""
+        errors: list[Exception] = []
+
+        def bad_cb(stem: str, path: Path | None) -> None:
+            raise RuntimeError("dispatch error")
+
+        with thumbnailer._lock:
+            thumbnailer._callbacks["test_clip"] = [bad_cb]
+
+        thumbnailer._dispatch_callbacks("test_clip", Path("/tmp/thumb.jpg"))
+        # should not raise
+
+    def test_shutdown_on_del(self) -> None:
+        """__del__ calls shutdown(wait=False)."""
+        t = Thumbnailer(max_cache=5)
+        with patch.object(t._executor, "shutdown") as mock_shutdown:
+            t.__del__()
+            mock_shutdown.assert_called_once_with(wait=False)

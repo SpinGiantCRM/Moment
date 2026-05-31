@@ -178,8 +178,45 @@ class TestImport:
     @patch("moment.core.import_export.Thumbnailer")
     @patch("moment.core.import_export.ensure_dir")
     @patch.object(ImportExport, "_check_mime_type", return_value=None)
+    def test_import_reencode(
+        self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie, store
+    ):
+        """When re_encode=True, the Encoder is invoked."""
+        mock_probe.return_value = {
+            "format": {"duration": "10.0"},
+            "streams": [
+                {
+                    "codec_type": "video", "codec_name": "h264",
+                    "width": 1280, "height": 720, "r_frame_rate": "30/1",
+                },
+            ],
+        }
+        mock_thumb = MagicMock()
+        mock_thumb.generate.return_value = None
+        mock_thumb_cls.return_value = mock_thumb
+
+        fd, tmp = tempfile.mkstemp(suffix=".mp4", prefix="reencode_")
+        os.close(fd)
+        Path(tmp).write_bytes(b"data" * 50)
+        try:
+            with patch("moment.core.import_export.Encoder.encode") as mock_encode:
+                mock_encode.return_value = Path("/tmp/encoded.mp4")
+                clip = ie.import_file(Path(tmp), copy=False, re_encode=True)
+                assert clip is not None
+                mock_encode.assert_called_once()
+        finally:
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+
+    @patch("moment.core.import_export.ffprobe")
+    @patch("moment.core.import_export.Thumbnailer")
+    @patch("moment.core.import_export.ensure_dir")
+    @patch.object(ImportExport, "_check_mime_type", return_value=None)
+    @patch("moment.core.import_export.shutil.copy2", return_value=None)
     def test_import_with_game_and_tags(
-        self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie
+        self, mock_copy, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie
     ):
         mock_probe.return_value = {
             "format": {"duration": "60.0"},
@@ -201,6 +238,41 @@ class TestImport:
             clip = ie.import_file(Path(tmp), copy=False, game="elden-ring", tags=["boss", "no-hit"])
             assert clip.game == "elden-ring"
             assert clip.tags == ["boss", "no-hit"]
+        finally:
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+
+    @patch("moment.core.import_export.ffprobe")
+    @patch("moment.core.import_export.Thumbnailer")
+    @patch("moment.core.import_export.ensure_dir")
+    @patch.object(ImportExport, "_check_mime_type", return_value=None)
+    def test_import_copy_temp_cleanup_on_rename_fail(
+        self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie
+    ):
+        """When rename fails after copy, temp file is cleaned up."""
+        mock_probe.return_value = {
+            "format": {"duration": "5.0"},
+            "streams": [
+                {
+                    "codec_type": "video", "codec_name": "h264",
+                    "width": 640, "height": 480, "r_frame_rate": "30/1",
+                },
+            ],
+        }
+
+        fd, tmp = tempfile.mkstemp(suffix=".mp4", prefix="rename_fail_")
+        os.close(fd)
+        Path(tmp).write_bytes(b"fake video data" * 50)
+        try:
+            with (
+                patch("moment.core.import_export.shutil.copy2") as mock_copy,
+                patch("moment.core.import_export.os.rename", side_effect=OSError("rename failed")),
+            ):
+                mock_copy.side_effect = lambda src, dst: Path(dst).write_bytes(b"x")
+                with pytest.raises(ImportError, match="rename"):
+                    ie.import_file(Path(tmp), copy=True)
         finally:
             try:
                 os.unlink(tmp)
@@ -292,6 +364,60 @@ class TestExport:
         count = ie.export_clips(["symlink-safe"], dest)
         assert count == 1
         assert (dest / "link.mp4").exists()
+
+
+# ---------------------------------------------------------------------------
+# MIME type checks
+# ---------------------------------------------------------------------------
+
+class TestMimeType:
+    def test_mime_type_video_accepted(self, ie) -> None:
+        """Video MIME types pass validation."""
+        with (
+            patch("moment.core.import_export._HAS_MAGIC", True),
+            patch("moment.core.import_export.magic") as mock_magic,
+        ):
+            mock_magic.from_file.return_value = "video/mp4"
+            ie._check_mime_type(Path("/tmp/test.mp4"))
+
+    def test_mime_type_audio_accepted(self, ie) -> None:
+        """Audio MIME types pass validation."""
+        with (
+            patch("moment.core.import_export._HAS_MAGIC", True),
+            patch("moment.core.import_export.magic") as mock_magic,
+        ):
+            mock_magic.from_file.return_value = "audio/mpeg"
+            ie._check_mime_type(Path("/tmp/test.mp3"))
+
+    def test_mime_type_unknown_rejected(self, ie) -> None:
+        """Non-media MIME types raise ImportError."""
+        with (
+            patch("moment.core.import_export._HAS_MAGIC", True),
+            patch("moment.core.import_export.magic") as mock_magic,
+        ):
+            mock_magic.from_file.return_value = "application/pdf"
+            with pytest.raises(ImportError, match="Not a recognised"):
+                ie._check_mime_type(Path("/tmp/test.pdf"))
+
+    def test_mime_type_exception_logged(self, ie) -> None:
+        """If python-magic raises, the method falls back to file(1)."""
+        with (
+            patch("moment.core.import_export._HAS_MAGIC", True),
+            patch("moment.core.import_export.magic") as mock_magic,
+            patch("moment.core.import_export.ExternalCommandRunner.run") as mock_run,
+        ):
+            mock_magic.from_file.side_effect = Exception("magic error")
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "video/mp4\n"
+            ie._check_mime_type(Path("/tmp/test.mp4"))
+
+    def test_no_mime_checker_available_skips(self, ie) -> None:
+        """If neither magic nor file(1) is available, skip MIME check silently."""
+        with (
+            patch("moment.core.import_export._HAS_MAGIC", False),
+            patch("moment.core.import_export.ExternalCommandRunner.run", side_effect=FileNotFoundError),
+        ):
+            ie._check_mime_type(Path("/tmp/test.mp4"))
 
 
 # ---------------------------------------------------------------------------

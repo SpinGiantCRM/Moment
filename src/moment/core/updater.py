@@ -56,6 +56,8 @@ def _parse_version(version: str) -> tuple[int, ...]:
     >>> _parse_version("1.0.0a1")
     (1, 0, 0)
     """
+    if version is None:
+        return (0,)
     try:
         # Take only leading numeric components (ignore pre-release suffixes)
         parts: list[int] = []
@@ -69,6 +71,10 @@ def _parse_version(version: str) -> tuple[int, ...]:
             if not digits:
                 break
             parts.append(int(digits))
+            # If the original part had trailing non-digit chars (e.g. "0-beta"),
+            # stop parsing — remaining parts are pre-release labels, not version segments
+            if len(digits) < len(part.strip()):
+                break
         return tuple(parts) if parts else (0,)
     except (ValueError, TypeError):
         return (0,)
@@ -122,6 +128,7 @@ async def check_for_updates(current_version: str) -> UpdateResult:
             if latest and _is_newer(latest, current):
                 result["available"] = True
                 result["latest_version"] = latest
+                logger.info("Update available: %s", latest)
 
             logger.debug(
                 "Update check: installed=%s  latest=%s  available=%s",

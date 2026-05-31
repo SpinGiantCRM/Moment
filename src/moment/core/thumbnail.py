@@ -183,7 +183,7 @@ class Thumbnailer:
         try:
             self._executor.shutdown(wait=False)
         except Exception:
-            pass
+            logger.debug("Thumbnailer executor shutdown ignored during GC")
 
     def get_cached(self, stem: str) -> Path | None:
         """Return the cached thumbnail path, or ``None``."""
@@ -226,7 +226,7 @@ class Thumbnailer:
                 try:
                     old_path.unlink(missing_ok=True)
                 except OSError:
-                    pass
+                    logger.debug("Failed to clean up old thumbnail %s", old_path)
             self._in_flight.discard(stem)
 
         self._dispatch_callbacks(stem, out)
@@ -277,8 +277,8 @@ class Thumbnailer:
             total = self._total_count
         try:
             self._on_progress(current, total, clip.id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Progress callback error for %s: %s", clip.id, exc)
 
     def _dispatch_callbacks(self, stem: str, path: Path | None) -> None:
         """Invoke all registered callbacks for *stem*."""

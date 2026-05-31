@@ -58,11 +58,11 @@ def _cleanup_child_processes() -> None:
             os.kill(pid, signal.SIGKILL)
             logger.debug("Sent SIGKILL to tracked child pid=%d", pid)
         except (ProcessLookupError, OSError):
-            pass
+            logger.debug("Process %d already exited — skipping SIGKILL", pid)
         try:
             os.waitid(os.P_PID, pid, os.WNOHANG)
         except (ChildProcessError, OSError):
-            pass
+            logger.debug("waitid failed for pid %d", pid)
 
 
 def _signal_cleanup(signum: int, _frame: Any) -> None:
@@ -91,7 +91,7 @@ def _sandbox_preexec() -> None:
     try:
         os.setsid()
     except OSError:
-        pass
+        logger.debug("Failed to create new session in sandbox")  # non-fatal — some environments restrict setsid
 
     # Drop setuid / setgid privileges if elevated
     try:
@@ -100,13 +100,13 @@ def _sandbox_preexec() -> None:
             os.setgid(os.getgid())
             os.setuid(os.getuid())
     except OSError:
-        pass
+        logger.debug("Failed to drop privileges in sandbox")  # non-fatal — not running as root
 
     # Close inherited file descriptors beyond stdin/stdout/stderr
     try:
         os.closerange(3, _FD_CLOSE_MAX)
     except OSError:
-        pass
+        logger.debug("Failed to close inherited file descriptors in sandbox")  # non-fatal
 
 
 def run_sandboxed(

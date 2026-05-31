@@ -489,7 +489,7 @@ class MainWindow(QMainWindow):
             try:
                 self._toolbar_search.textChanged.disconnect()
             except TypeError:
-                pass
+                logger.debug("Toolbar search signal not connected yet")
             self._toolbar_search.textChanged.connect(
                 self._grid_page._proxy_model.set_filter_text
             )
@@ -498,7 +498,7 @@ class MainWindow(QMainWindow):
             try:
                 self._toolbar_sort.currentTextChanged.disconnect()
             except TypeError:
-                pass
+                logger.debug("Toolbar sort signal not connected yet")
             self._toolbar_sort.currentTextChanged.connect(
                 self._grid_page._on_sort_changed
             )
@@ -991,7 +991,7 @@ class MainWindow(QMainWindow):
                 try:
                     counts[parts[0].lower()] = int(parts[1])
                 except ValueError:
-                    pass
+                    logger.debug("Failed to parse status segment: %s", segment)
 
         if "(paused)" in status_text and not counts:
             banner.update_status("idle")

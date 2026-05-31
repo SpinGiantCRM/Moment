@@ -22,9 +22,18 @@ from moment.core.store import Store
 from moment.core.thumbnail import Thumbnailer
 from moment.utils.ffmpeg import FFmpegError, parse_fps
 from moment.utils.ffmpeg import probe as ffprobe
+from moment.utils.subprocess import ExternalCommandRunner
 from moment.utils.system import ensure_dir, sanitize_stem
 
 logger = logging.getLogger(__name__)
+
+# Optional python-magic for MIME type detection
+try:
+    import magic
+    _HAS_MAGIC = True
+except ImportError:
+    _HAS_MAGIC = False
+    magic = None  # type: ignore[assignment]
 
 # Preset definitions
 _PRESETS: dict[str, dict[str, object]] = {
@@ -145,8 +154,8 @@ class ImportExport:
             except Exception:
                 try:
                     os.unlink(tmp_path)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.warning("Failed to clean up temp file %s: %s", tmp_path, exc)
                 raise
 
         # Probe metadata
@@ -157,8 +166,8 @@ class ImportExport:
             if copy:
                 try:
                     os.unlink(target_path)
-                except OSError:
-                    pass
+                except OSError as exc2:
+                    logger.warning("Failed to clean up target file %s: %s", target_path, exc2)
             raise ImportError(f"ffprobe failed for {target_path}: {exc}") from exc
 
         # Atomic rename: temp → final destination (validated)
@@ -170,8 +179,8 @@ class ImportExport:
             except OSError as exc:
                 try:
                     os.unlink(target_path)
-                except OSError:
-                    pass
+                except OSError as exc2:
+                    logger.warning("Failed to clean up target file %s: %s", target_path, exc2)
                 raise ImportError(f"Failed to rename temp file: {exc}") from exc
 
         fmt = probe_data.get("format", {})
@@ -185,8 +194,8 @@ class ImportExport:
             if copy:
                 try:
                     os.unlink(target_path)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.warning("Failed to clean up target file %s: %s", target_path, exc)
             raise ImportError(f"No video stream found in {target_path}")
 
         video_codec = video_stream.get("codec_name", "")
@@ -340,8 +349,8 @@ class ImportExport:
                     custom = cfg.get_path(key)
                     if custom:
                         allowed.add(str(Path(custom).resolve()))
-        except Exception:
-            pass  # graceful fallback; hardcoded roots are sufficient
+        except Exception as exc:
+            logger.warning("Config fallback for allowed roots failed: %s", exc)
 
         from os.path import commonpath
 
@@ -381,20 +390,17 @@ class ImportExport:
         mime_type: str | None = None
 
         # Try python-magic first
-        try:
-            import magic
-
-            mime_type = magic.from_file(str(path), mime=True)  # type: ignore[union-attr]
-        except ImportError:
+        if _HAS_MAGIC:
+            try:
+                mime_type = magic.from_file(str(path), mime=True)
+            except Exception as exc:
+                logger.debug("python-magic MIME check failed: %s", exc)
+        else:
             logger.debug("python-magic not installed — trying file(1) fallback")
-        except Exception as exc:
-            logger.debug("python-magic MIME check failed: %s", exc)
 
         # Fallback: subprocess call to file(1)
         if mime_type is None:
             try:
-                from moment.utils.subprocess import ExternalCommandRunner
-
                 result = ExternalCommandRunner().run(
                     ["file", "--mime-type", "-b", str(path)],
                     capture_output=True,

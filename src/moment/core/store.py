@@ -113,8 +113,8 @@ class Store:
         for c in (self._conn, self._read_conn):
             try:
                 c.close()
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as exc:
+                logger.warning("Failed to close database connection: %s", exc)
 
     def _execute_with_retry(self, sql, params=(), *, cursor=None, max_retries=5):
         return self._base.execute_with_retry(sql, params, cursor=cursor, max_retries=max_retries)

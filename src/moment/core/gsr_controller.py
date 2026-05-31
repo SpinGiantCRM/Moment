@@ -174,7 +174,7 @@ class GSRController:
                 timeout=_TERM_GRACE + 1,
             )
         except _sp.TimeoutExpired:
-            pass
+            logger.debug("Terminate grace period expired")
 
         # SIGKILL survivors
         remaining = _sp.run(
@@ -187,8 +187,8 @@ class GSRController:
                 try:
                     os.kill(pid, signal.SIGKILL)
                     logger.warning("Sent SIGKILL to external GSR (pid=%d)", pid)
-                except (ProcessLookupError, OSError):
-                    pass
+                except (ProcessLookupError, OSError) as exc:
+                    logger.debug("SIGKILL failed for stale GSR (pid=%d): %s", pid, exc)
 
     def start(self) -> None:
         """Launch GSR in instant-replay mode.
@@ -343,7 +343,8 @@ class GSRController:
         # Send SIGTERM to the process group
         try:
             os.kill(pid, signal.SIGTERM)
-        except (ProcessLookupError, OSError):
+        except (ProcessLookupError, OSError) as exc:
+            logger.debug("SIGTERM failed for GSR (pid=%d): %s", pid, exc)
             self._proc = None
             return
 
@@ -356,8 +357,8 @@ class GSRController:
             try:
                 os.kill(pid, signal.SIGKILL)
                 self._proc.wait(timeout=2)
-            except (ProcessLookupError, OSError, subprocess.TimeoutExpired):
-                pass
+            except (ProcessLookupError, OSError, subprocess.TimeoutExpired) as exc:
+                logger.debug("SIGKILL/cleanup failed for GSR (pid=%d): %s", pid, exc)
         finally:
             self._proc = None
 

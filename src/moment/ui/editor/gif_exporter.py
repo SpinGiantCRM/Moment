@@ -287,7 +287,7 @@ class GifExporter(QDialog):
             try:
                 Path(palette_path).unlink(missing_ok=True)
             except OSError:
-                pass
+                logger.debug("Failed to clean up palette temp file")
             self.export_finished.emit(self._output_path)
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
             self.export_error.emit(f"GIF encoding failed: {exc}")

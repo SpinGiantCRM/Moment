@@ -247,5 +247,5 @@ def get_os_name() -> str:
                 if line.startswith("PRETTY_NAME="):
                     return line.split("=", 1)[1].strip().strip("\"'")
     except FileNotFoundError:
-        pass
+        logger.debug("Could not read /etc/os-release — defaulting OS name to Linux")
     return "Linux"

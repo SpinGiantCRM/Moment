@@ -240,8 +240,8 @@ class GameMonitor:
                     if self._use_nvidia and not self._check_gpu_utilization():
                         continue
                     return comm
-        except (OSError, FileNotFoundError):
-            pass
+        except (OSError, FileNotFoundError) as exc:
+            logger.debug("Failed to scan /proc: %s", exc)
 
         return None
 

@@ -35,8 +35,8 @@ def _get_or_create_db_key() -> bytes | None:
         key = keyring.get_password("moment", "db_encryption_key")
         if key is not None:
             return key.encode()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to read DB encryption key from keyring: %s", exc)
 
     import secrets
 
@@ -456,8 +456,8 @@ def _migration_006_migrate_old_dirs(conn: sqlite3.Connection) -> None:
             try:
                 os.rename(old, new)
                 logger.info("Migration 006: Renamed %s → %s", old, new)
-            except OSError:
-                logger.warning("Could not rename %s → %s", old, new)
+            except OSError as exc:
+                logger.warning("Could not rename %s → %s: %s", old, new, exc)
 
 
 def _migration_007_migrate_json(conn: sqlite3.Connection) -> None:

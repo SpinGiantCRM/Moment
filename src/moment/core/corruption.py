@@ -216,8 +216,8 @@ class CorruptionDetector:
                     if age > TEMP_MAX_AGE:
                         entry.unlink()
                         deleted += 1
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.debug("Failed to clean up stale temp file %s: %s", entry, exc)
             if deleted:
                 logger.info("Cleaned up %d stale temp files", deleted)
         except OSError as exc:
@@ -258,6 +258,6 @@ class CorruptionDetector:
                     self._last_task_time = now
             else:
                 self._last_task_count = 0
-        except Exception:  # nosec B110
-            pass
+        except Exception as exc:
+            logger.debug("Pipeline stuck check failed: %s", exc)
         return issues

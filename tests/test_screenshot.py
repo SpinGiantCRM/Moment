@@ -231,6 +231,18 @@ class TestPostProcessing:
 # ---------------------------------------------------------------------------
 
 
+class TestValidateDisplay:
+    def test_valid_display(self, screenshot: Screenshot) -> None:
+        assert screenshot._validate_display(":0") == ":0"
+        assert screenshot._validate_display(":0.0") == ":0.0"
+        assert screenshot._validate_display(":1.2") == ":1.2"
+
+    def test_invalid_display_falls_back(self, screenshot: Screenshot) -> None:
+        assert screenshot._validate_display("") == ":0.0"
+        assert screenshot._validate_display("bad") == ":0.0"
+        assert screenshot._validate_display("localhost:0") == ":0.0"
+
+
 class TestResolutionDetection:
     def test_detect_from_xdpyinfo(self, screenshot: Screenshot) -> None:
         mock_result = MagicMock()
@@ -245,8 +257,142 @@ class TestResolutionDetection:
             res = screenshot._detect_resolution(":0.0")
             assert res == "2560x1440"
 
+    def test_detect_from_xrandr(self, screenshot: Screenshot) -> None:
+        """When xdpyinfo fails, try xrandr for primary output."""
+        def side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock()
+            if cmd and cmd[0] == "xdpyinfo":
+                result.returncode = 1
+                result.stdout = ""
+            elif cmd and cmd[0] == "xrandr":
+                result.returncode = 0
+                result.stdout = "HDMI-1 connected 1920x1080+0+0 (normal)"
+            else:
+                result.returncode = 1
+                result.stdout = ""
+            return result
+
+        with patch("subprocess.run", side_effect=side_effect):
+            res = screenshot._detect_resolution(":0.0")
+            assert res == "1920x1080"
+
+    def test_detect_from_wlr_randr(self, screenshot: Screenshot) -> None:
+        """When on Wayland, try wlr-randr."""
+        def side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock()
+            if cmd and cmd[0] == "xdpyinfo":
+                raise FileNotFoundError()
+            elif cmd and cmd[0] == "wlr-randr":
+                result.returncode = 0
+                result.stdout = "eDP-1 2560x1440 @ 60.00 Hz"
+            else:
+                result.returncode = 1
+                result.stdout = ""
+            return result
+
+        with (
+            patch("subprocess.run", side_effect=side_effect),
+            patch("moment.core.screenshot._is_wayland", return_value=True),
+        ):
+            res = screenshot._detect_resolution(":0.0")
+            assert res == "2560x1440"
+
     def test_detect_fallback(self, screenshot: Screenshot) -> None:
         """When xdpyinfo and xrandr fail, fall back to 1920x1080."""
         with patch("subprocess.run", side_effect=FileNotFoundError):
             res = screenshot._detect_resolution(":0.0")
             assert res == "1920x1080"
+
+
+class TestWaylandCapture:
+    def test_wayland_capture_grim_success(self, screenshot: Screenshot, tmp_path: Path) -> None:
+        """Wayland capture with grim succeeds."""
+        def side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock()
+            if cmd and cmd[0] == "grim":
+                result.returncode = 0
+            else:
+                result.returncode = 1
+            return result
+
+        output = tmp_path / "screenshots" / "wayland_grim.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"\x89PNG\r\n")
+
+        with (
+            patch("subprocess.run", side_effect=side_effect),
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+        ):
+            mock_stat.return_value.st_size = 1000
+            result = screenshot._capture_wayland(output)
+            assert result == output
+
+    def test_wayland_capture_all_methods_fail(self, screenshot: Screenshot, tmp_path: Path) -> None:
+        """When all Wayland capture methods fail, raise ScreenshotError."""
+        with (
+            patch("subprocess.run", return_value=MagicMock(returncode=1)),
+            patch("pathlib.Path.is_file", return_value=False),
+        ):
+            with pytest.raises(ScreenshotError, match="Wayland screenshot failed"):
+                screenshot._capture_wayland(tmp_path / "fail.png")
+
+    def test_wayland_capture_gnome_screenshot(self, screenshot: Screenshot, tmp_path: Path) -> None:
+        """Wayland capture via gnome-screenshot succeeds when grim unavailable."""
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get("args", [])
+            result = MagicMock()
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # grim fails
+                return MagicMock(returncode=1, stderr="grim not found")
+            elif call_count[0] == 2:
+                # spectacle fails
+                return MagicMock(returncode=1, stderr="spectacle not found")
+            elif call_count[0] == 3:
+                # gnome-screenshot succeeds
+                result.returncode = 0
+            else:
+                result.returncode = 1
+            return result
+
+        output = tmp_path / "screenshots" / "wayland_gnome.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"\x89PNG\r\n")
+
+        with (
+            patch("subprocess.run", side_effect=side_effect),
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+        ):
+            mock_stat.return_value.st_size = 1000
+            result = screenshot._capture_wayland(output)
+            assert result == output
+
+    @patch("moment.core.screenshot.find_ffmpeg", side_effect=FileNotFoundError("ffmpeg not found"))
+    def test_capture_ffmpeg_not_found(self, mock_find, screenshot: Screenshot) -> None:
+        """If ffmpeg is not available, capture_fallback raises ScreenshotError."""
+        with (
+            patch("moment.core.screenshot._is_wayland", return_value=False),
+        ):
+            with pytest.raises(ScreenshotError, match="ffmpeg not available"):
+                screenshot.capture_fallback()
+
+
+class TestCropFailure:
+    def test_crop_failure_returns_original(self, screenshot: Screenshot, fake_screenshot: Path) -> None:
+        """If crop ffmpeg command fails, return original path."""
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("moment.core.screenshot.find_ffmpeg", return_value="ffmpeg"),
+        ):
+            mock_run.return_value.returncode = 1
+            mock_run.return_value.stderr = "crop error"
+
+            result = screenshot.post_process(fake_screenshot, crop=(10, 10, 100, 100))
+            assert result == fake_screenshot  # Original returned

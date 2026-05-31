@@ -499,7 +499,7 @@ class TimelinePanel(QWidget):
             speed = float(text)
             self._timeline.set_speed(seg_idx, speed)
         except ValueError:
-            pass
+            logger.debug("Invalid speed value: %s", text)
 
 
 def _fmt(seconds: float) -> str:

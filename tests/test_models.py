@@ -194,3 +194,23 @@ class TestSupportingModels:
         assert t.status == TaskStatus.PENDING
         assert t.retry_count == 0
         assert t.max_retries == 3
+
+    def test_task_ordering(self) -> None:
+        t1 = Task(id="a", type=TaskKind.ENCODE)
+        t2 = Task(id="b", type=TaskKind.ENCODE)
+        assert t1 < t2  # alphabetical by id
+        assert not (t2 < t1)
+
+    def test_task_lt_not_task_returns_not_implemented(self) -> None:
+        t = Task(id="t1", type=TaskKind.ENCODE)
+        result = t.__lt__("not a task")  # type: ignore[arg-type]
+        assert result is NotImplemented
+
+    def test_health_check_task_kind(self) -> None:
+        assert TaskKind.HEALTH_CHECK.value == "health_check"
+
+    def test_import_task_kind(self) -> None:
+        assert TaskKind.IMPORT.value == "import"
+
+    def test_thumbnail_task_kind(self) -> None:
+        assert TaskKind.THUMBNAIL.value == "thumbnail"

@@ -40,7 +40,7 @@ def _resolve_api_token(cli_token: str | None) -> str | None:
         if token:
             return token
     except Exception:
-        pass
+        logger.debug("Keyring token lookup failed — no API token configured")
     return None
 
 

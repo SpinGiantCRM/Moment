@@ -416,7 +416,7 @@ def _owner_id_from_auth() -> str | None:
         if scope == "mutation":
             return "*"
     except Exception:
-        pass
+        logger.debug("Failed to get auth scope — defaulting to no owner")
     return None
 
 
@@ -427,7 +427,7 @@ def _check_mutation_allowed() -> str | None:
         if get_auth_scope() != "mutation":
             return "Forbidden: mutation-scoped token required for this operation"
     except Exception:
-        pass
+        logger.debug("Failed to get auth scope — defaulting to mutation forbidden")
     return None
 
 

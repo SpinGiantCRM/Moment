@@ -237,8 +237,11 @@ class RetentionManager:
                             "Retention: trashed source %s (%s old)",
                             row["stem"], _age_str(recorded_dt),
                         )
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        logger.debug(
+                            "Failed to trash source file %s: %s",
+                            row["stem"], exc,
+                        )
 
         return purged, freed
 
@@ -278,8 +281,11 @@ class RetentionManager:
                             "Retention: trashed encoded %s (%s old)",
                             row["stem"], _age_str(recorded_dt),
                         )
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        logger.debug(
+                            "Failed to trash encoded file %s: %s",
+                            row["stem"], exc,
+                        )
 
         return purged, freed
 

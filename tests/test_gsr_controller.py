@@ -62,6 +62,7 @@ class TestBinaryCheck:
     def test_binary_found_starts(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_monitor_process"),
         ):
@@ -84,6 +85,7 @@ class TestLifecycle:
     def test_start_creates_output_dir(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch("pathlib.Path.mkdir") as mock_mkdir,
             patch.object(gsr, "_monitor_process"),
@@ -99,6 +101,7 @@ class TestLifecycle:
     def test_start_replaces_existing_process(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_monitor_process"),
         ):
@@ -117,6 +120,7 @@ class TestLifecycle:
     def test_stop(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_monitor_process"),
         ):
@@ -144,6 +148,7 @@ class TestSaveReplay:
     def test_sends_sigusr1(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch("os.kill") as mock_kill,
             patch.object(gsr, "_monitor_process"),
@@ -165,6 +170,7 @@ class TestSaveReplay:
     def test_debounce(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch("os.kill") as mock_kill,
             patch.object(gsr, "_monitor_process"),
@@ -182,6 +188,7 @@ class TestSaveReplay:
     def test_sigusr1_on_dead_process(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch("os.kill") as mock_kill,
             patch.object(gsr, "_monitor_process"),
@@ -233,6 +240,7 @@ class TestCrashRecovery:
         """If the process dies, the monitor thread should restart it."""
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
         ):
             mock_proc = MagicMock()
@@ -260,6 +268,7 @@ class TestCrashRecovery:
         crashes: list[str] = []
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(GSRController, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
         ):
             ctrl = GSRController(
@@ -288,6 +297,7 @@ class TestCrashRecovery:
         """If we intentionally stopped, monitor should not restart."""
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_spawn_process_unlocked") as mock_spawn,
         ):
@@ -337,6 +347,7 @@ class TestQueries:
     def test_recording_after_start(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_monitor_process"),
         ):

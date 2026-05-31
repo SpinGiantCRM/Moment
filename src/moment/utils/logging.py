@@ -178,7 +178,7 @@ def setup_logging(verbose: bool = False, *, config: "Config | None" = None) -> l
     try:
         os.chmod(log_file, 0o600)
     except OSError:
-        pass
+        logger.debug("Failed to set permissions on log file %s", log_file)
 
     # Stream handler → stderr (picked up by systemd journal if applicable)
     stream_handler = logging.StreamHandler()

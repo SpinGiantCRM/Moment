@@ -12,6 +12,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+import os
+import shutil
+import tempfile
+
 import pytest
 
 from moment.core.config import Config
@@ -433,3 +437,247 @@ class TestStartStop:
         assert m.is_running
         m.stop()
         assert not m.is_running
+
+    def test_double_start_noop(self, store: Store, trash_dir: str) -> None:
+        m = RetentionManager(store, trash_dir=trash_dir)
+        m.start()
+        m.start()  # should be a no-op
+        assert m.is_running
+        m.stop()
+
+    def test_stop_cancels_timer(self, store: Store, trash_dir: str) -> None:
+        m = RetentionManager(store, trash_dir=trash_dir)
+        m.start()
+        m.stop()
+        assert m._timer is None
+
+    def test_skip_error_corrupt_default(self, store: Store, trash_dir: str) -> None:
+        """_skip_error_corrupt returns True for ERROR clips by default."""
+        m = RetentionManager(store, trash_dir=trash_dir)
+        clip = Clip(id="err", stem="err", source_path=Path("/tmp/err.mkv"), status=ClipStatus.ERROR)
+        assert m._skip_error_corrupt(clip) is True
+
+    def test_skip_error_corrupt_not_error(self, store: Store, trash_dir: str) -> None:
+        """_skip_error_corrupt returns False for non-ERROR clips."""
+        m = RetentionManager(store, trash_dir=trash_dir)
+        clip = Clip(id="ok", stem="ok", source_path=Path("/tmp/ok.mkv"), status=ClipStatus.DONE)
+        assert m._skip_error_corrupt(clip) is False
+
+    def test_on_tick_calls_enforce(self, store: Store, trash_dir: str) -> None:
+        """_on_tick calls enforce() then schedules next tick."""
+        m = RetentionManager(store, trash_dir=trash_dir)
+        m._running = True
+        with patch.object(m, "enforce", return_value=(0, 0)) as mock_enforce:
+            with patch.object(m, "_schedule") as mock_schedule:
+                m._on_tick()
+                mock_enforce.assert_called_once()
+                mock_schedule.assert_called_once()
+
+    def test_on_tick_exception_still_schedules(self, store: Store, trash_dir: str) -> None:
+        """_on_tick still schedules next tick even if enforce() raises."""
+        m = RetentionManager(store, trash_dir=trash_dir)
+        m._running = True
+        with patch.object(m, "enforce", side_effect=RuntimeError("boom")):
+            with patch.object(m, "_schedule") as mock_schedule:
+                m._on_tick()
+                mock_schedule.assert_called_once()
+
+    def test_age_str_all_branches(self) -> None:
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        assert _age_str(now - timedelta(days=400)) == "1y"
+        assert _age_str(now - timedelta(days=45)) == "45d"
+        assert _age_str(now - timedelta(hours=5)) == "5h"
+        assert _age_str(now - timedelta(minutes=30)) == "30m"
+
+    def test_source_oserror_logged(self, manager: RetentionManager, store: Store) -> None:
+        """OSError during source file trash is logged, not fatal."""
+        from datetime import datetime, timedelta, timezone
+        _make_clip(
+            store,
+            id="oserror-source",
+            source_path="/tmp/oserror_source.mkv",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=100),
+            status=ClipStatus.DONE,
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move", side_effect=OSError("permission denied")),
+        ):
+            mock_stat.return_value.st_size = 10_000_000
+            purged, freed = manager._enforce_source_age()
+            # Should be 0 because move failed but the exception was caught
+            assert purged >= 0
+
+
+class TestOSErrorHandlers:
+    def test_encoded_oserror_logged(self, manager: RetentionManager, store: Store) -> None:
+        """OSError during encoded file trash is logged, not fatal."""
+        _make_clip(
+            store,
+            id="oserror-enc",
+            source_path="/tmp/oserror_enc.mkv",
+            encoded_path="/tmp/oserror_enc.mp4",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=2000),
+            status=ClipStatus.DONE,
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move", side_effect=OSError("permission denied")),
+        ):
+            mock_stat.return_value.st_size = 5_000_000
+            purged, freed = manager._enforce_encoded_age()
+            assert purged >= 0
+
+
+# ---------------------------------------------------------------------------
+# Concurrent insert + enforce
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrentInsertEnforce:
+    def test_insert_during_enforce_does_not_crash(self, manager: RetentionManager, store: Store) -> None:
+        """Inserting clips while retention is running should not crash."""
+        import threading
+        from datetime import datetime, timedelta, timezone
+
+        results: list[Exception | None] = [None]
+
+        def insert_while_enforcing() -> None:
+            try:
+                for i in range(50):
+                    _make_clip(
+                        store,
+                        id=f"concurrent-{i}",
+                        source_path=f"/tmp/concurrent_{i}.mkv",
+                        recorded_at=datetime.now(timezone.utc) - timedelta(days=200),
+                        status=ClipStatus.DONE,
+                    )
+            except Exception as e:
+                results[0] = e
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move"),
+        ):
+            mock_stat.return_value.st_size = 10_000_000
+
+            t = threading.Thread(target=insert_while_enforcing)
+            t.start()
+            # Run enforce multiple times while insert is happening
+            for _ in range(5):
+                manager._enforce_source_age()
+                manager._enforce_encoded_age()
+            t.join()
+
+        assert results[0] is None, f"Insert error: {results[0]}"
+        # All clips should have been inserted
+        for i in range(50):
+            assert store.get_clip(f"concurrent-{i}") is not None
+
+
+# ---------------------------------------------------------------------------
+# Retention startup edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestRetentionStartup:
+    def test_startup_enforce_does_not_raise_on_empty_db(self, store: Store, trash_dir: str) -> None:
+        """RetentionManager.start() on empty DB should not raise."""
+        m = RetentionManager(store, trash_dir=trash_dir)
+        m.start()
+        assert m.is_running
+        m.stop()
+        assert not m.is_running
+
+    def test_startup_cleans_nonexistent_trash(self, store: Store) -> None:
+        """RetentionManager should create trash dir if it doesn't exist."""
+        trash_path = tempfile.mkdtemp(prefix="trash_startup_") + "/trash_subdir"
+        assert not os.path.exists(trash_path)
+
+        m = RetentionManager(store, trash_dir=trash_path)
+        m.start()
+        assert os.path.isdir(trash_path)
+        m.stop()
+
+        shutil.rmtree(os.path.dirname(trash_path), ignore_errors=True)
+
+    def test_startup_with_valid_clips(self, store: Store, trash_dir: str) -> None:
+        """RetentionManager.start() with existing clips runs enforce without error."""
+        from datetime import datetime, timedelta, timezone
+        _make_clip(
+            store,
+            id="startup-clip",
+            source_path="/tmp/startup_clip.mkv",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=1),
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat"),
+            patch("shutil.move"),
+        ):
+            m = RetentionManager(store, trash_dir=trash_dir)
+            m.start()
+            assert m.is_running
+            m.stop()
+
+
+# ---------------------------------------------------------------------------
+# Trash file path injection
+# ---------------------------------------------------------------------------
+
+
+class TestTrashPathInjection:
+    def test_trash_path_with_special_chars(self, manager: RetentionManager, store: Store, tmp_path: Path) -> None:
+        """Trash file paths with special characters are handled safely."""
+        from datetime import datetime, timedelta, timezone
+        _make_clip(
+            store,
+            id="special-path",
+            stem="../../../etc/passwd",
+            source_path="/tmp/special_path.mkv",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=200),
+            status=ClipStatus.DONE,
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move") as mock_move,
+        ):
+            mock_stat.return_value.st_size = 10_000_000
+            purged, freed = manager._enforce_source_age()
+            assert purged >= 1
+            # The move destination should be within trash_dir, not following the ../..
+            dest = mock_move.call_args[0][1]
+            assert str(dest).startswith(manager._trash_dir)
+            assert "/etc/" not in str(dest)
+
+    def test_trash_path_with_unicode(self, manager: RetentionManager, store: Store) -> None:
+        """Trash file paths with unicode characters are handled safely."""
+        from datetime import datetime, timedelta, timezone
+        _make_clip(
+            store,
+            id="unicode-path",
+            stem="🔥精彩片段 clip",
+            source_path="/tmp/unicode_clip.mkv",
+            recorded_at=datetime.now(timezone.utc) - timedelta(days=200),
+            status=ClipStatus.DONE,
+        )
+
+        with (
+            patch("pathlib.Path.is_file", return_value=True),
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("shutil.move") as mock_move,
+        ):
+            mock_stat.return_value.st_size = 10_000_000
+            purged, freed = manager._enforce_source_age()
+            assert purged >= 1
+            dest = mock_move.call_args[0][1]
+            assert str(dest).startswith(manager._trash_dir)

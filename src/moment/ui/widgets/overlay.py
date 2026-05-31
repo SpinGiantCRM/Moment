@@ -247,8 +247,8 @@ class Overlay(QWidget):
         # Try to set dock type via X11 property (best-effort)
         try:
             self.setAttribute(Qt.WidgetAttribute.WA_X11NetWmWindowTypeDock)
-        except Exception:  # nosec B110
-            pass
+        except Exception:
+            logger.debug("Could not set dock window type")  # nosec B110
 
         self.setFixedSize(_OVERLAY_WIDTH, _OVERLAY_HEIGHT)
 

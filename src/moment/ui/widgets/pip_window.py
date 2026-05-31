@@ -317,8 +317,8 @@ class PipWindow(QWidget):
             except Exception:
                 try:
                     self._ffmpeg_proc.kill()
-                except Exception:  # nosec B110
-                    pass
+                except Exception:
+                    logger.debug("Failed to kill ffmpeg process for PiP")  # nosec B110
             self._ffmpeg_proc = None
 
     # ------------------------------------------------------------------

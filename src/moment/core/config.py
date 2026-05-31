@@ -145,8 +145,8 @@ class Config:
         """Close the persistent SQLite connection."""
         try:
             self._conn.close()
-        except sqlite3.Error:
-            pass
+        except sqlite3.Error as exc:
+            logger.warning("Failed to close SQLite connection: %s", exc)
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db_path, check_same_thread=False)
@@ -168,7 +168,8 @@ class Config:
         Returns:
             The deserialized value.
         """
-        row = self._conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        with self._write_lock:
+            row = self._conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
         if row is None:
             return default
         try:
@@ -223,7 +224,8 @@ class Config:
 
     def get_all(self) -> dict[str, Any]:
         """Return the entire settings table as a dictionary."""
-        rows = self._conn.execute("SELECT key, value FROM settings").fetchall()
+        with self._write_lock:
+            rows = self._conn.execute("SELECT key, value FROM settings").fetchall()
         result: dict[str, Any] = {}
         for r in rows:
             try:
@@ -365,7 +367,7 @@ class Config:
             os.unlink(AUTOSTART_FILE)
             logger.info("Autostart disabled: removed %s", AUTOSTART_FILE)
         except FileNotFoundError:
-            pass
+            logger.debug("Autostart file not present — nothing to disable")
         except OSError as exc:
             logger.error("Failed to disable autostart: %s", exc)
             return False

@@ -465,7 +465,7 @@ def _key_string_to_x11_keycode(display: Any, key: str) -> int | None:
             keysym = XK.string_to_keysym(f"{prefix}{key_name}")
             if keysym:
                 return display.keysym_to_keycode(keysym)
-        except Exception:  # nosec B110 — keysym lookup fallback is best-effort
-            pass
+        except Exception:
+            logger.debug("Keysym lookup failed for key_name=%s", key_name)  # nosec B110 — keysym lookup fallback is best-effort
 
     return None
