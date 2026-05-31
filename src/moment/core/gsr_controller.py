@@ -133,13 +133,72 @@ class GSRController:
     # Public API — lifecycle
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _kill_external_gsr() -> None:
+        """Kill any ``gpu-screen-recorder`` processes NOT managed by us.
+
+        Uses ``pgrep`` to find existing instances and sends SIGTERM
+        (graceful) followed by SIGKILL (force) after a short grace
+        period. Handles the case where GSR was started outside Moment
+        (autostart, previous crash, manual launch).
+        """
+        import subprocess as _sp
+
+        try:
+            result = _sp.run(
+                ["pgrep", "-x", GSR_BINARY],
+                capture_output=True, text=True, timeout=5,
+            )
+        except (FileNotFoundError, _sp.TimeoutExpired):
+            return
+
+        if result.returncode != 0 or not result.stdout.strip():
+            return
+
+        pids = [int(pid) for pid in result.stdout.strip().splitlines() if pid.strip()]
+        if not pids:
+            return
+
+        logger.info("Found %d external GSR process(es) — stopping", len(pids))
+        for pid in pids:
+            logger.debug("Stopping external GSR (pid=%d)", pid)
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except (ProcessLookupError, OSError):
+                continue
+
+        # Wait for graceful exit
+        try:
+            _sp.run(
+                ["sleep", str(_TERM_GRACE)],
+                timeout=_TERM_GRACE + 1,
+            )
+        except _sp.TimeoutExpired:
+            pass
+
+        # SIGKILL survivors
+        remaining = _sp.run(
+            ["pgrep", "-x", GSR_BINARY],
+            capture_output=True, text=True, timeout=5,
+        )
+        if remaining.returncode == 0 and remaining.stdout.strip():
+            for pid_text in remaining.stdout.strip().splitlines():
+                pid = int(pid_text.strip())
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                    logger.warning("Sent SIGKILL to external GSR (pid=%d)", pid)
+                except (ProcessLookupError, OSError):
+                    pass
+
     def start(self) -> None:
         """Launch GSR in instant-replay mode.
 
         Creates the output directory if needed, spawns the GSR process,
         and starts the crash-monitor background thread.
 
-        If GSR is already running it is stopped first.
+        If GSR is already running on the system (including our own
+        managed process) it is stopped first so Moment can take control
+        with the correct shim and configuration.
         """
         # Check GSR binary availability
         if not shutil.which(GSR_BINARY):
@@ -149,6 +208,9 @@ class GSRController:
             )
 
         with self._lock:
+            # Kill any GSR running outside Moment (autostart, manual, etc.)
+            self._kill_external_gsr()
+
             if self._proc is not None:
                 logger.info("Stopping existing GSR process before restart")
                 self._stop_process_unlocked()
