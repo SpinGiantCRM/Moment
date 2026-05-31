@@ -37,6 +37,14 @@ Thumbs.db
 # AI context (session memory, not version-controlled)
 .ai_context/
 
+# AI agent / IDE config (local only, not shared)
+.cursorrules
+.cursor/
+.windsurf/
+.github-copilot*
+.continue/
+.codebuff/*
+
 # Secrets
 .env
 .env.local
@@ -58,3 +66,10 @@ htmlcov/
 
 # Logs
 *.log
+
+# Local development artifacts
+/todo*
+/scratch*
+/notes*
+/*.local.*
+/*.bak.*

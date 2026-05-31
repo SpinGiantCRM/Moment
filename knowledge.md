@@ -7,7 +7,7 @@ GPU-accelerated game clip manager for Linux. Wraps `gpu-screen-recorder` (GSR) a
 | Aspect | Detail |
 |--------|--------|
 | **Package** | `moment` |
-| **CLI** | `moment` (GUI), `moment bot`, `moment mcp` |
+| **CLI** | `moment` (GUI), `moment import/export`, `moment diagnose`, `moment bot`, `moment mcp` |
 | **Source** | `src/moment/` (80 files, ~14K lines) |
 | **Tests** | `tests/` (70 files, ~24K lines) |
 | **Config** | `pyproject.toml` — ruff, pytest |

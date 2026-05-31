@@ -262,7 +262,8 @@ Moment is a desktop application that wraps `gpu-screen-recorder` as a thin subpr
 - **Achieved:** Graceful degradation — optional deps show user-visible warnings, core starts with error banner
 - **Striving toward:** Dependency injection (eliminate `set_*_config()` module-level globals)
 - **Striving toward:** Async I/O (asyncio for rclone, webhooks)
-- **Striving toward:** Structured logging (JSON, correlation IDs, no bare `except: pass`)
+- **Achieved:** Structured logging — JSON formatter, LogDuration timing, CrashDump handler, `moment diagnose` CLI
+- **Achieved:** No bare `except: pass` — all exception handlers log the error or use a justified silent path
 - **Striving toward:** Test infrastructure (>40% coverage before production)
 
 ---

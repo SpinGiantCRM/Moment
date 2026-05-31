@@ -83,16 +83,16 @@ This installs the `.desktop` file, SVG icon, and PNG icons at 48/64/128/256px.
 
 ```bash
 moment --help        # Should show usage info
-moment --settings    # Opens the settings dialog
+moment diagnose      # Print diagnostic report
 ```
 
 ## Quick Start
 
 ```bash
 moment                  # Launch GUI
-moment --minimized      # Start in tray
-moment --settings       # Open settings dialog
-moment --open-encoded   # Open encoded clips folder
+moment import <path>    # Import a video file
+moment export <clip_id> # Export a clip
+moment diagnose         # Print diagnostic report
 moment bot              # Start Discord bot
 moment mcp              # Start MCP server for AI agent access
 ```

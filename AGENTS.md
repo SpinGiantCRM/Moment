@@ -11,9 +11,9 @@ Moment is a **GPU-accelerated game clip manager for Linux**. It wraps `gpu-scree
 | Command | Description |
 |---------|-------------|
 | `moment` | Launch GUI |
-| `moment --minimized` | Start in tray |
-| `moment --settings` | Open settings dialog |
-| `moment --open-encoded` | Open encoded clips folder |
+| `moment import <path>` | Import a video file |
+| `moment export <clip_id>` | Export a clip |
+| `moment diagnose` | Print diagnostic report |
 | `moment bot` | Start Discord bot |
 | `moment mcp` | Start MCP server for AI agent access |
 
@@ -267,7 +267,7 @@ class Foo(QObject):
 
 ## Common Pitfalls
 
-### 1. **Pysqlcipher3 Mandatory**
+### 1. **sqlcipher3 Mandatory**
 The Store will NOT open without `sqlcipher3` and `keyring`. Tests mock `_connect_encrypted` and `_run_encryption_health_check` to bypass this.
 
 ### 2. **Fernet Key Management**

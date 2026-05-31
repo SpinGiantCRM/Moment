@@ -154,6 +154,7 @@ When Upload is enabled, every new clip is automatically uploaded after encoding.
 | F10 | Anywhere | Open settings |
 | Escape | Player / Settings | Back to Grid |
 | Ctrl+B | Grid | Toggle batch selection mode |
+| Ctrl+Shift+I | Grid | Invert selection |
 
 ---
 
@@ -161,10 +162,13 @@ When Upload is enabled, every new clip is automatically uploaded after encoding.
 
 | Path | Purpose |
 |------|---------|
+| Path | Purpose |
+|------|---------|
 | `~/.config/moment/` | Configuration and database |
 | `~/.config/moment/clips.db` | Encrypted SQLite database (AES-256) |
 | `~/.local/share/moment/encoded/` | Encoded MP4 clips |
 | `~/.local/share/moment/thumbnails/` | Thumbnail JPEGs (lazy-loaded cache) |
+| `~/.local/share/moment/crash/` | Crash dump files (diagnostic context) |
 | `~/Videos/Moment/` | Raw GSR recordings (MKV before encoding) |
 
 ---
