@@ -70,16 +70,21 @@ class MainWindow(QMainWindow):
     Signals:
         close_to_tray: Emitted when the window should hide to tray
             instead of quitting.
+        store_retry_requested: Emitted when the user clicks Retry on
+            the unavailable-store banner.
     """
 
     close_to_tray = pyqtSignal()
+    store_retry_requested = pyqtSignal()
 
     # Sidebar width constant
     SIDEBAR_W = 76
 
-    def __init__(self, store: "Store | None" = None, parent=None) -> None:
+    def __init__(self, store: "Store | None" = None, parent=None,
+                 store_init_error: str | None = None) -> None:
         super().__init__(parent)
         self._store = store
+        self._store_init_error = store_init_error
         self._minimize_to_tray = True
 
         # Core service references (set by AppManager after construction)
@@ -113,7 +118,9 @@ class MainWindow(QMainWindow):
         central_layout.setSpacing(0)
 
         # --- Service unavailable banner (shown when store is None) ---
-        self._unavailable_banner = self._build_unavailable_banner()
+        self._unavailable_banner = self._build_unavailable_banner(
+            self._store_init_error or ""
+        )
         central_layout.addWidget(self._unavailable_banner)
         self._unavailable_banner.setVisible(self._store is None)
 
@@ -176,8 +183,13 @@ class MainWindow(QMainWindow):
     # Service unavailable banner
     # ==================================================================
 
-    def _build_unavailable_banner(self) -> QWidget:
-        """Build a banner widget shown when the store is unavailable."""
+    def _build_unavailable_banner(self, error_message: str) -> QWidget:
+        """Build a banner widget shown when the store is unavailable.
+
+        Args:
+            error_message: The actual error message from the failed
+                Store initialisation, displayed in the banner.
+        """
         banner = QFrame()
         banner.setObjectName("unavailableBanner")
         banner.setStyleSheet("""
@@ -195,12 +207,39 @@ class MainWindow(QMainWindow):
         icon_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold; background: transparent;")
         banner_layout.addWidget(icon_label)
 
-        msg_label = QLabel("Service unavailable — database could not be opened.  "
-                          "Check that ~/.config/moment/clips.db is accessible.")
+        # Build a descriptive message from the actual error
+        if error_message:
+            display_msg = error_message
+        else:
+            display_msg = "Service unavailable — database could not be opened."
+
+        msg_label = QLabel(display_msg)
         msg_label.setStyleSheet("color: white; font-size: 13px;")
         msg_label.setWordWrap(True)
         banner_layout.addWidget(msg_label, stretch=1)
 
+        # Show Log button — opens the log file in the system editor
+        show_log_btn = QPushButton("Show Log")
+        show_log_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255,255,255,0.2);
+                border: 1px solid rgba(255,255,255,0.3);
+                border-radius: 4px;
+                color: white;
+                padding: 4px 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: rgba(255,255,255,0.3);
+            }
+        """)
+        log_path = os.path.expanduser("~/.local/share/moment/moment.log")
+        show_log_btn.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(log_path))
+        )
+        banner_layout.addWidget(show_log_btn)
+
+        # Retry button — tries to re-initialise the store
         retry_btn = QPushButton("Retry")
         retry_btn.setStyleSheet("""
             QPushButton {
@@ -221,16 +260,48 @@ class MainWindow(QMainWindow):
         return banner
 
     def _on_retry_store(self) -> None:
-        """Attempt to re-initialise the store on retry click."""
+        """Attempt to re-initialise the store on retry click.
+
+        If ``_app_manager`` is set, delegates to its ``retry_store()``
+        method for a live re-initialisation.  Otherwise falls back to
+        a restart-required toast.
+        """
         logger.info("Retry store initialisation requested")
-        # For now, just log — the parent AppManager would need to handle
-        # re-initialisation.  This button serves as user-visible signal
-        # that something is wrong.
-        from moment.ui.widgets.toast import toast_manager
-        toast_manager.show_toast(
-            "info", "Restart required",
-            "Please restart Moment to retry database connection.",
-        )
+        if self._app_manager is not None:
+            self._app_manager.retry_store()
+        else:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(
+                "info", "Restart required",
+                "Please restart Moment to retry database connection.",
+            )
+
+    def on_store_recovered(self) -> None:
+        """Called when the store is successfully re-initialised.
+
+        Hides the unavailable banner, enables navigation, and refreshes
+        the grid page.
+        """
+        self._store = self._app_manager._store if self._app_manager else None
+        self._store_init_error = None
+
+        if self._store is not None:
+            self._unavailable_banner.setVisible(False)
+            self._set_nav_enabled(True)
+            # Update store reference on all pages that depend on it
+            self._grid_page._store = self._store
+            self._grid_page.refresh()
+            self._player_page._store = self._store
+            self._stats_page._store = self._store
+            self._trash_page._store = self._store
+            self._webhook_page._store = self._store
+            self._update_status("Store reconnected")
+
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(
+                "success", "Store reconnected",
+                "Database connection re-established.",
+            )
 
     def _set_nav_enabled(self, enabled: bool) -> None:
         """Enable or disable all navigation buttons."""

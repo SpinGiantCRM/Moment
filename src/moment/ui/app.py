@@ -163,6 +163,9 @@ class AppManager(QObject):
     _gsr_import_success = pyqtSignal(str, str)  # stem, message
     _gsr_import_error = pyqtSignal(str)          # error message
 
+    # ---- Store recovery signal (emitted on successful retry) ----
+    store_recovered = pyqtSignal()
+
     # ------------------------------------------------------------------
     # Initialisation
     # ------------------------------------------------------------------
@@ -180,6 +183,7 @@ class AppManager(QObject):
         self._tray: TrayIcon | None = None
         self._window = None  # MainWindow — created later
         self._store = None
+        self._store_init_error: str | None = None
         self._pipeline = None
         self._config = None
         self._gsr_controller = None
@@ -423,8 +427,10 @@ class AppManager(QObject):
             self._config = Config()
             self._store = Store(config=self._config)
             setup_logging(config=self._config, verbose=self._args.verbose)
+            self._store_init_error = None
             logger.info("Store + Config initialised")
         except Exception as exc:
+            self._store_init_error = str(exc)
             logger.warning("Core services not available: %s", exc)
             return
 
@@ -441,6 +447,45 @@ class AppManager(QObject):
                 self._bookmarker = Bookmarker(self._store)
             except Exception as exc:
                 logger.warning("Bookmarker init failed: %s", exc)
+
+    def retry_store(self) -> None:
+        """Re-attempt Store initialisation after a previous failure.
+
+        If successful, re-initialises the pipeline (if not already running)
+        and emits ``store_recovered`` so the UI can update.
+        """
+        logger.info("Retrying Store initialisation…")
+        try:
+            from moment.core.config import Config
+            from moment.core.store import Store
+            from moment.utils.logging import setup_logging
+
+            # Re-init config if it was never set up
+            if self._config is None:
+                self._config = Config()
+
+            self._store = Store(config=self._config)
+            setup_logging(config=self._config, verbose=self._args.verbose)
+            self._store_init_error = None
+            logger.info("Store re-initialised successfully")
+        except Exception as exc:
+            self._store_init_error = str(exc)
+            logger.warning("Store re-initialisation failed: %s", exc)
+            return
+
+        # Re-init pipeline if not already running
+        if self._pipeline is None:
+            self._init_pipeline()
+
+        # Re-init bookmarker if store is now available
+        if self._bookmarker is None and self._store is not None:
+            try:
+                from moment.core.bookmarker import Bookmarker
+                self._bookmarker = Bookmarker(self._store)
+            except Exception as exc:
+                logger.warning("Bookmarker init failed after retry: %s", exc)
+
+        self.store_recovered.emit()
 
     def _init_pipeline(self) -> None:
         """Create and start the Pipeline if store + config are available."""
@@ -568,7 +613,9 @@ class AppManager(QObject):
         try:
             from moment.ui.main_window import MainWindow
 
-            window = MainWindow(self._store)
+            window = MainWindow(self._store, store_init_error=self._store_init_error)
+            window.store_retry_requested.connect(self.retry_store)
+            self.store_recovered.connect(window.on_store_recovered)
 
             # Pass core service references for action handlers
             window._pipeline = self._pipeline
