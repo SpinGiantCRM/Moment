@@ -435,8 +435,10 @@ class ClipDelegate(QStyledItemDelegate):
             "file_size": clip.file_size,
             "status": clip.status.name if hasattr(clip.status, "name") else str(clip.status),
             "favorite": clip.favorite,
+            "protect_from_retention": clip.protect_from_retention,
             "thumb_path": str(clip.thumb_path) if clip.thumb_path else "",
             "encoded_path": str(clip.encoded_path) if clip.encoded_path else "",
+            "source_path": str(clip.source_path),
             "r2_url": clip.r2_url or "",
             "edit_version": getattr(clip, "edit_version", 0),
             "accessible_description": (

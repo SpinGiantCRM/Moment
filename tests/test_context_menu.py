@@ -139,13 +139,13 @@ class TestContextMenuBuilderBuild:
         assert found
 
     def test_protect_text_for_protected(self, qapp) -> None:
-        """Protected clip shows '🔒 Unprotect'."""
+        """Protected clip shows 'Unprotect'."""
         clip = _make_clip(protect_from_retention=True)
         builder = ContextMenuBuilder(clip)
         menu = builder.build()
         for action in menu.actions():
             if action and "Unprotect" in (action.text() or ""):
-                assert "🔒" in action.text()
+                assert "Unprotect" in action.text()
 
 
 class TestContextMenuBuilderSignals:

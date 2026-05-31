@@ -8,6 +8,7 @@ selection mode with batch operations (Tag, Favorite, Delete, etc.).
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import (
@@ -32,7 +33,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.core.models import Clip
 from moment.ui.services.async_loader import AsyncDataLoader
+from moment.ui.widgets.context_menu import ContextMenuBuilder
 from moment.ui.widgets.skeleton_card import SkeletonCard
 
 if TYPE_CHECKING:
@@ -647,32 +650,66 @@ class GridPage(QWidget):
     # ==================================================================
 
     def contextMenuEvent(self, event) -> None:
-        """Show right-click context menu for selected clips."""
-        from PyQt6.QtWidgets import QMenu
-
-        sel_model = self._list_view.selectionModel()
-        if sel_model is None:
+        """Show right-click context menu for the clip under the cursor."""
+        # Find the clip under the mouse cursor
+        index = self._list_view.indexAt(event.pos())
+        if not index.isValid():
             return
 
-        selected_ids: list[str] = []
-        for idx in sel_model.selectedIndexes():
-            source_idx = self._proxy_model.mapToSource(idx)
-            data = source_idx.data(Qt.ItemDataRole.UserRole)
-            if data and "id" in data:
-                selected_ids.append(data["id"])
+        source_idx = self._proxy_model.mapToSource(index)
+        data = source_idx.data(Qt.ItemDataRole.UserRole)
+        if not data or "id" not in data:
+            return
 
-        menu = QMenu(self)
+        # Build a lightweight Clip for ContextMenuBuilder
+        clip = Clip(
+            id=data["id"],
+            stem=data.get("stem", ""),
+            source_path=Path(data.get("source_path", "")),
+            encoded_path=Path(data["encoded_path"]) if data.get("encoded_path") else None,
+            r2_url=data.get("r2_url") or None,
+            favorite=data.get("favorite", False),
+            protect_from_retention=data.get("protect_from_retention", False),
+        )
 
-        if selected_ids:
-            menu.addAction("Open", lambda: self.clip_activated.emit(selected_ids[0]))
-            menu.addSeparator()
-            menu.addAction("Favorite", lambda: self._on_batch_action("Favorite"))
-            menu.addAction("Delete", lambda: self._on_batch_action("Delete"))
-            menu.addSeparator()
-            menu.addAction("Re-encode", lambda: self._on_batch_action("Re-encode"))
-            menu.addAction("Re-upload", lambda: self._on_batch_action("Re-upload"))
-            menu.addAction("Export", lambda: self._on_batch_action("Export"))
-            menu.addSeparator()
-            menu.addAction("Select All", self._list_view.selectAll)
+        builder = ContextMenuBuilder(clip, self)
 
+        # Connect builder signals to grid page signals
+        builder.copy_url_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Copy URL", [cid])
+        )
+        builder.rename_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Rename", [cid])
+        )
+        builder.open_source_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Open Source", [cid])
+        )
+        builder.open_encoded_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Open Encoded", [cid])
+        )
+        builder.open_player_triggered.connect(self.clip_activated.emit)
+        builder.reencode_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Re-encode", [cid])
+        )
+        builder.reupload_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Re-upload", [cid])
+        )
+        builder.favorite_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Favorite", [cid])
+        )
+        builder.manage_tags_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Tag", [cid])
+        )
+        builder.set_game_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Set Game", [cid])
+        )
+        builder.protect_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Protect", [cid])
+        )
+        builder.delete_triggered.connect(
+            lambda cid: self.batch_action_requested.emit("Delete", [cid])
+        )
+        builder.select_triggered.connect(lambda cid: self.enter_selection_mode())
+
+        menu = builder.build()
         menu.exec(event.globalPos())
