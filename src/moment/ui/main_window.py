@@ -13,6 +13,7 @@ import logging
 import os
 import shutil
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
@@ -312,6 +313,7 @@ class MainWindow(QMainWindow):
         self._grid_page.batch_action_requested.connect(self._on_batch_action)
         self._grid_page.selection_changed.connect(self._on_grid_selection_changed)
         self._grid_page.empty_action_requested.connect(self._on_empty_action)
+        self._grid_page.files_dropped.connect(self._on_files_dropped)
         self._stack.addWidget(self._grid_page)
 
         # Player
@@ -1080,6 +1082,55 @@ class MainWindow(QMainWindow):
         """Handle trash change — refresh grid."""
         logger.debug("Trash changed")
         self._grid_page.refresh()
+
+    def _on_files_dropped(self, paths: list[Path]) -> None:
+        """Handle video files dropped onto the grid — import them as clips.
+
+        Uses :class:`ImportExport` to validate, copy, probe, thumbnail,
+        and insert each dropped file as a new clip.
+
+        Args:
+            paths: List of :class:`Path` objects (already filtered for
+                valid video extensions by ``_DragDropListView``).
+        """
+        if self._store is None:
+            logger.warning("Cannot import dropped files: store unavailable")
+            return
+
+        from moment.core.import_export import ImportExport
+
+        importer = ImportExport(self._store)
+        imported = 0
+        errors = 0
+
+        self._update_status(f"Importing {len(paths)} file(s)…")
+
+        for path in paths:
+            try:
+                importer.import_file(path, copy=True, re_encode=False)
+                imported += 1
+                logger.info("Imported dropped file: %s", path.name)
+            except Exception as exc:
+                errors += 1
+                logger.warning("Failed to import dropped file %s: %s", path.name, exc)
+
+        self._grid_page.refresh()
+
+        if imported > 0:
+            self._update_status(f"Imported {imported} clip(s)")
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(
+                "success", "Import complete",
+                f"Imported {imported} clip(s)" + (
+                    f" — {errors} failed" if errors else ""
+                ),
+            )
+        elif errors > 0:
+            from moment.ui.widgets.toast import toast_manager
+            toast_manager.show_toast(
+                "error", "Import failed",
+                f"Could not import {errors} file(s)",
+            )
 
     def _on_ctrl_b(self) -> None:
         """Enter batch selection mode (guarded against null store/grid)."""

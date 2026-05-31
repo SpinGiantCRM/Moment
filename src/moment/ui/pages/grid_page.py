@@ -12,14 +12,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import (
+    QMimeData,
     QModelIndex,
     QSize,
     QSortFilterProxyModel,
     Qt,
     QTimer,
+    QUrl,
     pyqtSignal,
 )
-from PyQt6.QtGui import QStandardItem, QStandardItemModel
+from PyQt6.QtGui import QDrag, QStandardItem, QStandardItemModel
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -159,6 +161,106 @@ class ClipFilterProxyModel(QSortFilterProxyModel):
         return False
 
 
+# Accepted video file extensions for drop-in
+_DROP_VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi"}
+
+
+class _DragDropListView(QListView):
+    """QListView subclass that supports drag-out (clip → file manager)
+    and drop-in (file manager → grid import).
+
+    Signals:
+        files_dropped(list[Path]): Emitted when video files are dropped.
+    """
+
+    files_dropped = pyqtSignal(list)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragDrop)
+
+    # ------------------------------------------------------------------
+    # Drag-out: clip → file manager
+    # ------------------------------------------------------------------
+
+    def startDrag(self, supportedActions: Qt.DropActions) -> None:
+        """Initiate a drag operation with file URLs for selected clips."""
+        model = self.model()
+        if model is None:
+            return
+
+        sel_model = self.selectionModel()
+        if sel_model is None:
+            return
+
+        # Collect file paths from selected items
+        urls: list[QUrl] = []
+        for idx in sel_model.selectedIndexes():
+            # Map through proxy model if needed
+            source_idx = idx
+            if isinstance(model, QSortFilterProxyModel):
+                source_idx = model.mapToSource(idx)
+            data = source_idx.data(Qt.ItemDataRole.UserRole)
+            if data is None:
+                continue
+
+            # Prefer encoded path (MP4), fall back to source path (MKV)
+            enc = data.get("encoded_path", "")
+            src = data.get("source_path", "")
+            filepath = enc or src
+            if filepath and Path(filepath).is_file():
+                urls.append(QUrl.fromLocalFile(filepath))
+
+        if not urls:
+            return
+
+        mime_data = QMimeData()
+        mime_data.setUrls(urls)
+
+        drag = QDrag(self)
+        drag.setMimeData(mime_data)
+        drag.exec(supportedActions)
+
+    # ------------------------------------------------------------------
+    # Drop-in: file manager → grid import
+    # ------------------------------------------------------------------
+
+    def dragEnterEvent(self, event) -> None:
+        """Accept drops containing file URLs."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:
+        """Accept drag-move with file URLs."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:
+        """Handle dropped files — validate and emit paths."""
+        if not event.mimeData().hasUrls():
+            event.ignore()
+            return
+
+        paths: list[Path] = []
+        for url in event.mimeData().urls():
+            if url.isLocalFile():
+                p = Path(url.toLocalFile())
+                if p.suffix.lower() in _DROP_VIDEO_EXTS and p.is_file():
+                    paths.append(p)
+
+        if paths:
+            event.acceptProposedAction()
+            self.files_dropped.emit(paths)
+        else:
+            event.ignore()
+
+
 class GridPage(QWidget):
     """Grid page showing clip cards in a scrollable grid.
 
@@ -166,12 +268,14 @@ class GridPage(QWidget):
         clip_activated(str): Emitted with clip ID when a card is clicked.
         batch_action_requested(str, list[str]): Action name + clip IDs.
         selection_changed(int): Emitted with count of selected clips.
+        files_dropped(list[Path]): Emitted when video files are dropped onto the grid.
     """
 
     clip_activated = pyqtSignal(str)
     batch_action_requested = pyqtSignal(str, list)
     selection_changed = pyqtSignal(int)
     empty_action_requested = pyqtSignal(str)
+    files_dropped = pyqtSignal(list)
 
     # Cards per row for dynamic sizing
     CARDS_PER_ROW = 4
@@ -254,8 +358,8 @@ class GridPage(QWidget):
         self._skeleton_cards: list[SkeletonCard] = []
         self._skeleton_container: QWidget | None = None
 
-        # --- Grid view ---
-        self._list_view = QListView()
+        # --- Grid view (drag-and-drop enabled) ---
+        self._list_view = _DragDropListView()
         self._list_view.setViewMode(QListView.ViewMode.IconMode)
         self._list_view.setIconSize(QSize(272, 176))
         self._list_view.setGridSize(QSize(284, 192))
@@ -273,6 +377,7 @@ class GridPage(QWidget):
 
         self._list_view.clicked.connect(self._on_item_clicked)
         self._list_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        self._list_view.files_dropped.connect(self.files_dropped.emit)
 
         # --- Empty / error states ---
         self._empty_widget = self._build_empty_state()
