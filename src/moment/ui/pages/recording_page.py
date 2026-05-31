@@ -39,7 +39,7 @@ def _rec_dot_color() -> QColor:
         hex_val = color("--accent-red")
         return QColor(hex_val)
     except ImportError:
-        return QColor("#f87171")
+        return QColor("#ed4245")
 
 
 _REC_DOT_COLOR = _rec_dot_color()
@@ -152,18 +152,10 @@ class RecordingPage(QWidget):
     # ==================================================================
 
     def _build_ready_state(self) -> None:
-        """Build the ready-to-record view with a big Record button."""
+        """Build the ready-to-record view with a clean pill record button."""
         layout = QVBoxLayout(self._ready_widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(24)
-
-        # Icon
-        icon = QLabel("⏺")
-        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setStyleSheet(
-            "font-size: 48px; color: var(--text-muted);"
-        )
-        layout.addWidget(icon)
+        layout.setSpacing(20)
 
         # Subtitle
         subtitle = QLabel("Ready to record")
@@ -172,20 +164,24 @@ class RecordingPage(QWidget):
         subtitle.setStyleSheet("font-size: 14px;")
         layout.addWidget(subtitle)
 
-        # Big Record button
+        # Clean pill-shaped Record button (Medal-inspired)
         self._record_btn = QPushButton("●  Start Recording")
-        self._record_btn.setObjectName("accent")
-        self._record_btn.setFixedSize(220, 56)
+        self._record_btn.setFixedSize(200, 48)
         self._record_btn.setStyleSheet(
-            "QPushButton#accent {"
+            "QPushButton {"
             "   background-color: var(--accent-red);"
             "   color: #ffffff;"
-            "   border-radius: 28px;"
-            "   font-size: 16px;"
-            "   font-weight: 700;"
+            "   border: none;"
+            "   border-radius: 24px;"
+            "   font-size: 15px;"
+            "   font-weight: 600;"
+            "   padding: 0 28px;"
             "}"
-            "QPushButton#accent:hover {"
-            "   background-color: #ef4444;"
+            "QPushButton:hover {"
+            "   background-color: #dc2626;"
+            "}"
+            "QPushButton:pressed {"
+            "   background-color: #b91c1c;"
             "}"
         )
         self._record_btn.clicked.connect(self._on_record_clicked)
@@ -253,9 +249,10 @@ class RecordingPage(QWidget):
         self._rec_dot = _RecDot()
         rec_row.addWidget(self._rec_dot)
 
-        rec_label = QLabel("RECORDING")
+        rec_label = QLabel("REC")
         rec_label.setStyleSheet(
-            "color: var(--accent-red); font-size: 16px; font-weight: 700;"
+            "color: var(--accent-red); font-size: 14px; font-weight: 700; "
+            "letter-spacing: 2px;"
         )
         rec_row.addWidget(rec_label)
         layout.addLayout(rec_row)
@@ -264,7 +261,7 @@ class RecordingPage(QWidget):
         self._rec_elapsed = QLabel("00:00")
         self._rec_elapsed.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._rec_elapsed.setStyleSheet(
-            "color: var(--text-primary); font-size: 42px; font-weight: 300;"
+            "color: var(--text-primary); font-size: 48px; font-weight: 300;"
         )
         layout.addWidget(self._rec_elapsed)
 
@@ -280,35 +277,36 @@ class RecordingPage(QWidget):
         btn_row.setSpacing(12)
 
         self._stop_btn = QPushButton("■  Stop")
-        self._stop_btn.setObjectName("danger")
-        self._stop_btn.setFixedSize(120, 44)
+        self._stop_btn.setFixedSize(120, 40)
         self._stop_btn.setStyleSheet(
-            "QPushButton#danger {"
+            "QPushButton {"
+            "   background-color: transparent;"
             "   border: 1px solid var(--accent-red);"
             "   color: var(--accent-red);"
-            "   border-radius: 8px;"
-            "   font-size: 14px;"
+            "   border-radius: 20px;"
+            "   font-size: 13px;"
             "   font-weight: 600;"
             "}"
-            "QPushButton#danger:hover {"
-            "   background-color: rgba(248, 113, 113, 0.15);"
+            "QPushButton:hover {"
+            "   background-color: rgba(237, 66, 69, 0.12);"
             "}"
         )
         self._stop_btn.clicked.connect(self._on_stop_clicked)
         btn_row.addWidget(self._stop_btn)
 
         self._save_clip_btn = QPushButton("Save 30s")
-        self._save_clip_btn.setFixedSize(120, 44)
+        self._save_clip_btn.setFixedSize(120, 40)
         self._save_clip_btn.setStyleSheet(
             "QPushButton {"
             "   background-color: var(--accent-blue);"
             "   color: #ffffff;"
-            "   border-radius: 8px;"
-            "   font-size: 14px;"
+            "   border: none;"
+            "   border-radius: 20px;"
+            "   font-size: 13px;"
             "   font-weight: 600;"
             "}"
             "QPushButton:hover {"
-            "   background-color: #3b82f6;"
+            "   background-color: #4752c4;"
             "}"
         )
         self._save_clip_btn.clicked.connect(lambda: self._on_save_clicked(30))

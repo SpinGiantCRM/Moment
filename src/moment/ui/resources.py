@@ -33,40 +33,46 @@ _ICONS = _ASSETS / "icons"
 # COLOUR PALETTE
 # ===========================================================================
 #
-# Tokens mirror the design system defined in .ai_context/architecture.md.
-# Each token is exposed both as a Python constant (for use in code) and as a
-# QSS variable (for use in stylesheets).
+# Medal-inspired cool dark palette — neutral blacks, subtle depth via
+# layering, blue accent (#5865f2).  Each token is exposed both as a
+# Python constant and as a QSS variable.
 #
 # fmt: off
 
 _COLOUR_TOKENS: dict[str, str] = {
     # Backgrounds
-    "--bg-window":          "#3c3c3c",
-    "--bg-surface":         "#333333",
-    "--bg-elevated":        "#404040",
-    "--bg-inset":           "#2a2a2a",
-    "--bg-hover":           "#555555",
-    "--bg-active":          "#606060",
+    "--bg-window":          "#0f0f0f",
+    "--bg-surface":         "#1a1a1a",
+    "--bg-elevated":        "#252525",
+    "--bg-inset":           "#141414",
+    "--bg-hover":           "#2e2e2e",
+    "--bg-active":          "#3a3a3a",
+    "--bg-sidebar":         "#121212",
 
     # Borders
-    "--border-window":      "#2a2a2a",
-    "--border-menu":        "#666666",
-    "--border-focus":       "#60a5fa",
+    "--border-window":      "#1f1f1f",
+    "--border-menu":        "#3a3a3a",
+    "--border-focus":       "#5865f2",
 
     # Text
-    "--text-primary":       "#d9d9d9",
-    "--text-secondary":     "#ababab",
-    "--text-muted":         "#9a9a9a",
+    "--text-primary":       "#e4e4e4",
+    "--text-secondary":     "#999999",
+    "--text-muted":         "#666666",
 
     # Accents
-    "--accent-blue":        "#60a5fa",
-    "--accent-green":       "#4ade80",
-    "--accent-orange":      "#fb923c",
-    "--accent-red":         "#f87171",
+    "--accent-blue":        "#5865f2",
+    "--accent-green":       "#3ba55c",
+    "--accent-orange":      "#faa61a",
+    "--accent-red":         "#ed4245",
 
     # Overlay / shadow
-    "--overlay-dark":       "rgba(0, 0, 0, 0.55)",
-    "--shadow-float":       "0 2px 6px rgba(0, 0, 0, 0.3)",
+    "--overlay-dark":       "rgba(0, 0, 0, 0.60)",
+    "--shadow-float":       "0 2px 8px rgba(0, 0, 0, 0.4)",
+
+    # Sidebar-specific
+    "--sidebar-hover":      "#242424",
+    "--sidebar-active":     "#333333",
+    "--sidebar-icon":       "#888888",
 }
 
 # fmt: on
@@ -273,7 +279,7 @@ QPushButton#accent {{
 }}
 
 QPushButton#accent:hover {{
-    background-color: #3b82f6;
+    background-color: #4752c4;
 }}
 
 QPushButton#danger {{
@@ -281,7 +287,7 @@ QPushButton#danger {{
 }}
 
 QPushButton#danger:hover {{
-    background-color: rgba(248, 113, 113, 0.15);
+    background-color: rgba(237, 66, 69, 0.15);
 }}
 
 /* ---- Tool buttons (flat, no border) ---------------------------------------- */
@@ -455,7 +461,7 @@ QListView::item:hover {{
 }}
 
 QListView::item:selected {{
-    background-color: #2a3a45;
+    background-color: #1e2a3a;
     border: 1px solid var(--accent-blue);
 }}
 
@@ -562,6 +568,40 @@ QProgressBar {{
 QProgressBar::chunk {{
     background-color: var(--accent-blue);
     border-radius: 3px;
+}}
+
+/* ---- Sidebar nav ---------------------------------------------------------- */
+
+QPushButton#sidebarNav {{
+    background-color: transparent;
+    color: var(--sidebar-icon);
+    font-family: {_FONT_STACK};
+    font-size: 11px;
+    font-weight: 500;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 6px;
+    text-align: center;
+}}
+
+QPushButton#sidebarNav:hover {{
+    background-color: var(--sidebar-hover);
+    color: var(--text-primary);
+}}
+
+QPushButton#sidebarNav:checked {{
+    background-color: var(--sidebar-active);
+    color: var(--text-primary);
+}}
+
+QPushButton#sidebarNav:focus {{
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 1px;
+}}
+
+QWidget#sidebarWidget {{
+    background-color: var(--bg-sidebar);
+    border-right: 1px solid var(--border-window);
 }}
 
 /* ---- Tool tips ------------------------------------------------------------ */

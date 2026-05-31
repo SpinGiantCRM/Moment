@@ -15,7 +15,6 @@ from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
     QApplication,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -142,84 +141,162 @@ class PlayerPage(QWidget):
         self._seek_bar = SeekBar()
         self._seek_bar.seeked.connect(self._player.setPosition)
 
-        # --- Transport controls ---
-        transport = QFrame()
-        transport.setObjectName("toolbarIsland")
+        # --- Transport controls (minimal, overlay-style) ---
+        transport = QWidget()
         transport_layout = QHBoxLayout(transport)
-        transport_layout.setContentsMargins(8, 4, 8, 4)
-        transport_layout.setSpacing(4)
+        transport_layout.setContentsMargins(12, 6, 12, 6)
+        transport_layout.setSpacing(8)
 
         self._play_btn = QPushButton("▶")
-        self._play_btn.setFixedSize(32, 28)
+        self._play_btn.setFixedSize(36, 36)
+        self._play_btn.setStyleSheet(
+            "QPushButton {"
+            "   background-color: rgba(255,255,255,0.10);"
+            "   color: #ffffff;"
+            "   border: none;"
+            "   border-radius: 18px;"
+            "   font-size: 16px;"
+            "}"
+            "QPushButton:hover {"
+            "   background-color: rgba(255,255,255,0.20);"
+            "}"
+        )
         self._play_btn.clicked.connect(self._toggle_play)
         transport_layout.addWidget(self._play_btn)
 
-        transport_layout.addStretch()
+        transport_layout.addSpacing(8)
 
-        transport_layout.addWidget(QLabel("Vol"))
         self._volume_slider = QSlider(Qt.Orientation.Horizontal)
         self._volume_slider.setRange(0, 200)
         self._volume_slider.setValue(80)
         self._volume_slider.setFixedWidth(100)
+        self._volume_slider.setStyleSheet(
+            "QSlider::groove:horizontal {"
+            "   background-color: rgba(255,255,255,0.15);"
+            "   border-radius: 2px; height: 3px;"
+            "}"
+            "QSlider::handle:horizontal {"
+            "   background-color: #ffffff; border: none;"
+            "   border-radius: 6px; width: 12px; height: 12px; margin: -4px 0;"
+            "}"
+            "QSlider::sub-page:horizontal {"
+            "   background-color: #ffffff; border-radius: 2px;"
+            "}"
+        )
         self._volume_slider.valueChanged.connect(
             lambda v: self._audio_output.setVolume(v / 100.0)
         )
         transport_layout.addWidget(self._volume_slider)
 
         self._mute_btn = QPushButton("🔊")
-        self._mute_btn.setFixedSize(28, 28)
+        self._mute_btn.setFixedSize(32, 32)
+        self._mute_btn.setStyleSheet(
+            "QPushButton {"
+            "   background-color: transparent;"
+            "   border: none; font-size: 14px;"
+            "}"
+        )
         self._mute_btn.clicked.connect(self._toggle_mute)
         transport_layout.addWidget(self._mute_btn)
 
-        # --- Audio mixer row ---
-        audio_mixer = QFrame()
-        audio_mixer.setObjectName("toolbarIsland")
-        mixer_layout = QHBoxLayout(audio_mixer)
-        mixer_layout.setContentsMargins(8, 4, 8, 4)
-        mixer_layout.setSpacing(8)
+        transport_layout.addStretch()
 
-        mixer_layout.addWidget(QLabel("Game"))
+        # --- Metadata (game • size • duration) ---
+        self._meta_label = QLabel()
+        self._meta_label.setObjectName("cardMeta")
+        self._meta_label.setStyleSheet(
+            "color: #cccccc; font-size: 12px; background: transparent;"
+        )
+        transport_layout.addWidget(self._meta_label)
+
+        transport_layout.addStretch()
+
+        # --- Audio mixer (compact row inside transport) ---
+        mixer_label = QLabel("Game")
+        mixer_label.setStyleSheet("color: #999; font-size: 10px; background: transparent;")
+        transport_layout.addWidget(mixer_label)
         self._game_vol_slider = QSlider(Qt.Orientation.Horizontal)
         self._game_vol_slider.setRange(0, 200)
         self._game_vol_slider.setValue(100)
-        self._game_vol_slider.setFixedWidth(80)
-        mixer_layout.addWidget(self._game_vol_slider)
+        self._game_vol_slider.setFixedWidth(60)
+        transport_layout.addWidget(self._game_vol_slider)
 
-        mixer_layout.addWidget(QLabel("Mic"))
+        mic_label = QLabel("Mic")
+        mic_label.setStyleSheet("color: #999; font-size: 10px; background: transparent;")
+        transport_layout.addWidget(mic_label)
         self._mic_vol_slider = QSlider(Qt.Orientation.Horizontal)
         self._mic_vol_slider.setRange(0, 200)
         self._mic_vol_slider.setValue(100)
-        self._mic_vol_slider.setFixedWidth(80)
-        mixer_layout.addWidget(self._mic_vol_slider)
-
-        # --- Metadata row ---
-        self._meta_label = QLabel()
-        self._meta_label.setObjectName("cardMeta")
+        self._mic_vol_slider.setFixedWidth(60)
+        transport_layout.addWidget(self._mic_vol_slider)
 
         # --- URL bar ---
-        url_frame = QFrame()
-        url_frame.setObjectName("toolbarIsland")
-        url_layout = QHBoxLayout(url_frame)
-        url_layout.setContentsMargins(8, 4, 8, 4)
-        url_layout.setSpacing(4)
+        url_row = QHBoxLayout()
+        url_row.setSpacing(6)
 
         self._url_input = QLineEdit()
         self._url_input.setReadOnly(True)
         self._url_input.setPlaceholderText("No URL — clip not yet uploaded")
-        url_layout.addWidget(self._url_input, stretch=1)
+        self._url_input.setStyleSheet(
+            "background-color: rgba(255,255,255,0.08);"
+            "border: 1px solid rgba(255,255,255,0.10);"
+            "border-radius: 4px;"
+            "color: #cccccc;"
+            "font-size: 12px;"
+            "padding: 4px 8px;"
+        )
+        url_row.addWidget(self._url_input, stretch=1)
 
         copy_btn = QPushButton("Copy")
+        copy_btn.setStyleSheet(
+            "QPushButton {"
+            "   background-color: rgba(255,255,255,0.08);"
+            "   color: #cccccc;"
+            "   border: 1px solid rgba(255,255,255,0.10);"
+            "   border-radius: 4px;"
+            "   padding: 4px 12px;"
+            "   font-size: 12px;"
+            "}"
+            "QPushButton:hover {"
+            "   background-color: rgba(255,255,255,0.15);"
+            "}"
+        )
         copy_btn.clicked.connect(self._copy_url)
-        url_layout.addWidget(copy_btn)
+        url_row.addWidget(copy_btn)
 
         # --- Back button ---
-        back_btn = QPushButton("← Grid")
+        back_btn = QPushButton("← Back")
+        back_btn.setStyleSheet(
+            "QPushButton {"
+            "   background-color: transparent;"
+            "   color: #cccccc;"
+            "   border: 1px solid rgba(255,255,255,0.15);"
+            "   border-radius: 4px;"
+            "   padding: 4px 12px;"
+            "   font-size: 12px;"
+            "}"
+            "QPushButton:hover {"
+            "   background-color: rgba(255,255,255,0.10);"
+            "}"
+        )
         back_btn.clicked.connect(self.back_requested.emit)
 
         # --- Edit button ---
         edit_btn = QPushButton("✎ Edit")
-        edit_btn.setObjectName("outline")
         edit_btn.setToolTip("Open in advanced editor")
+        edit_btn.setStyleSheet(
+            "QPushButton {"
+            "   background-color: rgba(88, 101, 242, 0.15);"
+            "   color: var(--accent-blue);"
+            "   border: 1px solid rgba(88, 101, 242, 0.25);"
+            "   border-radius: 4px;"
+            "   padding: 4px 12px;"
+            "   font-size: 12px;"
+            "}"
+            "QPushButton:hover {"
+            "   background-color: rgba(88, 101, 242, 0.25);"
+            "}"
+        )
         edit_btn.clicked.connect(self._on_edit_clicked)
 
         # --- Empty state ---
@@ -241,11 +318,17 @@ class PlayerPage(QWidget):
         # Async loader
         self._loader: AsyncDataLoader | None = None
 
-        # --- Controls container (hidden in fullscreen) ---
+        # --- Controls overlay (translucent, overlays video) ---
         self._controls = QWidget()
+        self._controls.setStyleSheet(
+            "QWidget {"
+            "   background-color: rgba(15, 15, 15, 0.85);"
+            "   border-radius: 8px;"
+            "}"
+        )
         controls_layout = QVBoxLayout(self._controls)
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(8)
+        controls_layout.setContentsMargins(12, 8, 12, 8)
+        controls_layout.setSpacing(6)
 
         top_row = QHBoxLayout()
         top_row.addWidget(back_btn)
@@ -254,19 +337,23 @@ class PlayerPage(QWidget):
         controls_layout.addLayout(top_row)
         controls_layout.addWidget(self._seek_bar)
         controls_layout.addWidget(transport)
-        controls_layout.addWidget(audio_mixer)
-        controls_layout.addWidget(self._meta_label)
-        controls_layout.addWidget(url_frame)
+        controls_layout.addLayout(url_row)
 
-        # --- Main layout ---
+        # --- Main layout (video fills space, controls overlay at bottom) ---
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        layout.addWidget(self._controls)
+        # Video fills the page
         layout.addWidget(self._video_widget, stretch=1)
         layout.addWidget(self._empty_label, stretch=1)
         layout.addWidget(self._spinner_label, stretch=1)
+
+        # Controls overlay at the bottom
+        controls_overlay = QHBoxLayout()
+        controls_overlay.setContentsMargins(12, 0, 12, 12)
+        controls_overlay.addWidget(self._controls)
+        layout.addLayout(controls_overlay)
 
         self._empty_label.setVisible(True)
         self._video_widget.setVisible(False)
@@ -338,10 +425,9 @@ class PlayerPage(QWidget):
         self._player.play()
 
         game = self._current_clip.get("game", "")
-        size = _fmt_size(self._current_clip.get("file_size", 0))
         duration = _fmt_ms(int(self._current_clip.get("duration", 0) * 1000))
         edited = "  •  Edited" if self._current_clip.get("edit_version", 0) > 0 else ""
-        self._meta_label.setText(f"{game}  •  {size}  •  {duration}{edited}")
+        self._meta_label.setText(f"{game}{edited}  •  {duration}")
 
         r2_url = self._current_clip.get("r2_url", "")
         self._url_input.setText(r2_url)

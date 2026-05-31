@@ -1,8 +1,9 @@
-"""Main window — QMainWindow with toolbar island, page stack, and status bar.
+"""Main window — QMainWindow with left sidebar nav, page stack, and status bar.
 
 Manages navigation between pages (Grid, Player, Stats, Trash, Webhooks)
-via a ``QStackedWidget``.  The toolbar island provides nav buttons,
-a search bar, and sort controls.  The status bar shows pipeline state.
+via a ``QStackedWidget``.  The left sidebar provides icon+label nav
+buttons inspired by Medal.tv's desktop aesthetic.  The status bar
+shows pipeline state.
 """
 
 from __future__ import annotations
@@ -48,13 +49,14 @@ _PAGE_STATS = 3
 _PAGE_TRASH = 4
 _PAGE_WEBHOOK = 5
 
-_NAV_BUTTONS = [
-    ("&Recording", _PAGE_RECORD),
-    ("&Grid", _PAGE_GRID),
-    ("&Player", _PAGE_PLAYER),
-    ("&Stats", _PAGE_STATS),
-    ("&Trash", _PAGE_TRASH),
-    ("&Webhooks", _PAGE_WEBHOOK),
+# Sidebar navigation items: (icon, label, page_index)
+_NAV_ITEMS: list[tuple[str, str, int]] = [
+    ("📁", "Library", _PAGE_GRID),
+    ("⏺", "Record", _PAGE_RECORD),
+    ("▶", "Player", _PAGE_PLAYER),
+    ("📊", "Stats", _PAGE_STATS),
+    ("🗑", "Trash", _PAGE_TRASH),
+    ("🔗", "Webhooks", _PAGE_WEBHOOK),
 ]
 
 
@@ -67,6 +69,9 @@ class MainWindow(QMainWindow):
     """
 
     close_to_tray = pyqtSignal()
+
+    # Sidebar width constant
+    SIDEBAR_W = 76
 
     def __init__(self, store: "Store | None" = None, parent=None) -> None:
         super().__init__(parent)
@@ -85,7 +90,7 @@ class MainWindow(QMainWindow):
         self.setAccessibleName("Moment — Game Clip Manager")
         self.setAccessibleDescription("GPU-accelerated game clip recording and management")
         self.resize(950, 650)
-        self.setMinimumSize(680, 400)
+        self.setMinimumSize(720, 420)
 
         # Center on primary screen
         screen = QApplication.primaryScreen()
@@ -108,19 +113,32 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(self._unavailable_banner)
         self._unavailable_banner.setVisible(self._store is None)
 
-        # --- Toolbar island ---
-        toolbar = self._build_toolbar()
-        central_layout.addWidget(toolbar)
+        # --- Content area: sidebar + content (horizontal split) ---
+        content_row = QHBoxLayout()
+        content_row.setContentsMargins(0, 0, 0, 0)
+        content_row.setSpacing(0)
 
-        # --- Processing banner (pipeline progress) ---
+        # Left sidebar
+        self._sidebar = self._build_sidebar()
+        content_row.addWidget(self._sidebar)
+
+        # Right content area
+        right_area = QVBoxLayout()
+        right_area.setContentsMargins(0, 0, 0, 0)
+        right_area.setSpacing(0)
+
+        # Processing banner (pipeline progress)
         from moment.ui.widgets.processing_banner import ProcessingBanner
         self._processing_banner = ProcessingBanner()
         self._processing_banner.setVisible(False)
-        central_layout.addWidget(self._processing_banner)
+        right_area.addWidget(self._processing_banner)
 
-        # --- Page stack ---
+        # Page stack
         self._stack = QStackedWidget()
-        central_layout.addWidget(self._stack, stretch=1)
+        right_area.addWidget(self._stack, stretch=1)
+
+        content_row.addLayout(right_area, stretch=1)
+        central_layout.addLayout(content_row, stretch=1)
 
         # --- Status bar ---
         self._status_bar = QStatusBar()
@@ -212,66 +230,54 @@ class MainWindow(QMainWindow):
             btn.setEnabled(enabled)
 
     # ==================================================================
-    # Toolbar
+    # Sidebar
     # ==================================================================
 
-    def _build_toolbar(self) -> QWidget:
-        """Build the floating island toolbar with nav buttons."""
-        outer = QWidget()
-        outer.setObjectName("toolbarOuter")
-        outer.setStyleSheet("""
-            QWidget#toolbarOuter {
-                background-color: var(--bg-window);
-                border-bottom: 1px solid var(--border-window);
-            }
-        """)
-        outer_layout = QHBoxLayout(outer)
-        outer_layout.setContentsMargins(12, 6, 12, 6)
-        outer_layout.setSpacing(8)
+    def _build_sidebar(self) -> QWidget:
+        """Build the left sidebar with icon+label nav buttons."""
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebarWidget")
+        sidebar.setFixedWidth(self.SIDEBAR_W)
 
-        # Left: nav buttons in a floating island group
-        nav_island = QFrame()
-        nav_island.setObjectName("toolbarIsland")
-        nav_layout = QHBoxLayout(nav_island)
-        nav_layout.setContentsMargins(4, 2, 4, 2)
-        nav_layout.setSpacing(2)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(4, 12, 4, 12)
+        sidebar_layout.setSpacing(2)
 
-        self._nav_buttons: dict[int, QToolButton] = {}
-        for label, idx in _NAV_BUTTONS:
-            btn = QToolButton()
-            btn.setText(label)
+        self._nav_buttons: dict[int, QPushButton] = {}
+
+        a11y_labels = {
+            _PAGE_RECORD: "Recording View",
+            _PAGE_GRID: "Library",
+            _PAGE_PLAYER: "Player",
+            _PAGE_STATS: "Statistics",
+            _PAGE_TRASH: "Trash",
+            _PAGE_WEBHOOK: "Webhooks",
+        }
+
+        for icon, label, idx in _NAV_ITEMS:
+            # Build a two-line button: icon (big) + label (small)
+            btn = QPushButton(f"{icon}\n{label}")
+            btn.setObjectName("sidebarNav")
             btn.setCheckable(True)
-            btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            btn.setFixedSize(68, 52)
             btn.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             btn.clicked.connect(lambda checked, i=idx: self._switch_page(i))
-            # Accessible names
-            a11y_labels = {
-                _PAGE_RECORD: "Recording View",
-                _PAGE_GRID: "Grid View",
-                _PAGE_PLAYER: "Player",
-                _PAGE_STATS: "Statistics",
-                _PAGE_TRASH: "Trash",
-                _PAGE_WEBHOOK: "Webhooks",
-            }
             btn.setAccessibleName(a11y_labels.get(idx, label))
-            nav_layout.addWidget(btn)
+
+            sidebar_layout.addWidget(btn)
             self._nav_buttons[idx] = btn
 
         # Tab order: nav buttons in a logical chain
-        for i in range(len(_NAV_BUTTONS) - 1):
-            _, curr_idx = _NAV_BUTTONS[i]
-            _, next_idx = _NAV_BUTTONS[i + 1]
+        for i in range(len(_NAV_ITEMS) - 1):
+            _, _, curr_idx = _NAV_ITEMS[i]
+            _, _, next_idx = _NAV_ITEMS[i + 1]
             self.setTabOrder(
                 self._nav_buttons[curr_idx],
                 self._nav_buttons[next_idx],
             )
 
-        outer_layout.addWidget(nav_island)
-
-        # Spacer
-        outer_layout.addStretch()
-
-        return outer
+        sidebar_layout.addStretch()
+        return sidebar
 
     # ==================================================================
     # Pages

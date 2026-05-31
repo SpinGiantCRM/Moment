@@ -254,8 +254,8 @@ class GridPage(QWidget):
         # --- Grid view ---
         self._list_view = QListView()
         self._list_view.setViewMode(QListView.ViewMode.IconMode)
-        self._list_view.setIconSize(QSize(260, 190))
-        self._list_view.setGridSize(QSize(272, 206))
+        self._list_view.setIconSize(QSize(272, 176))
+        self._list_view.setGridSize(QSize(284, 192))
         self._list_view.setResizeMode(QListView.ResizeMode.Adjust)
         self._list_view.setMovement(QListView.Movement.Static)
         self._list_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -281,14 +281,11 @@ class GridPage(QWidget):
         layout.setContentsMargins(16, 12, 16, 16)
         layout.setSpacing(8)
 
-        # Title row
-        title_row = QHBoxLayout()
-        title_label = QLabel("Clips")
-        title_label.setObjectName("pageTitle")
-        title_row.addWidget(title_label)
-        title_row.addStretch()
-        title_row.addWidget(toolbar)
-        layout.addLayout(title_row)
+        # Title row (search + sort toolbar, no page title since sidebar has it)
+        toolbar_row = QHBoxLayout()
+        toolbar_row.addWidget(toolbar)
+        toolbar_row.addStretch()
+        layout.addLayout(toolbar_row)
 
         layout.addWidget(self._batch_bar)
         layout.addWidget(self._list_view, stretch=1)
@@ -367,7 +364,7 @@ class GridPage(QWidget):
 
             item = QStandardItem()
             item.setData(data, Qt.ItemDataRole.UserRole)
-            item.setSizeHint(QSize(260, 190))
+            item.setSizeHint(QSize(272, 176))
             item.setFlags(
                 Qt.ItemFlag.ItemIsEnabled
                 | Qt.ItemFlag.ItemIsSelectable

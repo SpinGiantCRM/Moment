@@ -1,8 +1,8 @@
 """Clip delegate — custom-painted grid card for Clip items.
 
-Renders a 260×190px card with thumbnail, title overlay bar, status
-badges, favorite star, and metadata rows.  Handles hover/selected
-states as defined in the ONLYOFFICE-inspired design system.
+Renders a 272×176px card with a 16:9 thumbnail, overlaid game badge
+and duration, clean metadata row, and status/favorite indicators.
+Handles hover/selected states with a Medal-inspired dark aesthetic.
 """
 
 from __future__ import annotations
@@ -22,32 +22,34 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import QStyle, QStyledItemDelegate, QStyleOptionViewItem
 
 # ---------------------------------------------------------------------------
-# Layout constants
+# Layout constants — Medal-inspired 16:9 ratio cards
 # ---------------------------------------------------------------------------
 
-CARD_W = 260
-CARD_H = 190
-THUMB_W = 240
-THUMB_H = 135
-OVERLAY_H = 28
+CARD_W = 272
+CARD_H = 176
+THUMB_W = 256
+THUMB_H = 144  # 16:9
 PADDING = 8
-RADIUS = 6
+RADIUS = 8
 THUMB_RADIUS = 4
 
-# Colours
-BG_NORMAL = QColor("#333333")
-BG_ELEVATED = QColor("#404040")
-BG_SELECTED = QColor("#2a3a45")
-BORDER_SELECTED = QColor("#60a5fa")
-TEXT_PRIMARY = QColor("#d9d9d9")
-TEXT_SECONDARY = QColor("#ababab")
-TEXT_MUTED = QColor("#9a9a9a")
+# Colours — Medal-inspired cool dark palette
+BG_NORMAL = QColor("#1e1e1e")
+BG_ELEVATED = QColor("#282828")
+BG_SELECTED = QColor("#1e2a3a")
+BORDER_SELECTED = QColor("#5865f2")
+BORDER_HOVER = QColor("#3a3a3a")
+TEXT_PRIMARY = QColor("#e4e4e4")
+TEXT_SECONDARY = QColor("#999999")
+TEXT_MUTED = QColor("#666666")
 OVERLAY_DARK = QColor(0, 0, 0, 140)
-ACCENT_GREEN = QColor("#4ade80")
-ACCENT_ORANGE = QColor("#fb923c")
-ACCENT_RED = QColor("#f87171")
-ACCENT_BLUE = QColor("#60a5fa")
+OVERLAY_BADGE = QColor(0, 0, 0, 180)
+ACCENT_GREEN = QColor("#3ba55c")
+ACCENT_ORANGE = QColor("#faa61a")
+ACCENT_RED = QColor("#ed4245")
+ACCENT_BLUE = QColor("#5865f2")
 FAVORITE_GOLD = QColor("#fbbf24")
+
 
 def _placeholder_thumb(
     size: QSize = QSize(THUMB_W, THUMB_H),
@@ -56,36 +58,35 @@ def _placeholder_thumb(
 ) -> QPixmap:
     """Return a deterministic placeholder thumbnail.
 
-    Shows the game name (or a video icon) centred on a dark background.
+    Shows the game name centred on a dark background with subtle grid texture.
     When duration is known it's overlaid in the bottom-right corner.
 
     Args:
         size: Thumbnail size in pixels.
-        game: Game name to display (empty → generic "video" icon).
+        game: Game name to display (empty → generic icon).
         duration: Clip duration in seconds for the overlay badge.
     """
-    # Invalidate cache if game/duration info is richer than what's cached
     cache_key = (game, duration)
     cached = getattr(_placeholder_thumb, "_cache", None)
     if cached is None or cached.get("key") != cache_key:
         pixmap = QPixmap(size)
-        pixmap.fill(QColor("#1e1e2e"))
+        pixmap.fill(QColor("#141419"))
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Subtle grid pattern overlay for visual texture
+        # Subtle grid pattern for visual texture
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#252538"))
+        painter.setBrush(QColor("#1a1a24"))
         for row in range(0, size.height(), 16):
             for col in range(0, size.width(), 16):
                 if (row // 16 + col // 16) % 2 == 0:
                     painter.drawRect(col, row, 16, 16)
 
-        # Centred icon / game name
-        painter.setPen(QColor("#525270"))
+        # Centred game name or icon
+        painter.setPen(QColor("#4a4a60"))
         font = painter.font()
         if game:
-            font.setPointSize(11)
+            font.setPointSize(12)
             font.setBold(True)
             painter.setFont(font)
             elided = painter.fontMetrics().elidedText(
@@ -94,36 +95,13 @@ def _placeholder_thumb(
             text_rect = QRectF(0, 0, size.width(), size.height() - 20)
             painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, elided)
         else:
-            # Generic video icon (Unicode film symbol)
-            font.setPointSize(28)
+            font.setPointSize(32)
             painter.setFont(font)
             painter.drawText(
                 QRectF(0, 0, size.width(), size.height() - 16),
                 Qt.AlignmentFlag.AlignCenter,
                 "🎬",
             )
-
-        # Duration badge (bottom-right)
-        if duration > 0:
-            badge_text = _format_duration(duration)
-            badge_font = painter.font()
-            badge_font.setPointSize(8)
-            badge_font.setBold(True)
-            painter.setFont(badge_font)
-            fm = painter.fontMetrics()
-            text_w = fm.horizontalAdvance(badge_text) + 8
-            text_h = fm.height() + 4
-            badge_x = size.width() - text_w - 6
-            badge_y = size.height() - text_h - 6
-            badge_rect = QRectF(badge_x, badge_y, text_w, text_h)
-
-            painter.setPen(Qt.PenStyle.NoPen)
-            bg = QColor(0, 0, 0, 160)
-            painter.setBrush(bg)
-            painter.drawRoundedRect(badge_rect, 3, 3)
-
-            painter.setPen(QColor("#d9d9d9"))
-            painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
 
         painter.end()
         _placeholder_thumb._cache = {"key": cache_key, "pixmap": pixmap}  # type: ignore[attr-defined]
@@ -163,27 +141,18 @@ class ClipDelegate(QStyledItemDelegate):
         hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
         # --- Card background ---
-        card_rect = QRectF(option.rect).adjusted(1, 1, -1, -1)
+        card_rect = QRectF(option.rect).adjusted(2, 2, -2, -2)
+
         if selected:
-            painter.setPen(QPen(BORDER_SELECTED, 1))
+            painter.setPen(QPen(BORDER_SELECTED, 1.5))
             painter.setBrush(BG_SELECTED)
+        elif hovered:
+            painter.setPen(QPen(BORDER_HOVER, 1))
+            painter.setBrush(BG_ELEVATED)
         else:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(BG_ELEVATED if hovered else BG_NORMAL)
+            painter.setBrush(BG_NORMAL)
 
-        painter.drawRoundedRect(card_rect, RADIUS, RADIUS)
-
-        # --- Shadow lift on hover ---
-        if hovered and not selected:
-            shadow = QColor(0, 0, 0, 50)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(shadow)
-            shadow_rect = card_rect.adjusted(0, 2, 0, 2)
-            painter.drawRoundedRect(shadow_rect, RADIUS, RADIUS)
-
-        # Redraw the card on top (shadow is underneath)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(BG_ELEVATED if hovered else BG_NORMAL)
         painter.drawRoundedRect(card_rect, RADIUS, RADIUS)
 
         # --- Data extraction ---
@@ -192,7 +161,6 @@ class ClipDelegate(QStyledItemDelegate):
             painter.restore()
             return
 
-        # Extract fields from the data dict
         title = data.get("title") or data.get("stem", "Untitled")
         duration = data.get("duration", 0.0)
         game = data.get("game") or ""
@@ -207,8 +175,7 @@ class ClipDelegate(QStyledItemDelegate):
         thumb_y = option.rect.y() + PADDING
         thumb_rect = QRectF(thumb_x, thumb_y, THUMB_W, THUMB_H)
 
-        # Clip thumbnail to rounded rect — only if painter has a valid device
-        # (offscreen/headless tests may have a null paint device → skip clip)
+        # Clip thumbnail to rounded rect
         painter.save()
         if painter.isActive():
             clip_path = QPainterPath()
@@ -231,72 +198,87 @@ class ClipDelegate(QStyledItemDelegate):
                 scaled, src_x, src_y, THUMB_W, THUMB_H,
             )
         else:
-            # Deterministic placeholder with game name + duration
             painter.drawPixmap(
                 int(thumb_rect.x()), int(thumb_rect.y()),
                 _placeholder_thumb(game=game, duration=duration),
             )
         painter.restore()
 
-        # --- Thumbnail overlay bar ---
-        overlay_rect = QRectF(
-            thumb_x, thumb_y + THUMB_H - OVERLAY_H,
-            THUMB_W, OVERLAY_H,
-        )
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(OVERLAY_DARK)
-        painter.drawRect(overlay_rect)
+        # --- Game badge (top-left of thumbnail) ---
+        if game:
+            self._draw_game_badge(painter, thumb_rect, game)
 
-        # Title text on overlay
+        # --- Duration badge (bottom-right of thumbnail) ---
+        if duration > 0:
+            self._draw_duration_badge(painter, thumb_rect, duration)
+
+        # --- Status dot (top-right of thumbnail) ---
+        self._draw_status_dot(painter, thumb_rect, status)
+
+        # --- Favorite star (top-right of thumbnail or after status) ---
+        if favorite:
+            self._draw_favorite_star(painter, thumb_rect, status)
+
+        # --- Metadata row (below thumbnail) ---
+        meta_y = thumb_y + THUMB_H + 8
+        meta_rect = QRectF(thumb_x, meta_y, THUMB_W, 16)
+
         painter.setPen(TEXT_PRIMARY)
         font = painter.font()
         font.setPointSize(9)
         font.setBold(True)
         painter.setFont(font)
-        title_rect = overlay_rect.adjusted(6, 0, -6, 0)
+
         elided_title = painter.fontMetrics().elidedText(
-            title, Qt.TextElideMode.ElideRight, int(title_rect.width() - 20),
+            title, Qt.TextElideMode.ElideRight, int(meta_rect.width() - 4),
         )
-        painter.drawText(title_rect, Qt.AlignmentFlag.AlignVCenter, elided_title)
+        painter.drawText(
+            meta_rect.adjusted(2, 0, 0, 0),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            elided_title,
+        )
 
-        # --- Status badge (top-right of thumbnail) ---
-        self._draw_status_badge(painter, thumb_rect, status)
-
-        # --- Favorite star (bottom-left of overlay) ---
-        if favorite:
-            self._draw_favorite_star(painter, overlay_rect)
-
-        # --- Metadata row ---
-        meta_y = thumb_y + THUMB_H + 6
+        # --- Second metadata row ---
+        meta2_rect = QRectF(thumb_x, meta_y + 14, THUMB_W, 14)
         painter.setPen(TEXT_SECONDARY)
-        meta_font = painter.font()
-        meta_font.setPointSize(8)
-        painter.setFont(meta_font)
+        font2 = painter.font()
+        font2.setPointSize(8)
+        font2.setBold(False)
+        painter.setFont(font2)
 
         meta_parts: list[str] = []
-        if duration > 0:
-            meta_parts.append(_format_duration(duration))
         if game:
             meta_parts.append(game)
+        if duration > 0:
+            meta_parts.append(_format_duration(duration))
         meta_parts.append(_format_size(file_size))
 
         meta_text = " • ".join(meta_parts)
-        meta_rect = QRectF(thumb_x, meta_y, THUMB_W, 14)
         elided_meta = painter.fontMetrics().elidedText(
-            meta_text, Qt.TextElideMode.ElideRight, int(meta_rect.width()),
+            meta_text, Qt.TextElideMode.ElideRight, int(meta2_rect.width() - 4),
         )
-        painter.drawText(meta_rect, Qt.AlignmentFlag.AlignLeft, elided_meta)
+        painter.drawText(
+            meta2_rect.adjusted(2, 0, 0, 0),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            elided_meta,
+        )
 
-        # --- Uploaded checkmark / Edited badge (second metadata row) ---
+        # --- Uploaded/Edited badge ---
         edited = data.get("edit_version", 0) > 0
         if status == "UPLOADED":
             painter.setPen(ACCENT_GREEN)
-            check_rect = QRectF(thumb_x, meta_y + 14, THUMB_W, 14)
-            painter.drawText(check_rect, Qt.AlignmentFlag.AlignLeft, "✓ Uploaded")
+            status_rect = QRectF(thumb_x + 4, meta_y + 28, THUMB_W - 8, 14)
+            font3 = painter.font()
+            font3.setPointSize(8)
+            painter.setFont(font3)
+            painter.drawText(status_rect, Qt.AlignmentFlag.AlignLeft, "✓ Uploaded")
         elif edited:
             painter.setPen(ACCENT_ORANGE)
-            edit_rect = QRectF(thumb_x, meta_y + 14, THUMB_W, 14)
-            painter.drawText(edit_rect, Qt.AlignmentFlag.AlignLeft, "✎ Edited")
+            status_rect = QRectF(thumb_x + 4, meta_y + 28, THUMB_W - 8, 14)
+            font3 = painter.font()
+            font3.setPointSize(8)
+            painter.setFont(font3)
+            painter.drawText(status_rect, Qt.AlignmentFlag.AlignLeft, "✎ Edited")
 
         painter.restore()
 
@@ -304,11 +286,56 @@ class ClipDelegate(QStyledItemDelegate):
     # Badge helpers
     # ------------------------------------------------------------------
 
-    def _draw_status_badge(self, painter: QPainter, thumb_rect: QRectF, status: str) -> None:
-        """Draw a small status indicator in the top-right of the thumbnail."""
-        badge_x = thumb_rect.right() - 20
-        badge_y = thumb_rect.top() + 6
-        badge_r = 7
+    def _draw_game_badge(self, painter: QPainter, thumb_rect: QRectF, game: str) -> None:
+        """Draw a game name badge in the top-left of the thumbnail."""
+        font = painter.font()
+        font.setPointSize(8)
+        font.setBold(True)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+
+        text_w = fm.horizontalAdvance(game) + 12
+        text_h = fm.height() + 4
+        badge_x = thumb_rect.x() + 6
+        badge_y = thumb_rect.y() + 6
+        badge_rect = QRectF(badge_x, badge_y, text_w, text_h)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(OVERLAY_BADGE)
+        painter.drawRoundedRect(badge_rect, 3, 3)
+
+        painter.setPen(TEXT_PRIMARY)
+        painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, game)
+
+    def _draw_duration_badge(
+        self, painter: QPainter, thumb_rect: QRectF, duration: float,
+    ) -> None:
+        """Draw a duration badge in the bottom-right of the thumbnail."""
+        badge_text = _format_duration(duration)
+        font = painter.font()
+        font.setPointSize(8)
+        font.setBold(True)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+
+        text_w = fm.horizontalAdvance(badge_text) + 10
+        text_h = fm.height() + 4
+        badge_x = thumb_rect.right() - text_w - 6
+        badge_y = thumb_rect.bottom() - text_h - 8
+        badge_rect = QRectF(badge_x, badge_y, text_w, text_h)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(OVERLAY_BADGE)
+        painter.drawRoundedRect(badge_rect, 3, 3)
+
+        painter.setPen(TEXT_PRIMARY)
+        painter.drawText(badge_rect, Qt.AlignmentFlag.AlignCenter, badge_text)
+
+    def _draw_status_dot(self, painter: QPainter, thumb_rect: QRectF, status: str) -> None:
+        """Draw a small status dot in the top-right of the thumbnail."""
+        badge_x = thumb_rect.right() - 16
+        badge_y = thumb_rect.top() + 10
+        dot_r = 4
 
         color_map = {
             "UPLOADED": ACCENT_GREEN,
@@ -320,36 +347,36 @@ class ClipDelegate(QStyledItemDelegate):
             "ERROR": ACCENT_RED,
             "CORRUPT": ACCENT_RED,
         }
-        badge_color = color_map.get(status, TEXT_MUTED)
+        dot_color = color_map.get(status, TEXT_MUTED)
 
-        # Draw semi-transparent background circle
+        # Semi-transparent background circle
         painter.setPen(Qt.PenStyle.NoPen)
-        bg = QColor(badge_color)
-        bg.setAlpha(40)
+        bg = QColor(dot_color)
+        bg.setAlpha(50)
         painter.setBrush(bg)
         painter.drawEllipse(
-            QRectF(badge_x - badge_r, badge_y - badge_r, badge_r * 2, badge_r * 2),
+            QRectF(badge_x - dot_r - 2, badge_y - dot_r - 2, (dot_r + 2) * 2, (dot_r + 2) * 2),
         )
 
-        # Draw colored dot
-        painter.setBrush(badge_color)
-        dot_r = 4
+        # Colored dot
+        painter.setBrush(dot_color)
         painter.drawEllipse(
             QRectF(badge_x - dot_r, badge_y - dot_r, dot_r * 2, dot_r * 2),
         )
 
-    def _draw_favorite_star(self, painter: QPainter, overlay_rect: QRectF) -> None:
-        """Draw a gold star in the bottom-left of the overlay bar."""
+    def _draw_favorite_star(
+        self, painter: QPainter, thumb_rect: QRectF, status: str,
+    ) -> None:
+        """Draw a gold star in the top-right area (offset from status dot)."""
+        offset_x = 28 if status else 16
+        star_x = thumb_rect.right() - offset_x
+        star_y = thumb_rect.top() + 4
+
         painter.setPen(FAVORITE_GOLD)
         font = painter.font()
         font.setPointSize(11)
         painter.setFont(font)
-        star_rect = QRectF(
-            overlay_rect.x() + 4,
-            overlay_rect.y(),
-            20,
-            overlay_rect.height(),
-        )
+        star_rect = QRectF(star_x, star_y, 20, 20)
         painter.drawText(star_rect, Qt.AlignmentFlag.AlignCenter, "★")
 
     # ------------------------------------------------------------------
@@ -369,7 +396,6 @@ class ClipDelegate(QStyledItemDelegate):
                 self._thumb_cache[cache_key] = pixmap
                 # Limit cache size
                 if len(self._thumb_cache) > 250:
-                    # Remove oldest entry
                     oldest = next(iter(self._thumb_cache))
                     del self._thumb_cache[oldest]
                 return pixmap

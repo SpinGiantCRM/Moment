@@ -23,28 +23,29 @@ from PyQt6.QtWidgets import QWidget
 
 from moment.ui.resources import color
 
-_CARD_W = 260
-_CARD_H = 190
-_THUMB_W = 240
-_THUMB_H = 135
+_CARD_W = 272
+_CARD_H = 176
+_THUMB_W = 256
+_THUMB_H = 144
 _THUMB_X = (_CARD_W - _THUMB_W) // 2
-_THUMB_Y = 6
-_TITLE_W = int(_CARD_W * 0.60)
-_TITLE_X = 10
-_TITLE_Y = _THUMB_Y + _THUMB_H + 16
-_SUBTITLE_W = int(_CARD_W * 0.40)
-_SUBTITLE_Y = _TITLE_Y + 14
+_THUMB_Y = 8
+_TITLE_W = int(_CARD_W * 0.65)
+_TITLE_X = (_CARD_W - _TITLE_W) // 2
+_TITLE_Y = _THUMB_Y + _THUMB_H + 12
+_SUBTITLE_W = int(_CARD_W * 0.45)
+_SUBTITLE_X = (_CARD_W - _SUBTITLE_W) // 2
+_SUBTITLE_Y = _TITLE_Y + 12
 _LINE_H = 8
 _RADIUS = 4
 
 
 class SkeletonCard(QWidget):
-    """A 260×190 pulsing placeholder card."""
+    """A 272×176 pulsing placeholder card."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedSize(_CARD_W, _CARD_H)
-        self.setStyleSheet(f"background-color: {color('--bg-surface')}; border-radius: 6px;")
+        self.setStyleSheet(f"background-color: {color('--bg-surface')}; border-radius: 8px;")
 
         self._opacity_val = 1.0
         self._base_color = QColor(color("--bg-elevated"))
@@ -92,7 +93,7 @@ class SkeletonCard(QWidget):
         painter.drawRoundedRect(QRect(_TITLE_X, _TITLE_Y, _TITLE_W, _LINE_H), 3, 3)
 
         # Subtitle line (40% width)
-        painter.drawRoundedRect(QRect(_TITLE_X, _SUBTITLE_Y, _SUBTITLE_W, _LINE_H // 2), 2, 2)
+        painter.drawRoundedRect(QRect(_SUBTITLE_X, _SUBTITLE_Y, _SUBTITLE_W, _LINE_H // 2), 2, 2)
 
         painter.end()
 
