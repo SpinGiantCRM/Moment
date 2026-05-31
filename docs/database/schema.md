@@ -1,6 +1,6 @@
 # Database Schema
 
-**Engine:** SQLite 3 (WAL mode) via pysqlcipher3 (AES-256 encrypted) — encryption is mandatory, no plaintext fallback
+**Engine:** SQLite 3 (WAL mode) via sqlcipher3 (AES-256 encrypted) — encryption is mandatory, no plaintext fallback
 **Location:** `~/.config/moment/clips.db`
 **Permissions:** `0o600` (owner read/write)
 **Tables:** 16

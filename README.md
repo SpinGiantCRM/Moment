@@ -22,7 +22,7 @@ GPU-accelerated game clip manager for Linux. Capture, edit, and share your gamin
 - PyQt6
 - ffmpeg with NVENC (`h264_nvenc`, `hevc_nvenc` or `av1_nvenc`)
 - rclone with a remote configured (see [storage providers](docs/storage-providers.md))
-- `sqlcipher` system library (for pysqlcipher3)
+- `sqlcipher` system library (for sqlcipher3)
 - `gpu-screen-recorder` for capture
 - NVIDIA GPU for NVENC (software fallback via libx264 available)
 

@@ -82,7 +82,7 @@ Moment is a desktop application that wraps `gpu-screen-recorder` as a thin subpr
 ### 3.1 SQLite Database
 - WAL mode at `~/.config/moment/clips.db`
 - 16 tables (see `docs/database/schema.md`)
-- Mandatory pysqlcipher3 encryption (AES-256-CBC), hard fail on missing dep
+- Mandatory sqlcipher3 encryption (AES-256-CBC), hard fail on missing dep
 - Migration framework: `schema_version` table with numbered, ordered migrations in `base.py`
 - Read-write lock (`threading.Lock`) + separate read connection for thread-safe SELECTs
 - Soft-delete with `deleted_at` timestamp
@@ -177,7 +177,7 @@ Moment is a desktop application that wraps `gpu-screen-recorder` as a thin subpr
 ## 5. Security
 
 ### 5.1 Encryption
-- **Achieved:** Mandatory pysqlcipher3 for SQLite (AES-256-CBC) — hard fail on missing dep
+- **Achieved:** Mandatory sqlcipher3 for SQLite (AES-256-CBC) — hard fail on missing dep
 - **Achieved:** No plaintext fallback paths — all encryption failures are `RuntimeError`
 - **Achieved:** Store encryption keys in OS keyring (never alongside ciphertext)
 - **Achieved:** Hard-fail webhook URL encryption (Fernet) — no silent plaintext fallback
@@ -286,7 +286,7 @@ Moment is a desktop application that wraps `gpu-screen-recorder` as a thin subpr
 
 ### Dependencies
 - **Required:** Python 3.11+, PyQt6, ffmpeg/ffprobe, rclone, gpu-screen-recorder
-- **Optional:** discord.py (bot), fastmcp (MCP), keyring (secrets), pysqlcipher3 (encryption), python-magic (MIME), RNNoise (noise suppression)
+- **Optional:** discord.py (bot), fastmcp (MCP), keyring (secrets), sqlcipher3 (encryption), python-magic (MIME), RNNoise (noise suppression)
 
 ---
 

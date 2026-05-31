@@ -138,7 +138,7 @@ moment mcp --http --port 9000 --api-token "secret"  # Auth enabled
 
 ## Troubleshooting
 
-### "pysqlcipher3 not found"
+### "sqlcipher3 not found"
 
 ```bash
 # Install system dependencies
@@ -146,7 +146,7 @@ sudo apt install libsqlcipher-dev   # Debian/Ubuntu
 sudo pacman -S sqlcipher            # Arch
 
 # Reinstall moment
-pip install --force-reinstall pysqlcipher3
+pip install --force-reinstall sqlcipher3
 ```
 
 ### "Database could not be opened"

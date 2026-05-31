@@ -24,7 +24,7 @@ Moment is a **GPU-accelerated game clip manager for Linux**. It wraps `gpu-scree
 1. **GSR as subprocess controller** — Moment manages `gpu-screen-recorder` as a thin wrapper; it does NOT reimplement screen capture.
 2. **Pipeline architecture** — Clips flow through a priority task queue: Watcher → Encode → Upload → Notify.
 3. **PyQt6 dark theme** — ONLYOFFICE Modern Dark inspired design with floating island toolbars.
-4. **Encrypted at rest** — SQLite database (pysqlcipher3) with keys in the OS keyring. No plaintext fallback.
+4. **Encrypted at rest** — SQLite database (sqlcipher3) with keys in the OS keyring. No plaintext fallback.
 5. **Game-aware pausing** — GPU-intensive pipeline tasks pause when a game is active to avoid stealing NVENC sessions.
 6. **Best-effort services** — Core services (Store, Config, Pipeline) fail gracefully; GUI launches without them and shows an error banner.
 7. **No GUI in core** — The `moment/core/` directory must never import from PyQt6.
@@ -268,7 +268,7 @@ class Foo(QObject):
 ## Common Pitfalls
 
 ### 1. **Pysqlcipher3 Mandatory**
-The Store will NOT open without `pysqlcipher3` and `keyring`. Tests mock `_connect_encrypted` and `_run_encryption_health_check` to bypass this.
+The Store will NOT open without `sqlcipher3` and `keyring`. Tests mock `_connect_encrypted` and `_run_encryption_health_check` to bypass this.
 
 ### 2. **Fernet Key Management**
 Webhook URLs are encrypted with a Fernet key stored in the OS keyring. `Store.reset_fernet_cache()` MUST be called between tests to avoid cross-test pollution. The conftest.py fixture handles this.
@@ -298,7 +298,7 @@ Core components emit on `EventBus` instead of accepting raw callbacks. The UI la
 
 ## Security Requirements
 
-1. **Encryption mandatory** — pysqlcipher3 for DB, Fernet for webhook URLs, keyring for all secrets
+1. **Encryption mandatory** — sqlcipher3 for DB, Fernet for webhook URLs, keyring for all secrets
 2. **No plaintext fallback** — encryption failures are hard errors (RuntimeError), not silent downgrades
 3. **Config key whitelist** — prevents arbitrary config writes via `_ALLOWED_KEYS`
 4. **Path containment** — `path_*` config values must resolve within `$HOME` or `/tmp`

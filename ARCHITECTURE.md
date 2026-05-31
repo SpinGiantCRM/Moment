@@ -243,7 +243,7 @@ GSR Watcher Thread
 |------------|---------|-----------|
 | PyQt6 | GUI framework | Yes |
 | cryptography | Fernet encryption for webhook URLs | Yes |
-| pysqlcipher3 | SQLite encryption at rest | Yes |
+| sqlcipher3 | SQLite encryption at rest | Yes |
 | keyring | OS keyring integration | Yes |
 | ffmpeg/ffprobe | Video encoding, probing, thumbnail | Yes |
 | rclone | Cloud storage upload | Yes |

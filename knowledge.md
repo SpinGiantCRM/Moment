@@ -31,7 +31,7 @@ Hotkey/UI → GSRController (capture) → Watcher (detect) → Pipeline (encode/
 
 ## Critical Rules
 
-1. **Encryption is mandatory** — pysqlcipher3 + keyring required. No plaintext fallback.
+1. **Encryption is mandatory** — sqlcipher3 + keyring required. No plaintext fallback.
 2. **No GUI in core** — `core/` never imports from PyQt6. Thread-safe signals only.
 3. **Config whitelist** — `_ALLOWED_KEYS` in `config.py`; unknown keys are rejected.
 4. **DB migrations** — `_MIGRATIONS` list in `base.py`, numbered ordered migrations in `schema_version` table.
@@ -58,3 +58,7 @@ Hotkey/UI → GSRController (capture) → Watcher (detect) → Pipeline (encode/
 → **CONTRIBUTING.md** — Dev setup, PR process, testing guidelines
 → **TRUTH.md** — Complete feature inventory + aspirational state
 → **docs/** — Detailed guides (getting-started, storage-providers, database schema)
+
+## Resolved Issues
+
+1. **pysqlcipher3 → sqlcipher3** (May 2026) — `pysqlcipher3` uses removed C API functions (`PyObject_AsCharBuffer`, `_PyLong_AsInt`) and fails to build on Python 3.13+. `sqlcipher3>=0.6` has prebuilt wheels for CPython 3.9–3.14 and is API-compatible (`import sqlcipher3.dbapi2 as sqlcipher`). Swapped in `base.py` and `pyproject.toml`.

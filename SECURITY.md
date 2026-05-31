@@ -11,11 +11,11 @@ Moment handles sensitive data: Discord bot tokens, webhook URLs, cloud storage c
 ## 1. Encryption at Rest
 
 ### Database Encryption (SQLCipher)
-- **Mandatory:** `pysqlcipher3` is required — the store will not open without it
+- **Mandatory:** `sqlcipher3` is required — the store will not open without it
 - **Algorithm:** AES-256-CBC via SQLCipher
 - **Key storage:** OS keyring (`keyring` library), stored under `moment/db_encryption_key`
 - **Key generation:** 256-bit random hex key generated on first access
-- **No fallback:** If keyring or pysqlcipher3 is unavailable, `Store.__init__()` raises `RuntimeError`
+- **No fallback:** If keyring or sqlcipher3 is unavailable, `Store.__init__()` raises `RuntimeError`
 - **File permissions:** DB file set to `0o600` (owner read/write only)
 
 ### Webhook URL Encryption (Fernet)
@@ -27,7 +27,7 @@ Moment handles sensitive data: Discord bot tokens, webhook URLs, cloud storage c
 
 ### Startup Health Check
 On every `Store` initialization:
-1. Verifies pysqlcipher3 is importable
+1. Verifies sqlcipher3 is importable
 2. Verifies keyring is available
 3. Runs Fernet encrypt/decrypt round-trip test (hard fail)
 4. Checks DB file header — warns if plaintext SQLite detected
