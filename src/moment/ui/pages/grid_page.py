@@ -21,7 +21,7 @@ from PyQt6.QtCore import (
     QUrl,
     pyqtSignal,
 )
-from PyQt6.QtGui import QDrag, QStandardItem, QStandardItemModel
+from PyQt6.QtGui import QDrag, QKeySequence, QShortcut, QStandardItem, QStandardItemModel
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from PyQt6.QtCore import QItemSelectionModel
 
 from moment.core.models import Clip
 from moment.ui.services.async_loader import AsyncDataLoader
@@ -348,6 +349,11 @@ class GridPage(QWidget):
             btn.clicked.connect(lambda checked, a=action: self._on_batch_action(a))
             batch_layout.addWidget(btn)
 
+        self._invert_btn = QPushButton("Invert")
+        self._invert_btn.setToolTip("Invert selection (Ctrl+Shift+I)")
+        self._invert_btn.clicked.connect(self._invert_selection)
+        batch_layout.addWidget(self._invert_btn)
+
         self._cancel_select_btn = QPushButton("Cancel")
         self._cancel_select_btn.clicked.connect(self._exit_selection_mode)
         batch_layout.addWidget(self._cancel_select_btn)
@@ -407,6 +413,10 @@ class GridPage(QWidget):
         self._empty_widget.setVisible(True)
         self._list_view.setVisible(False)
         self._error_widget.setVisible(False)
+
+        # --- Invert selection shortcut (Ctrl+Shift+I) ---
+        self._invert_shortcut = QShortcut(QKeySequence("Ctrl+Shift+I"), self)
+        self._invert_shortcut.activated.connect(self._invert_selection)
 
         # --- Shortcuts ---
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -581,6 +591,41 @@ class GridPage(QWidget):
         self._list_view.setSelectionMode(
             QAbstractItemView.SelectionMode.MultiSelection
         )
+
+    def _invert_selection(self) -> None:
+        """Invert the current selection — selected become deselected and vice versa.
+
+        Uses :meth:`QItemSelectionModel.select` with
+        :attr:`~QItemSelectionModel.SelectionFlag.Toggle` on every row,
+        which efficiently flips the selection without rebuilding indices.
+
+        .. note::
+            If no clips are selected this selects everything (same as Ctrl+A).
+            If everything is selected this deselects everything.
+        """
+        sel_model = self._list_view.selectionModel()
+        if sel_model is None:
+            return
+
+        row_count = self._proxy_model.rowCount()
+        if row_count == 0:
+            return
+
+        # Block signals to avoid N redundant _on_selection_changed callbacks
+        sel_model.blockSignals(True)
+        try:
+            for row in range(row_count):
+                idx = self._proxy_model.index(row, 0)
+                sel_model.select(
+                    idx,
+                    QItemSelectionModel.SelectionFlag.Toggle
+                    | QItemSelectionModel.SelectionFlag.Rows,
+                )
+        finally:
+            sel_model.blockSignals(False)
+
+        # Fire selection-changed callback once after the bulk toggle
+        self._on_selection_changed()
 
     def focus_search(self) -> None:
         """Set keyboard focus on the search bar."""
