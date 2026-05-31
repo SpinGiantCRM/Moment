@@ -4,8 +4,6 @@ GPU-accelerated game clip manager for Linux. Capture, edit, and share your gamin
 
 **Status:** Pre-release — private development until v1.0.
 
-<!-- TODO: Add screenshots and demo GIF at v1.0 -->
-
 ## Features
 
 - One-click clip capture via `gpu-screen-recorder`
@@ -16,6 +14,7 @@ GPU-accelerated game clip manager for Linux. Capture, edit, and share your gamin
 - Discord webhook integration
 - Game-aware: pauses GPU work during gameplay
 - Keyboard-first UI in ONLYOFFICE Modern Dark style
+- MCP server for AI agent integration
 
 ## Requirements
 
@@ -23,28 +22,60 @@ GPU-accelerated game clip manager for Linux. Capture, edit, and share your gamin
 - PyQt6
 - ffmpeg with NVENC (`h264_nvenc`, `hevc_nvenc` or `av1_nvenc`)
 - rclone with a remote configured (see [storage providers](docs/storage-providers.md))
-- gpu-screen-recorder *(optional, for capture)*
-- NVIDIA GPU *(optional, for NVENC — software fallback available)*
+- `sqlcipher` system library (for pysqlcipher3)
+- `gpu-screen-recorder` for capture
+- NVIDIA GPU for NVENC (software fallback via libx264 available)
 
 ## Installation
 
-```bash
-pip install git+https://github.com/SpinGiantCRM/moment.git
+### From Source (dev)
 
-# With optional features:
+```bash
+git clone https://github.com/SpinGiantCRM/moment.git
+cd moment
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[bot,mcp]"
+```
+
+### From PyPI (user)
+
+```bash
 pip install "moment[bot,mcp]"
+```
+
+### With pipx (isolated, recommended for users)
+
+```bash
+pipx install "moment[bot,mcp]"
+```
+
+**Note:** On newer distros (Arch, Fedora 38+) you may need `--break-system-packages` or `PIP_REQUIRE_VIRTUALENV=false` when using pip outside a venv. Prefer pipx in that case.
+
+### Desktop Integration
+
+After installation, register the app icon and desktop entry:
+
+```bash
+# Installs desktop file + SVG + PNG icons (48/64/128/256px)
+git clone https://github.com/SpinGiantCRM/moment.git
+cd moment
+./install/install.sh             # user-local install
+# Or: sudo ./install/install.sh --system
 ```
 
 ### Arch Linux (AUR)
 
-<!-- TODO: Add AUR package link at v1.0 -->
+A PKGBUILD is available in the repository. Submit to AUR at v1.0.
 
 ## Quick Start
 
 ```bash
 moment                  # Launch GUI
 moment --minimized      # Start in tray
-moment bot              # Start Discord bot (requires discord.py)
+moment --settings       # Open settings dialog
+moment --open-encoded   # Open encoded clips folder
+moment bot              # Start Discord bot
 moment mcp              # Start MCP server for AI agent access
 ```
 
@@ -58,18 +89,7 @@ moment mcp              # Start MCP server for AI agent access
 - [Storage Providers](docs/storage-providers.md) — configure rclone for Backblaze B2, Cloudflare R2, AWS S3, and more
 - [Database Schema](docs/database/schema.md) — full table reference
 - [Request Flows](docs/architecture/request-flow.md) — detailed request flow diagrams
-- [Truth](TRUTH.md) — complete feature inventory and aspirational state
-
-## Development
-
-```bash
-git clone https://github.com/SpinGiantCRM/moment.git
-cd moment
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[bot,mcp]"
-pytest tests/
-```
+- [Truth](TRUTH.md) — complete feature inventory with current and striving states
 
 ## License
 

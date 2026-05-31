@@ -1,8 +1,34 @@
 # Getting Started with Moment
 
+## Requirements
+
+- Python 3.11+
+- PyQt6
+- ffmpeg with NVENC (`h264_nvenc`, `hevc_nvenc` or `av1_nvenc`)
+- rclone with a remote configured
+- `sqlcipher` system library (install via your package manager)
+- `gpu-screen-recorder` for capture support
+- NVIDIA GPU for NVENC (software fallback available)
+
+Install system deps:
+
+```bash
+# Debian/Ubuntu
+sudo apt install libsqlcipher-dev
+
+# Arch
+sudo pacman -S sqlcipher
+```
+
 ## Installation
 
-### From Source
+### pipx (recommended for users)
+
+```bash
+pipx install "moment[bot,mcp]"
+```
+
+### From Source (for development)
 
 ```bash
 git clone https://github.com/SpinGiantCRM/moment.git
@@ -12,17 +38,21 @@ source .venv/bin/activate
 pip install -e ".[bot,mcp]"
 ```
 
-### With the Install Script
+### Desktop Integration
+
+Register the app launcher icon:
 
 ```bash
 cd moment
-./install/install.sh          # User-local install
-./install/install.sh --system # System-wide (requires sudo)
+./install/install.sh             # user-local
+sudo ./install/install.sh --system  # system-wide
 ```
+
+This installs the desktop file (`moment.desktop`), SVG icon, and rendered PNGs at 48/64/128/256px. It does NOT install the Python package.
 
 ### Arch Linux (AUR)
 
-*Coming soon.*
+A PKGBUILD is included in the repository.
 
 ## Quick Start
 
@@ -45,9 +75,8 @@ moment --settings         # Open settings on launch
 ### Record Your First Clip
 
 1. **Enable instant replay** in Settings → Recording
-2. **Press Alt+Z** to open the overlay
-3. **F8** saves a 30-second replay, **F9** saves 60 seconds
-4. The clip appears in the Grid page after encoding completes
+2. **Press F8** to save a 30-second replay (or F9 for 60 seconds)
+3. The clip appears in the Grid page after encoding completes
 
 ### View Your Clips
 
@@ -62,9 +91,9 @@ moment --settings         # Open settings on launch
 
 | Hotkey | Action |
 |--------|--------|
-| Alt+Z | Show/hide overlay |
 | F8 | Save 30s replay |
 | F9 | Save 60s replay |
+| F10 | Open settings |
 | Ctrl+B | Batch select mode |
 | Escape | Back to grid |
 
@@ -143,5 +172,6 @@ ffmpeg -encoders | grep libx264
 
 - `AGENTS.md` — AI agent briefing
 - `ARCHITECTURE.md` — System architecture
+- `SECURITY.md` — Security model and encryption
 - `docs/storage-providers.md` — Cloud storage configuration
 - `CONTRIBUTING.md` — How to contribute

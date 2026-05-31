@@ -12,10 +12,10 @@ Moment is a **GPU-accelerated game clip manager for Linux**. It wraps `gpu-scree
 |---------|-------------|
 | `moment` | Launch GUI |
 | `moment --minimized` | Start in tray |
-| `moment bot` | Start Discord bot |
-| `moment mcp` | Start MCP server for AI agent access |
 | `moment --settings` | Open settings dialog |
 | `moment --open-encoded` | Open encoded clips folder |
+| `moment bot` | Start Discord bot |
+| `moment mcp` | Start MCP server for AI agent access |
 
 ---
 
@@ -35,55 +35,69 @@ Moment is a **GPU-accelerated game clip manager for Linux**. It wraps `gpu-scree
 
 ```
 src/moment/
-├── core/           # Business logic, no GUI imports allowed
-│   ├── config.py           # Key-value settings (SQLite-backed)
-│   ├── store.py            # SQLite persistence layer (~1100 lines)
-│   ├── models.py           # Pure dataclasses & enums
-│   ├── pipeline.py         # Task queue & worker threads
-│   ├── encoder.py          # NVENC/VAAPI ffmpeg encoding
-│   ├── uploader.py         # rclone-based cloud upload
-│   ├── thumbnail.py        # Thumbnail generation
-│   ├── watcher.py          # Filesystem watcher for new clips
-│   ├── gsr_controller.py   # GSR subprocess management
-│   ├── gsr_watcher.py      # GSR output directory watcher
-│   ├── hotkey_daemon.py    # Hotkey listening daemon
+├── core/                  # Business logic, no GUI imports allowed
+│   ├── config.py          # Key-value settings (SQLite-backed)
+│   ├── store.py           # SQLite persistence facade (~266 lines)
+│   ├── models.py          # Pure dataclasses & enums
+│   ├── event_bus.py       # Centralized QObject signal bus
+│   ├── encryption.py      # Fernet encrypt/decrypt helpers
+│   ├── migrations.py      # Legacy JSON import, directory renames
+│   ├── pipeline.py        # Task queue & worker threads
+│   ├── encoder.py         # NVENC/VAAPI ffmpeg encoding
+│   ├── uploader.py        # rclone-based cloud upload
+│   ├── thumbnail.py       # Thumbnail generation
+│   ├── gsr_controller.py  # GSR subprocess management
+│   ├── gsr_watcher.py     # GSR output directory watcher
+│   ├── recorder_controller.py # Recording lifecycle
+│   ├── hotkey_daemon.py   # Hotkey listening daemon
 │   ├── noise_suppression.py # RNNoise integration
-│   ├── corruption.py       # Corrupt clip detection
-│   ├── game_monitor.py     # Game process detection
-│   ├── game_profiles.py    # Per-game recording profiles
-│   ├── bookmarker.py       # Session bookmark management
-│   ├── screenshot.py       # Screenshot capture
-│   ├── retention.py        # Automatic clip deletion by age
-│   ├── import_export.py    # Clip import/export operations
-│   └── discord_bot.py      # Discord bot integration
+│   ├── corruption.py      # Corrupt clip detection
+│   ├── game_monitor.py    # Game process detection
+│   ├── game_profiles.py   # Per-game recording profiles
+│   ├── bookmarker.py      # Session bookmark management
+│   ├── screenshot.py      # Screenshot capture
+│   ├── retention.py       # Automatic clip deletion by age
+│   ├── import_export.py   # Clip import/export operations
+│   ├── discord_bot.py     # Discord bot integration
+│   ├── repositories/      # Domain persistence layer (refactored from monolithic store)
+│   │   ├── base.py        # Connection helpers, schema, migration framework (run_migrations)
+│   │   ├── clip_repo.py
+│   │   ├── tag_repo.py
+│   │   ├── folder_repo.py
+│   │   ├── bookmark_repo.py
+│   │   ├── profile_repo.py
+│   │   ├── webhook_repo.py
+│   │   ├── task_repo.py
+│   │   └── settings_repo.py
+│   └── __init__.py
 │
-├── ui/             # PyQt6 GUI components
-│   ├── app.py              # AppManager — bootstrap & lifecycle
-│   ├── main_window.py      # QMainWindow with page stack
-│   ├── tray.py             # System tray icon
-│   ├── resources.py        # Stylesheet, icons, fonts
-│   ├── pages/              # Page views
-│   │   ├── grid_page.py    # Clip grid with search/filter
-│   │   ├── player_page.py  # Video player
+├── ui/                    # PyQt6 GUI components
+│   ├── app.py             # AppManager — bootstrap & lifecycle
+│   ├── main_window.py     # QMainWindow with page stack
+│   ├── tray.py            # System tray icon
+│   ├── resources.py       # Stylesheet, icons, fonts
+│   ├── pages/             # Page views
+│   │   ├── grid_page.py   # Clip grid with search/filter
+│   │   ├── player_page.py # Video player
 │   │   ├── recording_page.py # Recording controls
-│   │   ├── stats_page.py   # Aggregate statistics
-│   │   ├── trash_page.py   # Soft-deleted clips
+│   │   ├── stats_page.py  # Aggregate statistics
+│   │   ├── trash_page.py  # Soft-deleted clips
 │   │   └── webhook_page.py # Webhook management
-│   ├── dialogs/            # Modal dialogs
+│   ├── dialogs/           # Modal dialogs
 │   │   ├── settings_dialog.py
 │   │   ├── trim_dialog.py
 │   │   ├── tag_dialog.py
 │   │   ├── game_profile_dialog.py
 │   │   └── about_dialog.py
-│   ├── widgets/            # Reusable widgets
-│   │   ├── toast.py        # Stacking notifications
+│   ├── widgets/           # Reusable widgets
+│   │   ├── toast.py       # Stacking notifications
 │   │   ├── search_bar.py
 │   │   ├── timeline_editor.py
 │   │   ├── audio_mixer.py
-│   │   ├── overlay.py      # GSR overlay
-│   │   ├── pip_window.py   # Picture-in-picture
+│   │   ├── overlay.py     # GSR overlay
+│   │   ├── pip_window.py  # Picture-in-picture
 │   │   └── ... (14 widgets total)
-│   ├── editor/             # Video editor module
+│   ├── editor/            # Video editor module
 │   │   ├── editor_window.py
 │   │   ├── timeline_panel.py
 │   │   ├── filter_panel.py
@@ -93,24 +107,24 @@ src/moment/
 │   └── services/
 │       └── global_hotkey.py # KDE global shortcut registration
 │
-├── utils/          # Utility modules
-│   ├── ffmpeg.py           # ffmpeg/ffprobe wrappers
-│   ├── logging.py          # Logging configuration
-│   ├── system.py           # System helpers
-│   └── subprocess.py       # Subprocess helpers
+├── utils/                 # Utility modules
+│   ├── ffmpeg.py          # ffmpeg/ffprobe wrappers
+│   ├── logging.py         # Logging configuration
+│   ├── system.py          # System helpers
+│   └── subprocess.py      # Subprocess helpers
 │
-├── bot/            # Discord bot
-│   ├── main.py             # CLI entry point for `moment bot`
+├── bot/                   # Discord bot
+│   ├── main.py            # CLI entry point for `moment bot`
 │   └── __init__.py
 │
-├── mcp/            # MCP server for AI agent access
-│   ├── main.py             # CLI entry point for `moment mcp`
-│   ├── server.py           # FastMCP server
-│   └── tools.py            # Tool definitions
+├── mcp/                   # MCP server for AI agent access
+│   ├── main.py            # CLI entry point for `moment mcp`
+│   ├── server.py          # FastMCP server
+│   └── tools.py           # Tool definitions
 │
-├── __init__.py     # Version
-├── __main__.py     # `python -m moment` entry point
-└── main.py         # CLI dispatch (gui/bot/mcp)
+├── __init__.py            # Version
+├── __main__.py            # `python -m moment` entry point
+└── main.py                # CLI dispatch (gui/bot/mcp)
 ```
 
 ---
@@ -130,9 +144,10 @@ src/moment/
 | `.github/workflows/release.yml` | Release pipeline |
 
 **Files with high modification risk** (be extra careful):
-- `src/moment/core/store.py` (~1100 lines) — complex SQLite layer with migrations, encryption, and CRUD
 - `src/moment/core/models.py` — used everywhere; changing a field affects ALL consumers
 - `src/moment/core/config.py` — key whitelist enforcement; adding keys requires updating `_ALLOWED_KEYS`
+- `src/moment/core/repositories/base.py` — shared schema, migration framework (run_migrations), connection helpers
+- `src/moment/core/repositories/*.py` — each repo is the single source of truth for its table's CRUD
 
 ---
 
@@ -141,14 +156,14 @@ src/moment/
 ### Feature: Clip Capture → Upload Pipeline
 
 ```
-GSR writes MKV → Filesystem Watcher → Store.insert_clip()
+GSR writes MKV → GSRWatcher → Store.insert_clip()
   → Pipeline.enqueue(ENCODE) → ffmpeg NVENC → encoded.mp4
   → Pipeline.enqueue(UPLOAD) → rclone copy → cloud URL
   → Pipeline.enqueue(THUMBNAIL) → ffmpeg frame extract → .jpg
-  → GUI signals → Toast notification → Grid page updates
+  → EventBus signals → Toast notification → Grid page updates
 ```
 
-Key files: `gsr_controller.py`, `gsr_watcher.py`, `watcher.py`, `pipeline.py`, `encoder.py`, `uploader.py`, `thumbnail.py`
+Key files: `gsr_controller.py`, `gsr_watcher.py`, `recorder_controller.py`, `pipeline.py`, `encoder.py`, `uploader.py`, `thumbnail.py`, `event_bus.py`
 
 ### Feature: Discord Bot
 
@@ -162,7 +177,8 @@ Key files: `discord_bot.py`, `bot/main.py`
 ### Feature: MCP Server
 
 ```
-HTTP POST /tools → auth check → Store operation → JSON response
+HTTP POST /tools → Bearer auth check → Store operation → JSON response
+  (--allow-mutations flag enables writes; without it: read-only)
   stdio transport also available
 ```
 
@@ -261,10 +277,10 @@ Webhook URLs are encrypted with a Fernet key stored in the OS keyring. `Store.re
 Pipeline workers run in background threads. UI updates MUST go through Qt signals (`pyqtSignal`), never direct calls from worker threads.
 
 ### 4. **Database Migrations**
-Schema changes require:
-1. A migration method in `Store` (e.g., `_migrate_webhook_include_url`)
-2. An `ALTER TABLE` with column existence check via `PRAGMA table_info`
-3. The column in the `CREATE TABLE IF NOT EXISTS` statement for fresh installs
+The migration framework uses a `schema_version` table with numbered, ordered migrations defined in `base.py` (`_MIGRATIONS` list). New migrations:
+1. Add a `_migration_NNN_name()` function in `base.py` that accepts `sqlite3.Connection`
+2. Append `("NNN_name", _migration_NNN_name)` to the `_MIGRATIONS` list
+3. `run_migrations()` runs them in order inside transactions
 
 ### 5. **Config Key Whitelist**
 `Config.set()` rejects unknown keys. You MUST add new keys to `_ALLOWED_KEYS` or `_ALLOWED_PREFIXES` in `config.py`.
@@ -274,6 +290,9 @@ The `GameMonitor` pauses the pipeline when a game process is detected. This affe
 
 ### 7. **Soft Delete vs Hard Delete**
 Clips use soft-delete (`deleted_at` timestamp set, data preserved). Hard delete (`Store.delete_clip(soft=False)`) is only for the "Empty Trash" operation.
+
+### 8. **Event Bus**
+Core components emit on `EventBus` instead of accepting raw callbacks. The UI layer connects bus signals to Qt slots for thread-safe delivery. Never `import` from `ui/` in a core module to emit signals — use `EventBus` from a passed reference.
 
 ---
 
@@ -287,7 +306,7 @@ Clips use soft-delete (`deleted_at` timestamp set, data preserved). Hard delete 
 6. **DB file permissions** — `0o600` (owner-only)
 7. **Clipboard timeout** — URLs auto-clear after 60 seconds
 8. **PID-based signaling** — `save-replay.sh` uses `pgrep` + `kill`, not `killall`
-9. **MCP auth** — Bearer token required for mutation endpoints; scoped tokens (read-only vs. read-write)
+9. **MCP auth** — ALL HTTP endpoints require Bearer token; scoped tokens (read-only vs. read-write via `--allow-mutations`)
 10. **Log redaction** — secrets (tokens, keys, URLs) are redacted in logs
 
 ---
@@ -310,9 +329,9 @@ Clips use soft-delete (`deleted_at` timestamp set, data preserved). Hard delete 
 
 - **HTTP**: `127.0.0.1:8742` (configurable via `--port`)
 - **Stdio**: stdin/stdout JSON-RPC
-- **Auth**: Bearer token via `--api-token` or `MOMENT_MCP_TOKEN` env var
+- **Auth**: Bearer token required on ALL endpoints via `--api-token` or `MOMENT_MCP_TOKEN` env var
+- **Scope**: `--allow-mutations` flag enables write operations; without it, read-only
 - **Endpoints**: list/search/get clips, get stats, list game profiles, list webhooks, enqueue encode/upload, save game profile, test webhook
-- **Read-only mode**: `--allow-mutations` flag enables write operations
 
 ## Discord Bot Details
 

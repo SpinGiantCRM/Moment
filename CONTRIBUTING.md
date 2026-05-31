@@ -64,7 +64,7 @@ python -m pytest tests/test_store.py -x --tb=short -v  # Specific module
 - [ ] No `# nosec` without explanatory comment
 - [ ] Signal/slot dispatch for cross-thread communication (not direct calls)
 - [ ] New config keys added to `_ALLOWED_KEYS` or `_ALLOWED_PREFIXES`
-- [ ] Schema changes include migration method + `CREATE TABLE` update
+- [ ] Schema changes add migration to `_MIGRATIONS` list in `base.py` + update `SCHEMA_SQL`
 - [ ] Secret values use keyring, not env vars or config table
 - [ ] New dependencies added to `pyproject.toml` with version constraints
 
@@ -93,7 +93,7 @@ python -m pytest tests/test_store.py -x --tb=short -v  # Specific module
 - `AGENTS.md` — AI agent briefing (highest priority for accuracy)
 - `ARCHITECTURE.md` — System architecture and request flows
 - `SECURITY.md` — Security model and encryption details
-- `TRUTH.md` — Aspirational state and audit findings
+- `TRUTH.md` — Current state and aspirations
 - `README.md` — Quick start and feature overview
 - `docs/` — Detailed guides and references
 

@@ -1,8 +1,20 @@
 # Database Schema
 
-**Engine:** SQLite 3 (WAL mode) via pysqlcipher3 (AES-256 encrypted)
+**Engine:** SQLite 3 (WAL mode) via pysqlcipher3 (AES-256 encrypted) — encryption is mandatory, no plaintext fallback
 **Location:** `~/.config/moment/clips.db`
 **Permissions:** `0o600` (owner read/write)
+**Tables:** 16
+
+---
+
+## Table: `schema_version`
+
+Migration tracking table. Used by `run_migrations()` in `repositories/base.py` to apply pending migrations sequentially inside transactions.
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `version` | TEXT PK | — | Migration identifier (e.g., `"001_initial"`) |
+| `applied_at` | TEXT | `datetime('now')` | When the migration was applied |
 
 ---
 
@@ -271,23 +283,48 @@ Generic key-value configuration store.
 
 ---
 
-## Migration Patterns
+## Migration Framework
 
-Moment handles database migrations by checking column existence before applying `ALTER TABLE`. All migration methods follow this pattern:
+**Location:** `src/moment/core/repositories/base.py`
+
+Moment uses a numbered migration framework with a `schema_version` table. `run_migrations()` applies pending migrations sequentially inside transactions.
+
+### The `_MIGRATIONS` List
 
 ```python
-def _migrate_webhook_include_url(self) -> None:
-    """Add ``include_clip_url`` column to webhooks table."""
-    rows = self._conn.execute("PRAGMA table_info(webhooks)").fetchall()
-    columns = {r["name"] for r in rows}
-    if "include_clip_url" not in columns:
-        self._conn.execute(
-            "ALTER TABLE webhooks ADD COLUMN include_clip_url INTEGER NOT NULL DEFAULT 0"
-        )
-    self._conn.commit()
+_MIGRATIONS: list[tuple[str, _MigrationFunc]] = [
+    ("001_initial", _migration_001_initial),
+    ("002_webhook_include_url", _migration_002_webhook_include_url),
+    ("003_webhook_per_game_filter", _migration_003_webhook_per_game_filter),
+    ("004_migrate_secrets_to_keyring", _migration_004_migrate_secrets_to_keyring),
+    ("005_migrate_webhook_key_to_keyring", _migration_005_migrate_webhook_key_to_keyring),
+]
 ```
 
-When adding a new column:
-1. Create a migration method in `Store` that checks `PRAGMA table_info`
-2. Add the column to the `CREATE TABLE IF NOT EXISTS` statement in `_SCHEMA_SQL`
-3. Call the migration from `Store.__init__()` (in order)
+### Migration Function Pattern
+
+Each migration is a module-level function accepting `sqlite3.Connection`:
+
+```python
+def _migration_002_webhook_include_url(conn: sqlite3.Connection) -> None:
+    rows = conn.execute("PRAGMA table_info(webhooks)").fetchall()
+    columns = {r["name"] for r in rows}
+    if "include_clip_url" not in columns:
+        conn.execute(
+            "ALTER TABLE webhooks ADD COLUMN include_clip_url INTEGER NOT NULL DEFAULT 0"
+        )
+```
+
+All columns added by migrations also exist in `SCHEMA_SQL` for fresh installs, so migrations are idempotent — they check `PRAGMA table_info` before applying `ALTER TABLE`.
+
+### When adding a new column
+
+1. Add the column to `SCHEMA_SQL` (for fresh installs)
+2. Create a migration function in `base.py` that accepts `sqlite3.Connection` and checks `PRAGMA table_info`
+3. Append `(f"{NNN}_name", _migration_NNN_name)` to the `_MIGRATIONS` list
+4. `run_migrations()` handles execution order automatically
+
+### When adding a new table
+
+1. Add the `CREATE TABLE` statement to `SCHEMA_SQL`
+2. No migration needed for brand new tables — they exist at schema creation

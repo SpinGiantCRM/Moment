@@ -34,21 +34,21 @@ Hotkey/UI → GSRController (capture) → Watcher (detect) → Pipeline (encode/
 1. **Encryption is mandatory** — pysqlcipher3 + keyring required. No plaintext fallback.
 2. **No GUI in core** — `core/` never imports from PyQt6. Thread-safe signals only.
 3. **Config whitelist** — `_ALLOWED_KEYS` in `config.py`; unknown keys are rejected.
-4. **DB migrations** — PRAGMA-guarded column checks + CREATE TABLE update. Always.
+4. **DB migrations** — `_MIGRATIONS` list in `base.py`, numbered ordered migrations in `schema_version` table.
 5. **Test patterns** — `pytest`, mock externals, `Store.reset_fernet_cache()` between tests.
 
 ## Where to Look
 
 | Task | Start Here |
 |------|-----------|
-| Add a field to Clip | `models.py` → `store.py` (schema + CRUD) → migration method |
+| Add a field to Clip | `models.py` → `base.py` (SCHEMA_SQL) + repo CRUD + `_MIGRATIONS` entry |
 | New pipeline stage | `pipeline.py` (task types + workers) |
 | New UI page | `ui/pages/` + `main_window.py` (register in page stack) |
 | New widget | `ui/widgets/` |
 | New CLI command | `main.py` (argparse dispatch) |
 | New MCP tool | `mcp/tools.py` + `mcp/server.py` (register endpoint) |
 | New Discord command | `discord_bot.py` (slash command handler) |
-| Refactor store.py | See `docs/architecture/request-flow.md` for dependency map |
+| Store/repo interaction | `store.py` delegates to `repositories/*.py` for CRUD |
 
 ## Docs Map
 

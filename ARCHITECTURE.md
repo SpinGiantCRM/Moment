@@ -153,12 +153,13 @@ QMediaPlayer loads and plays video
 
 ## 4. Database Schema
 
-**File:** `src/moment/core/store.py` (schema in `_SCHEMA_SQL`)
+**File:** `src/moment/core/repositories/base.py` (schema in `SCHEMA_SQL`, migrations in `_MIGRATIONS`)
 
-**Tables (15 total):**
+**Tables (16 total):**
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
+| `schema_version` | Migration tracking | version, applied_at |
 | `clips` | Primary clip storage | id, stem, source_path, status, game, visibility, discord_user_id |
 | `tags` | Tag definitions | id, name, color |
 | `clip_tags` | M:N clip↔tag mapping | clip_id, tag_id |
@@ -175,7 +176,7 @@ QMediaPlayer loads and plays video
 | `pip_cache` | PIP window cache | id, clip_id, start_offset, end_offset |
 | `settings` | Config key-value store | key, value |
 
-**Migration pattern:** Each migration method (`_migrate_*`) checks column existence via `PRAGMA table_info` before applying `ALTER TABLE`. All columns also exist in the `CREATE TABLE IF NOT EXISTS` statement for fresh installs.
+**Migration framework:** A `schema_version` table tracks applied migrations. The `_MIGRATIONS` list in `base.py` defines numbered, ordered migration functions. `run_migrations()` applies pending migrations sequentially inside transactions. Each migration checks `PRAGMA table_info` before `ALTER TABLE` and all columns also exist in `SCHEMA_SQL` for fresh installs.
 
 ---
 
@@ -325,8 +326,18 @@ moment.main
 │   ├── moment.ui.resources → stylesheet, icons
 │   └── moment.ui.services.*
 ├── moment.core.*
-│   ├── moment.core.store  → SQLite persistence
-│   ├── moment.core.config → Key-value settings
+│   ├── moment.core.store  → Store facade (delegates to repos)
+│   ├── moment.core.repositories.base → Schema, migrations, BaseRepository
+│   ├── moment.core.repositories.clip_repo → Clip CRUD
+│   ├── moment.core.repositories.tag_repo → Tag CRUD
+│   ├── moment.core.repositories.folder_repo → Folder CRUD
+│   ├── moment.core.repositories.bookmark_repo → Bookmark CRUD
+│   ├── moment.core.repositories.profile_repo → Game profiles
+│   ├── moment.core.repositories.webhook_repo → Webhook CRUD
+│   ├── moment.core.repositories.task_repo → Pipeline task persistence
+│   ├── moment.core.repositories.settings_repo → Key-value settings
+│   ├── moment.core.config → Key-value settings (via settings_repo)
+│   ├── moment.core.event_bus → Centralized QObject signal bus
 │   ├── moment.core.models → Dataclasses & enums
 │   ├── moment.core.pipeline → Task queue & workers
 │   ├── moment.core.encoder → ffmpeg NVENC

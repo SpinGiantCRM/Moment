@@ -4,7 +4,7 @@
 
 Moment handles sensitive data: Discord bot tokens, webhook URLs, cloud storage credentials, and video files. Security is designed with **defense in depth** — encryption at rest, minimal attack surface, and secret redaction.
 
-**Current security posture:** Active development. See `TRUTH.md` for the aspirational security state.
+**Current security posture:** Active development.
 
 ---
 
@@ -69,11 +69,10 @@ Import/Export uses `python-magic` or `file(1)` to validate file types before imp
 ## 4. Authentication
 
 ### MCP Server
-- **Mutation endpoints** require Bearer token in `Authorization` header
-- **Read-only endpoints** are unauthenticated (future: scoped tokens)
+- **ALL endpoints** require Bearer token in `Authorization` header
+- **Scoped tokens:** `--allow-mutations` flag grants write access; without it, token is read-only
 - **Token comparison:** Uses `hmac.compare_digest()` for constant-time comparison
 - **Token storage:** CLI arg `--api-token` or `MOMENT_MCP_TOKEN` env var
-- **Scope:** `--allow-mutations` flag enables write operations
 
 ### Discord Bot
 - **Role-based access:** `discord_allowed_roles` config restricts slash commands

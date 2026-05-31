@@ -81,16 +81,19 @@ Moment is a desktop application that wraps `gpu-screen-recorder` as a thin subpr
 
 ### 3.1 SQLite Database
 - WAL mode at `~/.config/moment/clips.db`
-- 13 tables: clips, edit_profiles, tags, clip_tags, url_history, webhooks, webhook_log, settings, folders, folder_clips, game_profiles, bookmarks, pip_cache
+- 16 tables (see `docs/database/schema.md`)
+- Mandatory pysqlcipher3 encryption (AES-256-CBC), hard fail on missing dep
+- Migration framework: `schema_version` table with numbered, ordered migrations in `base.py`
+- Read-write lock (`threading.Lock`) + separate read connection for thread-safe SELECTs
 - Soft-delete with `deleted_at` timestamp
 - DB file permissions: 0o600 (owner-only)
-- **Striving toward:** Mandatory encryption (pysqlcipher3), schema versioning/migration framework, read-write lock, separate read connection
+- **Striving toward:** Separate schema definition from SCHEMA_SQL
 
 ### 3.2 Config System
 - Key-value settings table
 - Config key whitelist (prevents arbitrary config writes)
 - Path override support for data/config/temp directories
-- **Striving toward:** Migration from settings table to keyring for secrets
+- Secrets migrated from settings table to OS keyring (migrations 004, 005)
 
 ### 3.3 Import/Export
 - Import clips from filesystem (copy or reference mode)
@@ -171,39 +174,37 @@ Moment is a desktop application that wraps `gpu-screen-recorder` as a thin subpr
 
 ---
 
-## 5. Security (Aspirational State)
-
-Moment is audited at 38/100 and is **striving toward** production-ready security:
+## 5. Security
 
 ### 5.1 Encryption
-- **Sought:** Mandatory pysqlcipher3 for SQLite — hard fail on missing dep
-- **Sought:** Remove all plaintext fallback paths in encryption
-- **Sought:** Store encryption keys in OS keyring (never alongside ciphertext)
-- **Sought:** Hard-fail webhook URL encryption (no silent plaintext fallback)
+- **Achieved:** Mandatory pysqlcipher3 for SQLite (AES-256-CBC) — hard fail on missing dep
+- **Achieved:** No plaintext fallback paths — all encryption failures are `RuntimeError`
+- **Achieved:** Store encryption keys in OS keyring (never alongside ciphertext)
+- **Achieved:** Hard-fail webhook URL encryption (Fernet) — no silent plaintext fallback
+- **Striving toward:** DB file integrity monitoring
 
 ### 5.2 Authentication
-- **Sought:** Authenticate ALL MCP HTTP endpoints (not just mutations)
-- **Sought:** Constant-time auth comparison (`hmac.compare_digest()`)
-- **Sought:** Scoped tokens (read-only vs. mutation)
-- **Sought:** Server-side clip visibility enforcement (owner_id from token, not caller input)
+- **Achieved:** ALL MCP HTTP endpoints require Bearer token
+- **Achieved:** Constant-time auth comparison (`hmac.compare_digest()`)
+- **Achieved:** Scoped tokens (read-only vs. mutation via `--allow-mutations`)
+- **Striving toward:** Server-side clip visibility enforcement (owner_id from token, not caller input)
 
 ### 5.3 Credential Management
-- **Sought:** Keyring-only Discord token storage (no env var sourcing)
-- **Sought:** Retry keyring migration on every startup
-- **Sought:** No MCP token in config DB (keyring or session-only)
+- **Achieved:** Keyring-only Discord token storage (no env var)
+- **Achieved:** Retry keyring migration on every startup (migrations 004, 005)
+- **Striving toward:** No MCP token in config DB (keyring or session-only)
 
 ### 5.4 Logging & Monitoring
-- **Sought:** Comprehensive secret redaction (tokens, keys, URLs, paths)
-- **Sought:** Audit logging for sensitive operations
-- **Sought:** Metrics/health endpoint
+- **Achieved:** Comprehensive secret redaction (tokens, keys, URLs, paths)
+- **Achieved:** Audit logging for sensitive operations (URL copy, webhook dispatch, config write rejections)
+- **Striving toward:** Metrics/health endpoint
 
 ### 5.5 Hardening
-- **Sought:** Remove `MOMENT_BYPASS_WEBHOOK_RATE_LIMIT` env var
-- **Sought:** PID-based signaling (no broad `killall`)
-- **Sought:** Clipboard timeout for sensitive URLs
-- **Sought:** File integrity monitoring for DB
-- **Sought:** Sandbox ffmpeg subprocesses
-- **Sought:** SBOM + dependency scanning in CI
+- **Achieved:** PID-based signaling (`save-replay.sh` uses `pgrep` + `kill`)
+- **Achieved:** Clipboard timeout for sensitive URLs (60s auto-clear)
+- **Striving toward:** Remove `MOMENT_BYPASS_WEBHOOK_RATE_LIMIT` env var
+- **Striving toward:** Sandbox ffmpeg subprocesses
+- **Striving toward:** SBOM + dependency scanning in CI
 
 ---
 
@@ -219,8 +220,9 @@ Moment is audited at 38/100 and is **striving toward** production-ready security
 ### 6.2 MCP Server (Optional)
 - HTTP on `127.0.0.1:8742` + stdio transport
 - Tools: list/search/get clips, get stats, list game profiles, list webhooks, enqueue encode/upload, save game profile, test webhook
-- Auth token on mutation endpoints
-- **Striving toward:** Auth on all endpoints, scoped read-only token, metrics/health endpoint
+- Bearer token auth on ALL endpoints
+- Scoped tokens (`--allow-mutations` grants write access; without it, read-only)
+- **Striving toward:** Metrics/health endpoint
 
 ### 6.3 Cloud Storage (via rclone)
 - R2, S3, B2, GCS, Wasabi, Dropbox, Google Drive, MinIO, SFTP/NAS
@@ -252,18 +254,16 @@ Moment is audited at 38/100 and is **striving toward** production-ready security
 
 ---
 
-## 8. Architecture (Aspirational State)
+## 8. Architecture
 
-Moment is audited at 2.9/10 architecturally and is **striving toward**:
-
-- **Domain repositories:** Split 1650-line store.py into ClipRepository, WebhookRepository, ProfileRepository, etc.
-- **Event bus:** Centralized signal-based bus replacing callback spaghetti
-- **Dependency injection:** Eliminate all `set_*_config()` module-level globals
-- **Async I/O:** asyncio for rclone uploads, webhooks; dedicated thread pool for CPU work
-- **Structured logging:** JSON output, correlation IDs, no bare `except: pass`
-- **Migration framework:** Schema version table with numbered, ordered migrations
-- **Test infrastructure:** PyTest with minimum 40% coverage before production
-- **Graceful degradation:** User-visible warnings for missing optional deps
+- **Achieved:** Domain repositories — 8 repos under `repositories/`, each single table CRUD
+- **Achieved:** Event bus — centralized `QObject`-based signal bus in `event_bus.py`
+- **Achieved:** Migration framework — `schema_version` table with numbered, ordered migrations in `base.py`
+- **Achieved:** Graceful degradation — optional deps show user-visible warnings, core starts with error banner
+- **Striving toward:** Dependency injection (eliminate `set_*_config()` module-level globals)
+- **Striving toward:** Async I/O (asyncio for rclone, webhooks)
+- **Striving toward:** Structured logging (JSON, correlation IDs, no bare `except: pass`)
+- **Striving toward:** Test infrastructure (>40% coverage before production)
 
 ---
 
