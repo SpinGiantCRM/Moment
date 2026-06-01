@@ -32,16 +32,15 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QStatusBar,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 if TYPE_CHECKING:
     from moment.core.config import Config
+    from moment.core.gsr_controller import GSRController
     from moment.core.pipeline import Pipeline
     from moment.core.store import Store
-    from moment.core.gsr_controller import GSRController
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +203,9 @@ class MainWindow(QMainWindow):
         banner_layout.setSpacing(8)
 
         icon_label = QLabel("!")
-        icon_label.setStyleSheet("color: white; font-size: 16px; font-weight: bold; background: transparent;")
+        icon_label.setStyleSheet(
+            "color: white; font-size: 16px; font-weight: bold; background: transparent;"
+        )
         banner_layout.addWidget(icon_label)
 
         # Build a descriptive message from the actual error

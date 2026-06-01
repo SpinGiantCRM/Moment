@@ -145,7 +145,12 @@ def _cmd_diagnose(argv: list[str]) -> int:
             if clip:
                 print(f"  Clip {args.clip_id}:")
                 print(f"    Stem:      {clip.stem}")
-                print(f"    Status:    {clip.status.name if hasattr(clip.status, 'name') else clip.status}")
+                status_display = (
+                    clip.status.name
+                    if hasattr(clip.status, "name")
+                    else clip.status
+                )
+                print(f"    Status:    {status_display}")
                 print(f"    Duration:  {clip.duration:.1f}s")
                 print(f"    Size:      {clip.file_size} bytes")
                 print(f"    Codec:     {clip.video_codec}")

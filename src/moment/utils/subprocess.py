@@ -91,7 +91,9 @@ def _sandbox_preexec() -> None:
     try:
         os.setsid()
     except OSError:
-        logger.debug("Failed to create new session in sandbox")  # non-fatal — some environments restrict setsid
+        logger.debug(
+            "Failed to create new session in sandbox"
+        )  # non-fatal — some environments restrict setsid
 
     # Drop setuid / setgid privileges if elevated
     try:

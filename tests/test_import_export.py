@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from moment.core.import_export import (
-    ImportError,
+    ClipImportError,
     ImportExport,
 )
 from moment.core.models import Clip, ClipStatus, ClipType
@@ -46,7 +46,7 @@ class TestParseFps:
 
 class TestImport:
     def test_import_file_missing(self, ie):
-        with pytest.raises(ImportError, match="not found"):
+        with pytest.raises(ClipImportError, match="not found"):
             ie.import_file(Path("/tmp/nonexistent_import_test.mp4"))
 
     def test_import_file_empty(self, ie):
@@ -55,7 +55,7 @@ class TestImport:
         # Create a 0-byte file
         Path(tmp).write_text("")
         try:
-            with pytest.raises(ImportError, match="empty"):
+            with pytest.raises(ClipImportError, match="empty"):
                 ie.import_file(Path(tmp))
         finally:
             try:
@@ -154,7 +154,7 @@ class TestImport:
     def test_import_no_video_stream(
         self, mock_mime, mock_ensure, mock_probe, ie
     ):
-        """If no video stream is found, it should raise ImportError."""
+        """If no video stream is found, it should raise ClipImportError."""
         mock_probe.return_value = {
             "format": {"duration": "5.0"},
             "streams": [
@@ -165,7 +165,7 @@ class TestImport:
         os.close(fd)
         Path(tmp).write_bytes(b"data")
         try:
-            with pytest.raises(ImportError, match="No video stream"):
+            with pytest.raises(ClipImportError, match="No video stream"):
                 ie.import_file(Path(tmp), copy=False)
         finally:
             try:
@@ -270,7 +270,7 @@ class TestImport:
                 patch("moment.core.import_export.os.rename", side_effect=OSError("rename failed")),
             ):
                 mock_copy.side_effect = lambda src, dst: Path(dst).write_bytes(b"x")
-                with pytest.raises(ImportError, match="rename"):
+                with pytest.raises(ClipImportError, match="rename"):
                     ie.import_file(Path(tmp), copy=True)
         finally:
             try:
@@ -338,7 +338,7 @@ class TestExport:
         )
         store.insert_clip(clip)
 
-        with pytest.raises(ImportError, match="outside allowed"):
+        with pytest.raises(ClipImportError, match="outside allowed"):
             ie.export_clips(["symlink-clip"], tmp_path / "export_dest")
 
     def test_export_symlink_within_allowed_succeeds(self, store, ie, tmp_path: Path):
@@ -386,13 +386,13 @@ class TestMimeType:
             ie._check_mime_type(Path("/tmp/test.mp3"))
 
     def test_mime_type_unknown_rejected(self, ie) -> None:
-        """Non-media MIME types raise ImportError."""
+        """Non-media MIME types raise ClipImportError."""
         with (
             patch("moment.core.import_export._HAS_MAGIC", True),
             patch("moment.core.import_export.magic") as mock_magic,
         ):
             mock_magic.from_file.return_value = "application/pdf"
-            with pytest.raises(ImportError, match="Not a recognised"):
+            with pytest.raises(ClipImportError, match="Not a recognised"):
                 ie._check_mime_type(Path("/tmp/test.pdf"))
 
     def test_mime_type_exception_logged(self, ie) -> None:
@@ -408,12 +408,12 @@ class TestMimeType:
             ie._check_mime_type(Path("/tmp/test.mp4"))
 
     def test_no_mime_checker_available_raises(self, ie) -> None:
-        """If neither magic nor file(1) is available, raise ImportError (fail closed)."""
+        """If neither magic nor file(1) is available, raise ClipImportError (fail closed)."""
         with (
             patch("moment.core.import_export._HAS_MAGIC", False),
             patch("moment.core.import_export.ExternalCommandRunner.run", side_effect=FileNotFoundError),
         ):
-            with pytest.raises(ImportError, match="Cannot verify file type"):
+            with pytest.raises(ClipImportError, match="Cannot verify file type"):
                 ie._check_mime_type(Path("/tmp/test.mp4"))
 
 # ---------------------------------------------------------------------------

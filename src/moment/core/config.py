@@ -11,8 +11,8 @@ import logging
 import os
 import sqlite3
 import threading
-from pathlib import Path
 from os.path import commonpath
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)

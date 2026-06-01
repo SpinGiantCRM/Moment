@@ -13,7 +13,6 @@ import asyncio
 import logging
 import os
 import sys
-import threading
 import traceback
 import uuid
 from datetime import datetime, timezone

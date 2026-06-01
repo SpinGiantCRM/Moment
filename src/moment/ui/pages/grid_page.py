@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import (
+    QItemSelectionModel,
     QMimeData,
     QModelIndex,
     QSize,
@@ -34,7 +35,6 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import QItemSelectionModel
 
 from moment.core.models import Clip
 from moment.ui.services.async_loader import AsyncDataLoader

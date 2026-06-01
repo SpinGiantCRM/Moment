@@ -28,7 +28,6 @@ import os
 import platform
 import re
 import sys
-import textwrap
 import time
 import traceback
 from datetime import datetime, timezone
@@ -37,6 +36,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 import moment.utils.system as system_utils
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from moment.core.config import Config
@@ -307,7 +308,11 @@ def startup_banner(
         "pid": os.getpid(),
         "cwd": os.getcwd(),
         "config_dir": os.path.expanduser("~/.config/moment"),
-        "data_dir": config.get_path("data_dir") if config else os.path.expanduser("~/.local/share/moment"),
+        "data_dir": (
+            config.get_path("data_dir")
+            if config
+            else os.path.expanduser("~/.local/share/moment")
+        ),
         "log_path": resolved_log,
         "crash_dir": _CRASH_DIR,
         "nvidia_gpu": system_utils.is_nvidia_gpu(),
@@ -319,14 +324,19 @@ def startup_banner(
     logger = logging.getLogger("moment.startup")
 
     logger.info("━━━ Moment %s startup ━━━", __version__)
-    logger.info("Python: %s | Platform: %s | Arch: %s", info["python"], info["os"], info["architecture"])
+    logger.info(
+        "Python: %s | Platform: %s | Arch: %s",
+        info["python"], info["os"], info["architecture"],
+    )
     logger.info("PID: %d | CWD: %s", os.getpid(), info["cwd"])
     logger.info("Config: %s  |  Data: %s", info["config_dir"], info["data_dir"])
     logger.info("Log path: %s", resolved_log)
     logger.info("GPU: %s", "NVIDIA" if info["nvidia_gpu"] else "not detected")
-    logger.info("FFmpeg: %s  |  FFprobe: %s",
-                info["ffmpeg_path"] or "not found",
-                info["ffprobe_path"] or "not found")
+    logger.info(
+        "FFmpeg: %s  |  FFprobe: %s",
+        info["ffmpeg_path"] or "not found",
+        info["ffprobe_path"] or "not found",
+    )
     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     return info

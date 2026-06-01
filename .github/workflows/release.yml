@@ -85,6 +85,49 @@ jobs:
             --password ${{ secrets.PYPI_TOKEN }}
 
   # ---------------------------------------------------------------------------
+  # Auto-update PKGBUILD checksum after release is published
+  # ---------------------------------------------------------------------------
+  aur-update:
+    name: "Update PKGBUILD checksums"
+    needs: release
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Get version from tag
+        id: version
+        run: |
+          echo "version=${GITHUB_REF#refs/tags/v}" >> "${GITHUB_OUTPUT}"
+          echo "version_nov=${GITHUB_REF#refs/tags/}" >> "${GITHUB_OUTPUT}"
+
+      - name: Download source tarball and compute checksum
+        id: checksum
+        run: |
+          URL="https://github.com/SpinGiantCRM/moment/archive/refs/tags/${{ steps.version.outputs.version_nov }}.tar.gz"
+          SUM=$(curl -fsSL "$URL" | sha256sum | cut -d' ' -f1)
+          echo "sha256=${SUM}" >> "${GITHUB_OUTPUT}"
+          echo "Computed sha256sum: ${SUM}"
+
+      - name: Update PKGBUILD
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.version.outputs.version }}/" PKGBUILD
+          sed -i "s/^sha256sums=('.*')/sha256sums=('${{ steps.checksum.outputs.sha256 }}')/" PKGBUILD
+          cat PKGBUILD
+
+      - name: Commit and push PKGBUILD update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD
+          git diff --cached --quiet || git commit -m "chore: update PKGBUILD for v${{ steps.version.outputs.version }}"
+          git push origin master
+
+  # ---------------------------------------------------------------------------
   # Create GitHub Release
   # ---------------------------------------------------------------------------
   release:
@@ -104,6 +147,21 @@ jobs:
       - name: Get version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Find the previous version tag, or use the first commit
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | head -2 | tail -1 || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            LOG=$(git log "${PREV_TAG}..HEAD" --pretty=format:'- %s' --no-merges | head -50)
+          else
+            LOG=$(git log --pretty=format:'- %s' --no-merges | head -50)
+          fi
+          # Escape multiline output for GitHub Actions
+          echo "changelog<<EOF" >> "${GITHUB_OUTPUT}"
+          echo "$LOG" >> "${GITHUB_OUTPUT}"
+          echo "EOF" >> "${GITHUB_OUTPUT}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -146,7 +204,7 @@ jobs:
 
             ### What's Changed
 
-            See the [commit history](https://github.com/SpinGiantCRM/moment/commits/v${{ steps.version.outputs.version }}) for details.
+            ${{ steps.changelog.outputs.changelog }}
           files: |
             dist/*.whl
             dist/*.tar.gz

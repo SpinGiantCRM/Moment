@@ -61,8 +61,8 @@ _PRESETS: dict[str, dict[str, object]] = {
 CLIPS_DIR = Path.home() / "Videos"
 
 
-class ImportError(Exception):
-    """Raised when an import operation fails."""
+class ClipImportError(Exception):
+    """Raised when an import or export operation fails."""
 
 
 class ImportExport:
@@ -112,14 +112,14 @@ class ImportExport:
             The newly created :class:`Clip`.
 
         Raises:
-            ImportError: If the source file is missing, unreadable, or
+            ClipImportError: If the source file is missing, unreadable, or
                 ffprobe fails.
         """
         src = Path(path)
         if not src.is_file():
-            raise ImportError(f"Source file not found: {src}")
+            raise ClipImportError(f"Source file not found: {src}")
         if src.stat().st_size == 0:
-            raise ImportError(f"Source file is empty: {src}")
+            raise ClipImportError(f"Source file is empty: {src}")
 
         # MIME-type check — guard against non-media files being passed to ffprobe
         self._check_mime_type(src)
@@ -168,7 +168,7 @@ class ImportExport:
                     os.unlink(target_path)
                 except OSError as exc2:
                     logger.warning("Failed to clean up target file %s: %s", target_path, exc2)
-            raise ImportError(f"ffprobe failed for {target_path}: {exc}") from exc
+            raise ClipImportError(f"ffprobe failed for {target_path}: {exc}") from exc
 
         # Atomic rename: temp → final destination (validated)
         if copy and target_path != src:
@@ -181,7 +181,7 @@ class ImportExport:
                     os.unlink(target_path)
                 except OSError as exc2:
                     logger.warning("Failed to clean up target file %s: %s", target_path, exc2)
-                raise ImportError(f"Failed to rename temp file: {exc}") from exc
+                raise ClipImportError(f"Failed to rename temp file: {exc}") from exc
 
         fmt = probe_data.get("format", {})
         duration = float(fmt.get("duration", 0))
@@ -196,7 +196,7 @@ class ImportExport:
                     os.unlink(target_path)
                 except OSError as exc:
                     logger.warning("Failed to clean up target file %s: %s", target_path, exc)
-            raise ImportError(f"No video stream found in {target_path}")
+            raise ClipImportError(f"No video stream found in {target_path}")
 
         video_codec = video_stream.get("codec_name", "")
         fps_str = video_stream.get("r_frame_rate", "0/1")
@@ -290,7 +290,7 @@ class ImportExport:
             Number of files successfully copied.
 
         Raises:
-            ImportError: If a resolved path escapes allowed directories.
+            ClipImportError: If a resolved path escapes allowed directories.
         """
         dest = Path(dest)
         ensure_dir(dest)
@@ -324,7 +324,7 @@ class ImportExport:
         """Resolve symlinks and verify *path* stays within allowed directories.
 
         Raises:
-            ImportError: If the path is a symlink pointing outside allowed
+            ClipImportError: If the path is a symlink pointing outside allowed
                 directories, or the resolved path escapes the sandbox.
         """
         if path.is_symlink():
@@ -362,7 +362,7 @@ class ImportExport:
             except ValueError:
                 continue
         else:
-            raise ImportError(
+            raise ClipImportError(
                 f"Export blocked: {path.name} resolves to {resolved}, "
                 f"which is outside allowed directories"
             )
@@ -385,7 +385,7 @@ class ImportExport:
         a debug log (graceful degradation).
 
         Raises:
-            ImportError: If the file is not a recognised video/audio container.
+            ClipImportError: If the file is not a recognised video/audio container.
         """
         mime_type: str | None = None
 
@@ -414,7 +414,7 @@ class ImportExport:
 
         if mime_type is None:
             logger.warning("No MIME checker available — cannot validate import safety")
-            raise ImportError(
+            raise ClipImportError(
                 "Cannot verify file type: install python-magic (pip install python-magic) "
                 "or ensure the 'file' command is available on PATH"
             )
@@ -424,7 +424,7 @@ class ImportExport:
             logger.debug("MIME check passed: %s → %s", path.name, mime_type)
             return
 
-        raise ImportError(
+        raise ClipImportError(
             f"Not a recognised video or audio file: {path.name} (MIME: {mime_type})"
         )
 

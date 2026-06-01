@@ -18,8 +18,9 @@
 set -euo pipefail
 
 REPO="SpinGiantCRM/moment"
-BRANCH="main"
+BRANCH="master"
 GITHUB_RAW="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
+VERSION="${MOMENT_INSTALL_VERSION:-}"
 
 # ---- Resolve asset paths ------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,12 +28,20 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." 2>/dev/null && pwd || echo "")"
 
 ICON_SIZES=(48 64 128 256)
 
+# Resolve version-tagged URL if MOMENT_INSTALL_VERSION is set
+if [ -n "$VERSION" ]; then
+    GITHUB_RAW="https://raw.githubusercontent.com/${REPO}/v${VERSION}"
+fi
+
 # If running from a repo clone, use local assets; otherwise download from GitHub.
 if [ -n "$PROJECT_ROOT" ] && [ -f "${PROJECT_ROOT}/src/moment/ui/assets/icons/moment.svg" ]; then
     SVG_SRC="${PROJECT_ROOT}/src/moment/ui/assets/icons/moment.svg"
     DESKTOP_SRC="${SCRIPT_DIR}/moment.desktop"
     echo "Using local assets from ${PROJECT_ROOT}"
 else
+    if [ -z "$VERSION" ]; then
+        echo "Warning: Installing from branch '${BRANCH}' (unstable). Set MOMENT_INSTALL_VERSION=v0.2.1 for a stable release." >&2
+    fi
     SVG_SRC="$(mktemp /tmp/moment-svg-XXXXX.svg)"
     DESKTOP_SRC="$(mktemp /tmp/moment-desktop-XXXXX.desktop)"
     CLEANUP_TEMP="yes"
@@ -59,8 +68,16 @@ while [[ $# -gt 0 ]]; do
         --user)      MODE="user";   shift ;;
         --system)    MODE="system"; shift ;;
         --uninstall) ACTION="uninstall"; shift ;;
+        --version)
+            if [ -n "$VERSION" ]; then
+                echo "v${VERSION}"
+            else
+                echo "unknown (install from HEAD)"
+            fi
+            exit 0
+            ;;
         -h|--help)
-            echo "Usage: $0 [--user|--system] [--uninstall]"
+            echo "Usage: $0 [--user|--system] [--uninstall] [--version]"
             echo ""
             echo "Installs Moment desktop integration (launcher + icons)."
             echo ""
@@ -68,7 +85,11 @@ while [[ $# -gt 0 ]]; do
             echo "  --user        Install for current user only          (default)"
             echo "  --system      Install system-wide (requires sudo)"
             echo "  --uninstall   Remove previously installed files"
+            echo "  --version     Print version and exit"
             echo "  --help        Show this help"
+            echo ""
+            echo "Environment:"
+            echo "  MOMENT_INSTALL_VERSION  Pin to a release tag (e.g. v0.2.1)"
             echo ""
             echo "Run after installing the Python package via pip/pipx."
             echo "Works from a repo clone or standalone (downloads from GitHub)."
@@ -141,15 +162,28 @@ if [ "$ACTION" = "install" ]; then
         touch "${APPS_DIR}/moment.desktop" 2>/dev/null || true
     fi
 
+    # Install helper scripts
+    if [ -d "${SCRIPT_DIR}" ] && [ -f "${SCRIPT_DIR}/save-replay.sh" ]; then
+        install -Dm755 "${SCRIPT_DIR}/save-replay.sh" "${HOME}/.local/bin/moment-save-replay"
+        echo "    ${HOME}/.local/bin/moment-save-replay"
+    fi
+
     echo ""
     echo "==> Done! Moment should now appear in your app launcher."
     echo "    (You may need to log out and back in on GNOME/Wayland.)"
+    if [ -f "${SCRIPT_DIR}/moment-bot.service" ]; then
+        echo ""
+        echo "    Discord bot systemd service available at:"
+        echo "    ${SCRIPT_DIR}/moment-bot.service"
+        echo "    Install with: systemctl --user enable --now moment-bot.service"
+    fi
 
 # ---- Uninstall ------------------------------------------------------------
 else
     echo "==> Uninstalling Moment ($MODE mode)..."
 
     rm -f "${APPS_DIR}/moment.desktop"
+    rm -f "${HOME}/.local/bin/moment-save-replay"
     echo "    Removed ${APPS_DIR}/moment.desktop"
 
     rm -f "${ICONS_DIR}/scalable/apps/moment.svg"

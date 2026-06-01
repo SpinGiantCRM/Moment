@@ -53,6 +53,7 @@ sudo pacman -S librsvg             # Arch
 ```bash
 # Recommended — isolated install (no venv needed)
 pipx install "moment-clips[bot,mcp]"
+pipx ensurepath  # adds ~/.local/bin to PATH if not already there
 
 # OR from source (for development):
 git clone https://github.com/SpinGiantCRM/moment.git
@@ -69,15 +70,19 @@ pip install --user "moment-clips[bot,mcp]"
 Registers the app launcher icon so Moment appears in your application menu:
 
 ```bash
-# Standalone — works without cloning the repo:
-curl -fsSL https://raw.githubusercontent.com/SpinGiantCRM/moment/main/install/install.sh | bash
+# Standalone — works without cloning the repo (pinned to latest release):
+curl -fsSL https://raw.githubusercontent.com/SpinGiantCRM/moment/master/install/install.sh | bash
 
 # Or from a local repo clone:
 cd moment
 ./install/install.sh
+
+# Pin to a specific release version:
+MOMENT_INSTALL_VERSION=0.2.1 curl -fsSL https://.../install.sh | bash
 ```
 
-This installs the `.desktop` file, SVG icon, and PNG icons at 48/64/128/256px.
+This installs the `.desktop` file, SVG icon, PNG icons at 48/64/128/256px, and
+helper scripts (`moment-save-replay`).
 
 ### 4. Verify
 
@@ -95,6 +100,31 @@ moment export <clip_id> # Export a clip
 moment diagnose         # Print diagnostic report
 moment bot              # Start Discord bot
 moment mcp              # Start MCP server for AI agent access
+```
+
+### Discord Bot (systemd)
+
+A user systemd service is available for running the Discord bot persistently:
+
+```bash
+# From a repo clone
+cp install/moment-bot.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now moment-bot.service
+
+# Check status
+systemctl --user status moment-bot.service
+journalctl --user -u moment-bot.service -f
+```
+
+The bot auto-starts when you log in and restarts on failure.
+
+### Arch Linux (AUR)
+
+A `PKGBUILD` is included in the repo. Build and install with:
+
+```bash
+makepkg -si
 ```
 
 ## Documentation
