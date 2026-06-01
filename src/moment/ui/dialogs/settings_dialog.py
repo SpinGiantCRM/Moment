@@ -1,32 +1,57 @@
-"""Settings dialog — tabbed configuration with immediate persistence.
+"""Settings dialog — two-panel layout with category nav, stacked content,
+custom ToggleSwitch, and QSettings size persistence.
 
-Tabs: General, Encoding, Notifications, Game Detection,
-Recording, Storage Locations.
-Settings are persisted to the ``settings`` table on tab switch
-(no Apply button).
+Layout (ui-revamp Phase 6)::
+
+    ┌──────────┬─────────────────────────────────────┐
+    │ General  │ ┌─────────────────────────────────┐ │
+    │   Rec.   │ │  Theme          [Dark    ▼]     │ │
+    │   Video  │ │  Density        [Compact ▼]     │ │
+    │   Keys   │ │  Font           [Default ▼]     │ │
+    │   Output │ │  Auto-start     [====○]         │ │
+    │   Cloud  │ │  Tray           [○====]         │ │
+    │   About  │ └─────────────────────────────────┘ │
+    │          │                        [Cxl][Apl][OK]
+    └──────────┴─────────────────────────────────────┘
+
+7 categories matching the plan spec.  Settings are loaded on open and
+saved on Apply / OK (not on category switch).  Dialog size and position
+are persisted via QSettings.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import (
+    QEasingCurve,
+    QPropertyAnimation,
+    QRectF,
+    QSettings,
+    Qt,
+    pyqtProperty,
+    pyqtSignal,
+)
+from PyQt6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen
 from PyQt6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QFileDialog,
     QFormLayout,
-    QGroupBox,
+    QFrame,
     QHBoxLayout,
+    QKeySequenceEdit,
     QLabel,
     QLineEdit,
-    QMessageBox,
+    QListWidget,
+    QListWidgetItem,
+    QProgressBar,
     QPushButton,
     QSpinBox,
-    QTabWidget,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -36,19 +61,12 @@ if TYPE_CHECKING:
 
 from moment.core.config import _PATH_DEFAULTS
 
-# Resolve palette colours for the Appearance tab (with fallback)
-try:
-    from moment.ui.resources import color as _palette_color
-except ImportError:
-    _palette_color = None  # type: ignore[assignment]
-
 logger = logging.getLogger(__name__)
 
-# Encoding presets
-_PRESETS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"]
-_AUDIO_CODECS = ["aac", "opus", "copy"]
+# ---------------------------------------------------------------------------
+# Encoding / recording helpers (kept for Config integration)
+# ---------------------------------------------------------------------------
 
-# Video encoder dropdown — label → ffmpeg encoder name
 _VIDEO_ENCODER_OPTIONS: list[tuple[str, str]] = [
     ("Auto (detect best)", "auto"),
     ("NVENC H.264", "h264_nvenc"),
@@ -62,758 +80,932 @@ _VIDEO_ENCODER_OPTIONS: list[tuple[str, str]] = [
     ("QSV AV1", "av1_qsv"),
     ("Software (libx264)", "libx264"),
 ]
-_ENCODE_TIMINGS = ["immediately", "after_game", "when_idle"]
-_GAME_EXIT_BEHAVIORS = ["open_editor", "prompt", "nothing"]
-_REVIEW_SIZES = ["small", "medium", "large"]
 
-# Appearance tab swatches: (label, token, fallback_hex)
-_APPEARANCE_SWATCHES: list[tuple[str, str, str]] = [
-    ("Window BG", "--bg-window", "#3c3c3c"),
-    ("Surface", "--bg-surface", "#333333"),
-    ("Elevated", "--bg-elevated", "#404040"),
-    ("Inset", "--bg-inset", "#2a2a2a"),
-    ("Primary Text", "--text-primary", "#d9d9d9"),
-    ("Secondary", "--text-secondary", "#a1a1aa"),
-    ("Accent Blue", "--accent-blue", "#60a5fa"),
-    ("Accent Red", "--accent-red", "#f87171"),
-    ("Accent Green", "--accent-green", "#4ade80"),
+_PRESETS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"]
+
+# Hotkey action → config key mapping
+_HOTKEY_KEY_MAP: dict[str, str] = {
+    "Save clip": "hotkey_save_clip",
+    "Save with replay": "hotkey_save_with_replay",
+    "Toggle recording": "hotkey_toggle_recording",
+    "Open overlay": "hotkey_show_overlay",
+}
+
+
+# ======================================================================
+# Toggle Switch (custom animated QWidget)
+# ======================================================================
+
+
+class ToggleSwitch(QWidget):
+    """Animated toggle switch: 44×22, orange/blue knob with slide animation.
+
+    Emits ``toggled(bool)`` when clicked.
+    """
+
+    toggled = pyqtSignal(bool)
+
+    WIDTH = 44
+    HEIGHT = 22
+    KNOB_SIZE = 18
+    MARGIN = 2
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._checked = False
+        self._knob_x = self.MARGIN
+
+        self.setFixedSize(self.WIDTH, self.HEIGHT)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    # ── Public API ────────────────────────────────────────────────────
+
+    def isChecked(self) -> bool:
+        return self._checked
+
+    def setChecked(self, checked: bool) -> None:
+        """Set state programmatically (no animation)."""
+        self._checked = checked
+        self._knob_x = float(self.WIDTH - self.KNOB_SIZE - self.MARGIN if checked else self.MARGIN)
+        self.update()
+
+    def _get_knob_x(self) -> float:
+        return float(self._knob_x)
+
+    def _set_knob_x(self, value: float) -> None:
+        self._knob_x = value
+        self.update()
+
+    knobX = pyqtProperty(float, _get_knob_x, _set_knob_x)
+
+    # ── Interaction ───────────────────────────────────────────────────
+
+    def mousePressEvent(self, event) -> None:
+        self._checked = not self._checked
+        self.toggled.emit(self._checked)
+
+        target = self.WIDTH - self.KNOB_SIZE - self.MARGIN if self._checked else self.MARGIN
+        self._animate_knob(target)
+
+    def _animate_knob(self, target: float) -> None:
+        """Slide the knob to *target* x-position over 150ms."""
+        self._knob_anim = QPropertyAnimation(self, b"knobX")
+        self._knob_anim.setDuration(150)
+        self._knob_anim.setStartValue(self._knob_x)
+        self._knob_anim.setEndValue(target)
+        self._knob_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self._knob_anim.start()
+
+    # ── Paint ─────────────────────────────────────────────────────────
+
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w, h = self.width(), self.height()
+
+        # Track
+        track_color = QColor("#4a9eff") if self._checked else QColor("#444444")
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(track_color)
+        p.drawRoundedRect(QRectF(0, 0, w, h), h / 2, h / 2)
+
+        # Knob
+        knob_y = (h - self.KNOB_SIZE) / 2
+        p.setBrush(QColor("#ffffff"))
+        p.setPen(QPen(QColor("#000000"), 0))
+        p.drawEllipse(
+            QRectF(self._knob_x, knob_y, self.KNOB_SIZE, self.KNOB_SIZE),
+        )
+
+        p.end()
+
+
+# ======================================================================
+# Settings Dialog
+# ======================================================================
+
+_CATEGORIES = [
+    "General",
+    "Recording",
+    "Video",
+    "Hotkeys",
+    "Output",
+    "Cloud && Storage",
+    "About",
 ]
 
 
 class SettingsDialog(QDialog):
-    """Tabbed settings dialog — saves on tab switch, no Apply button."""
+    """Two-panel settings dialog with category nav and stacked content."""
 
-    def __init__(self, config: "Config | None" = None, parent=None) -> None:
+    def __init__(
+        self,
+        config: "Config | None" = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._config = config
-        self._dirty = False
 
+        # ── Window ───────────────────────────────────────────────────────
         self.setWindowTitle("Settings")
-        self.setMinimumSize(600, 480)
+        self.resize(720, 520)
+        self.setMinimumSize(600, 400)
 
-        # --- Tabs ---
-        self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_general_tab(), "General")
-        self._tabs.addTab(self._build_encoding_tab(), "Encoding")
-        self._tabs.addTab(self._build_notifications_tab(), "Notifications")
-        self._tabs.addTab(self._build_game_tab(), "Game Detection")
-        self._tabs.addTab(self._build_recording_tab(), "Recording")
-        self._tabs.addTab(self._build_appearance_tab(), "Appearance")
-        self._tabs.addTab(self._build_storage_tab(), "Storage Locations")
-        self._tabs.currentChanged.connect(self._on_tab_changed)
+        # ── Main layout ──────────────────────────────────────────────────
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # --- Bottom bar ---
-        reset_btn = QPushButton("Reset Defaults")
-        reset_btn.setObjectName("danger")
-        reset_btn.clicked.connect(self._on_reset_defaults)
-        reset_db_btn = QPushButton("Reset Database")
-        reset_db_btn.setObjectName("danger")
-        reset_db_btn.clicked.connect(self._on_reset_database)
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self._on_close)
+        # Left panel — category nav (180px)
+        self._nav = self._build_nav()
+        outer.addWidget(self._nav)
 
-        btn_layout = QHBoxLayout()
-        btn_layout.addWidget(reset_btn)
-        btn_layout.addWidget(reset_db_btn)
-        btn_layout.addStretch()
-        btn_layout.addWidget(close_btn)
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setStyleSheet("background-color: #2a2a2a; min-width: 1px; max-width: 1px;")
+        outer.addWidget(sep)
 
-        # --- Main layout ---
-        layout = QVBoxLayout(self)
-        layout.addWidget(self._tabs)
-        layout.addLayout(btn_layout)
+        # Right panel — content stack + bottom bar
+        right = QVBoxLayout()
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(0)
 
+        # Content stack
+        self._stack = QStackedWidget()
+        self._stack.setStyleSheet("background-color: #1a1a1a;")
+        self._stack.addWidget(self._build_general_page())
+        self._stack.addWidget(self._build_recording_page())
+        self._stack.addWidget(self._build_video_page())
+        self._stack.addWidget(self._build_hotkeys_page())
+        self._stack.addWidget(self._build_output_page())
+        self._stack.addWidget(self._build_cloud_page())
+        self._stack.addWidget(self._build_about_page())
+        right.addWidget(self._stack, stretch=1)
+
+        # Bottom button bar
+        bar = self._build_button_bar()
+        right.addWidget(bar)
+
+        outer.addLayout(right, stretch=1)
+
+        # ── Load ──────────────────────────────────────────────────────────
         self._load_settings()
 
+        # Restore size from QSettings
+        self._restore_geometry()
+
+        # Select first real category (row 0 is "PREFERENCES" header)
+        self._nav.setCurrentRow(1)
+
     # ==================================================================
-    # Tab builders
+    # Left panel — category nav
     # ==================================================================
 
-    def _build_general_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+    def _build_nav(self) -> QListWidget:
+        nav = QListWidget()
+        nav.setFixedWidth(180)
+        nav.setStyleSheet("""
+            QListWidget {
+                background-color: #181818;
+                border: none;
+                outline: none;
+                padding: 8px 0;
+            }
+            QListWidget::item {
+                padding: 12px 16px;
+                color: #a0a0a0;
+                font-size: 13px;
+            }
+            QListWidget::item:selected {
+                background-color: #323232;
+                color: #ffffff;
+            }
+            QListWidget::item:hover:!selected {
+                background-color: #2a2a2a;
+            }
+        """)
+        nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Behaviour
-        behaviour = QGroupBox("Behaviour")
-        bf = QFormLayout(behaviour)
-        self._autostart_cb = QCheckBox("Start automatically on login")
-        bf.addRow(self._autostart_cb)
-        self._minimize_tray_cb = QCheckBox("Minimize to tray on close")
-        self._minimize_tray_cb.setChecked(True)
-        bf.addRow(self._minimize_tray_cb)
-        layout.addWidget(behaviour)
+        # Header label
+        header_item = QListWidgetItem("PREFERENCES")
+        header_item.setFlags(Qt.ItemFlag.NoItemFlags)
+        header_item.setData(Qt.ItemDataRole.ForegroundRole, None)
+        nav.addItem(header_item)
+        # Style the header item
+        header_item.setData(Qt.ItemDataRole.DisplayRole, "PREFERENCES")
+        nav.item(0).setForeground(QColor("#555555"))
+        f = QFont()
+        f.setPointSize(9)
+        f.setCapitalization(QFont.Capitalization.AllUppercase)
+        nav.item(0).setFont(f)
 
-        # Encoding timing
-        timing = QGroupBox("Encoding")
-        tf = QFormLayout(timing)
-        self._encode_timing_cb = QComboBox()
-        self._encode_timing_cb.addItems(_ENCODE_TIMINGS)
-        tf.addRow("Encode timing:", self._encode_timing_cb)
-        layout.addWidget(timing)
+        for cat in _CATEGORIES:
+            item = QListWidgetItem(cat)
+            nav.addItem(item)
 
-        # Storage
-        storage = QGroupBox("Storage")
-        sf = QFormLayout(storage)
-        self._storage_path_lbl = QLabel("~/Videos (default)")
-        self._storage_path_lbl.setObjectName("muted")
-        sf.addRow("Recordings:", self._storage_path_lbl)
-        sf.addRow("Encoded:", QLabel("~/.local/share/moment/encoded"))
-        layout.addWidget(storage)
+        nav.currentRowChanged.connect(self._on_nav_changed)
+        return nav
 
-        layout.addStretch()
-        return tab
+    def _on_nav_changed(self, row: int) -> None:
+        """Switch content page when nav row changes (skip header row)."""
+        idx = row - 1  # skip header
+        if 0 <= idx < self._stack.count():
+            self._stack.setCurrentIndex(idx)
 
-    def _build_encoding_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+    # ==================================================================
+    # Content pages
+    # ==================================================================
 
-        # Video encoder
-        encoder_gb = QGroupBox("Video Encoder")
-        ef = QFormLayout(encoder_gb)
-        self._video_encoder_cb = QComboBox()
-        self._video_encoder_cb.addItems(
-            [label for label, _ in _VIDEO_ENCODER_OPTIONS]
+    def _make_page(self) -> QWidget:
+        """Create a content page with standard margins."""
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
+        return page
+
+    def _make_section_title(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "font-size: 15px; font-weight: 600; color: var(--text-primary);background: transparent;"
         )
-        ef.addRow("Video codec:", self._video_encoder_cb)
-        layout.addWidget(encoder_gb)
+        return lbl
 
-        gb = QGroupBox("Video")
-        gf = QFormLayout(gb)
+    def _make_separator(self) -> QFrame:
+        f = QFrame()
+        f.setFrameShape(QFrame.Shape.HLine)
+        f.setStyleSheet("background-color: #3d3d3d; max-height: 1px; margin: 0 0 16px 0;")
+        return f
 
+    def _make_form_row(
+        self,
+        label: str,
+        control: QWidget,
+        parent_layout: QFormLayout,
+    ) -> None:
+        lbl = QLabel(label)
+        lbl.setStyleSheet("font-size: 13px; color: var(--text-secondary); background: transparent;")
+        lbl.setFixedWidth(120)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        parent_layout.addRow(lbl, control)
+
+    # ── General ───────────────────────────────────────────────────────
+
+    def _build_general_page(self) -> QWidget:
+        page = self._make_page()
+        layout = page.layout()
+        layout.addWidget(self._make_section_title("General"))
+        layout.addWidget(self._make_separator())
+
+        form = QFormLayout()
+        form.setVerticalSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        self._theme_cb = QComboBox()
+        self._theme_cb.addItems(["Dark", "Light", "System"])
+        self._theme_cb.setFixedHeight(28)
+        self._make_form_row("Theme:", self._theme_cb, form)
+
+        self._density_cb = QComboBox()
+        self._density_cb.addItems(["Normal", "Compact", "Comfortable"])
+        self._density_cb.setFixedHeight(28)
+        self._make_form_row("Density:", self._density_cb, form)
+
+        self._font_cb = QComboBox()
+        self._font_cb.addItems(["Default", "Small", "Large"])
+        self._font_cb.setFixedHeight(28)
+        self._make_form_row("Font size:", self._font_cb, form)
+
+        self._language_cb = QComboBox()
+        self._language_cb.addItems(["English", "System"])
+        self._language_cb.setFixedHeight(28)
+        self._make_form_row("Language:", self._language_cb, form)
+
+        # Toggle rows
+        row_ls = QHBoxLayout()
+        row_ls.setSpacing(8)
+        self._autostart_ts = ToggleSwitch()
+        row_ls.addWidget(self._autostart_ts)
+        row_ls.addWidget(QLabel("Launch on startup"))
+        # Dropdown for minimized
+        self._autostart_mode_cb = QComboBox()
+        self._autostart_mode_cb.addItems(["Normal", "Minimized"])
+        self._autostart_mode_cb.setFixedWidth(100)
+        self._autostart_mode_cb.setFixedHeight(24)
+        row_ls.addWidget(self._autostart_mode_cb)
+        row_ls.addStretch()
+        form.addRow(QLabel("Startup:"), row_ls)
+
+        row_tray = QHBoxLayout()
+        row_tray.setSpacing(8)
+        self._minimize_tray_ts = ToggleSwitch()
+        self._minimize_tray_ts.setChecked(True)
+        row_tray.addWidget(self._minimize_tray_ts)
+        row_tray.addWidget(QLabel("Minimize to tray on close"))
+        row_tray.addStretch()
+        form.addRow(QLabel(""), row_tray)
+
+        layout.addLayout(form)
+        layout.addStretch()
+        return page
+
+    # ── Recording ─────────────────────────────────────────────────────
+
+    def _build_recording_page(self) -> QWidget:
+        page = self._make_page()
+        layout = page.layout()
+        layout.addWidget(self._make_section_title("Recording"))
+        layout.addWidget(self._make_separator())
+
+        form = QFormLayout()
+        form.setVerticalSpacing(10)
+
+        # Output directory
+        row_dir = QHBoxLayout()
+        self._recordings_path_edit = QLineEdit()
+        self._recordings_path_edit.setReadOnly(True)
+        self._recordings_path_edit.setPlaceholderText("~/Videos")
+        row_dir.addWidget(self._recordings_path_edit, stretch=1)
+        browse_btn = QPushButton("Browse")
+        browse_btn.setFixedHeight(28)
+        browse_btn.clicked.connect(self._on_browse_recordings)
+        row_dir.addWidget(browse_btn)
+        self._make_form_row("Output dir:", row_dir, form)
+
+        # Mode
+        self._record_mode_cb = QComboBox()
+        self._record_mode_cb.addItems(["Game", "Desktop", "Window"])
+        self._record_mode_cb.setFixedHeight(28)
+        self._make_form_row("Mode:", self._record_mode_cb, form)
+
+        # Capture audio
+        row_audio = QHBoxLayout()
+        row_audio.setSpacing(8)
+        self._capture_audio_ts = ToggleSwitch()
+        self._capture_audio_ts.setChecked(True)
+        row_audio.addWidget(self._capture_audio_ts)
+        row_audio.addWidget(QLabel("Capture audio"))
+        row_audio.addStretch()
+        form.addRow(QLabel(""), row_audio)
+
+        # Microphone
+        self._mic_cb = QComboBox()
+        self._mic_cb.addItems(["None", "default", "Microphone device…"])
+        self._mic_cb.setFixedHeight(28)
+        self._make_form_row("Microphone:", self._mic_cb, form)
+
+        # FPS
+        self._fps_cb = QComboBox()
+        self._fps_cb.addItems(["30", "60", "120", "144"])
+        self._fps_cb.setFixedHeight(28)
+        self._fps_cb.setCurrentIndex(1)  # 60
+        self._make_form_row("FPS:", self._fps_cb, form)
+
+        # Resolution
+        self._resolution_cb = QComboBox()
+        self._resolution_cb.addItems(["Auto (native)", "1920×1080", "2560×1440", "3840×2160"])
+        self._resolution_cb.setFixedHeight(28)
+        self._make_form_row("Resolution:", self._resolution_cb, form)
+
+        # Buffer duration
+        self._buffer_duration_sb = QSpinBox()
+        self._buffer_duration_sb.setRange(30, 600)
+        self._buffer_duration_sb.setValue(120)
+        self._buffer_duration_sb.setSuffix(" s")
+        self._buffer_duration_sb.setFixedHeight(28)
+        self._make_form_row("Buffer:", self._buffer_duration_sb, form)
+
+        layout.addLayout(form)
+        layout.addStretch()
+        return page
+
+    # ── Video ─────────────────────────────────────────────────────────
+
+    def _build_video_page(self) -> QWidget:
+        page = self._make_page()
+        layout = page.layout()
+        layout.addWidget(self._make_section_title("Video"))
+        layout.addWidget(self._make_separator())
+
+        form = QFormLayout()
+        form.setVerticalSpacing(10)
+
+        self._video_encoder_cb = QComboBox()
+        self._video_encoder_cb.addItems([label for label, _ in _VIDEO_ENCODER_OPTIONS])
+        self._video_encoder_cb.setFixedHeight(28)
+        self._make_form_row("Encoder:", self._video_encoder_cb, form)
+
+        # Quality slider row
+        row_q = QHBoxLayout()
+        row_q.setSpacing(8)
+        self._quality_cb = QComboBox()
+        self._quality_cb.addItems(["very_high", "high", "medium", "fast", "very_fast"])
+        self._quality_cb.setFixedWidth(120)
+        self._quality_cb.setFixedHeight(28)
+        row_q.addWidget(self._quality_cb)
+        row_q.addStretch()
+        self._make_form_row("Quality:", row_q, form)
+
+        # Format
+        self._format_cb = QComboBox()
+        self._format_cb.addItems(["MP4", "MKV", "MOV"])
+        self._format_cb.setFixedHeight(28)
+        self._make_form_row("Format:", self._format_cb, form)
+
+        # GPU acceleration toggle
+        row_gpu = QHBoxLayout()
+        row_gpu.setSpacing(8)
+        self._gpu_accel_ts = ToggleSwitch()
+        self._gpu_accel_ts.setChecked(True)
+        row_gpu.addWidget(self._gpu_accel_ts)
+        row_gpu.addWidget(QLabel("Enable GPU acceleration"))
+        row_gpu.addStretch()
+        form.addRow(QLabel(""), row_gpu)
+
+        # Preset
         self._preset_cb = QComboBox()
         self._preset_cb.addItems(_PRESETS)
-        self._preset_cb.setCurrentIndex(5)  # p6 default
-        gf.addRow("Preset:", self._preset_cb)
-        self._cq_slider = QSpinBox()
-        self._cq_slider.setRange(0, 51)
-        self._cq_slider.setValue(23)
-        gf.addRow("CQ (quality):", self._cq_slider)
+        self._preset_cb.setCurrentIndex(5)  # p6
+        self._preset_cb.setFixedHeight(28)
+        self._make_form_row("Preset:", self._preset_cb, form)
+
+        # Bitrate
         self._bitrate_sb = QSpinBox()
         self._bitrate_sb.setRange(1, 200)
         self._bitrate_sb.setValue(12)
         self._bitrate_sb.setSuffix(" Mbps")
-        gf.addRow("Bitrate:", self._bitrate_sb)
-        layout.addWidget(gb)
+        self._bitrate_sb.setFixedHeight(28)
+        self._make_form_row("Bitrate:", self._bitrate_sb, form)
 
-        gb2 = QGroupBox("Audio")
-        gf2 = QFormLayout(gb2)
-        self._audio_codec_cb = QComboBox()
-        self._audio_codec_cb.addItems(_AUDIO_CODECS)
-        gf2.addRow("Codec:", self._audio_codec_cb)
-        self._noise_supp_cb = QCheckBox("Apply RNNoise to microphone track")
-        self._noise_supp_cb.setChecked(False)
-        gf2.addRow(self._noise_supp_cb)
-        layout.addWidget(gb2)
-
+        layout.addLayout(form)
         layout.addStretch()
-        return tab
+        return page
 
-    def _build_notifications_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+    # ── Hotkeys ───────────────────────────────────────────────────────
 
-        gb = QGroupBox("Toast Notifications")
-        gf = QFormLayout(gb)
-        self._toast_success_cb = QCheckBox("Success")
-        self._toast_success_cb.setChecked(True)
-        gf.addRow(self._toast_success_cb)
-        self._toast_info_cb = QCheckBox("Info")
-        self._toast_info_cb.setChecked(True)
-        gf.addRow(self._toast_info_cb)
-        self._toast_warning_cb = QCheckBox("Warning")
-        self._toast_warning_cb.setChecked(True)
-        gf.addRow(self._toast_warning_cb)
-        self._toast_error_cb = QCheckBox("Error")
-        self._toast_error_cb.setChecked(True)
-        gf.addRow(self._toast_error_cb)
-        layout.addWidget(gb)
-
-        gb2 = QGroupBox("Other")
-        gf2 = QFormLayout(gb2)
-        self._review_card_cb = QCheckBox("Show review cards on capture")
-        self._review_card_cb.setChecked(True)
-        gf2.addRow(self._review_card_cb)
-        self._sound_cb = QCheckBox("Play sounds for clip events")
-        self._sound_cb.setChecked(False)
-        gf2.addRow(self._sound_cb)
-        layout.addWidget(gb2)
-
-        layout.addStretch()
-        return tab
-
-    def _build_game_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        gb = QGroupBox("Detection")
-        gf = QFormLayout(gb)
-        self._auto_detect_cb = QCheckBox("Auto-detect games via /proc scan")
-        self._auto_detect_cb.setChecked(True)
-        gf.addRow(self._auto_detect_cb)
-        self._process_list_edit = QLineEdit()
-        self._process_list_edit.setPlaceholderText("cs2, r5apex.exe, ...")
-        gf.addRow("Game processes:", self._process_list_edit)
-        self._scan_interval_sb = QSpinBox()
-        self._scan_interval_sb.setRange(1, 60)
-        self._scan_interval_sb.setValue(3)
-        self._scan_interval_sb.setSuffix(" s")
-        gf.addRow("Scan interval:", self._scan_interval_sb)
-        layout.addWidget(gb)
-
-        gb2 = QGroupBox("Behaviour During Game")
-        gf2 = QFormLayout(gb2)
-        self._pause_encode_cb = QCheckBox("Pause encoding during games")
-        self._pause_encode_cb.setChecked(True)
-        gf2.addRow(self._pause_encode_cb)
-        self._pause_thumbnail_cb = QCheckBox("Pause thumbnail generation during games")
-        self._pause_thumbnail_cb.setChecked(True)
-        gf2.addRow(self._pause_thumbnail_cb)
-        self._minimize_during_game_cb = QCheckBox("Minimize window during games")
-        self._minimize_during_game_cb.setChecked(True)
-        gf2.addRow(self._minimize_during_game_cb)
-        self._game_exit_cb = QComboBox()
-        self._game_exit_cb.addItems(_GAME_EXIT_BEHAVIORS)
-        gf2.addRow("On game exit:", self._game_exit_cb)
-        layout.addWidget(gb2)
-
-        layout.addStretch()
-        return tab
-
-    def _build_recording_tab(self) -> QWidget:
-        """Recording tab — GSR instant-replay settings."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        # Mode
-        mode_gb = QGroupBox("Recording Mode")
-        mf = QFormLayout(mode_gb)
-        self._replay_enabled_cb = QCheckBox(
-            "Enable instant replay (gpu-screen-recorder -k)"
-        )
-        self._replay_enabled_cb.setToolTip(
-            "When enabled, Moment launches gpu-screen-recorder in "
-            "headless replay-buffer mode at startup. The overlay "
-            "hotkey (Alt+Z) saves the last N seconds of gameplay."
-        )
-        mf.addRow(self._replay_enabled_cb)
-        layout.addWidget(mode_gb)
-
-        # Capture settings
-        capture_gb = QGroupBox("Capture")
-        cf = QFormLayout(capture_gb)
-
-        self._replay_fps_sb = QSpinBox()
-        self._replay_fps_sb.setRange(15, 240)
-        self._replay_fps_sb.setValue(60)
-        self._replay_fps_sb.setSuffix(" fps")
-        cf.addRow("Frame rate:", self._replay_fps_sb)
-
-        self._replay_quality_cb = QComboBox()
-        self._replay_quality_cb.addItems(
-            ["ultra_fast", "very_fast", "fast", "medium",
-             "slow", "very_high", "high"]
-        )
-        self._replay_quality_cb.setCurrentText("very_high")
-        cf.addRow("Quality:", self._replay_quality_cb)
-
-        self._replay_container_cb = QComboBox()
-        self._replay_container_cb.addItems(["mp4", "mkv", "flv"])
-        cf.addRow("Container:", self._replay_container_cb)
-
-        self._replay_codec_edit = QLineEdit()
-        self._replay_codec_edit.setPlaceholderText("auto (h264_nvenc, hevc_nvenc, …)")
-        cf.addRow("Video codec:", self._replay_codec_edit)
-
-        self._replay_duration_sb = QSpinBox()
-        self._replay_duration_sb.setRange(30, 600)
-        self._replay_duration_sb.setValue(120)
-        self._replay_duration_sb.setSuffix(" s")
-        self._replay_duration_sb.setToolTip("Circular buffer size in seconds")
-        cf.addRow("Buffer duration:", self._replay_duration_sb)
-
-        self._replay_audio_edit = QLineEdit()
-        self._replay_audio_edit.setPlaceholderText("default_output (leave empty to disable)")
-        cf.addRow("Audio device:", self._replay_audio_edit)
-
-        self._replay_area_cb = QComboBox()
-        self._replay_area_cb.addItems(["screen", "focused", "window"])
-        cf.addRow("Record area:", self._replay_area_cb)
-
-        self._replay_show_cursor_cb = QCheckBox("Show cursor in recordings")
-        self._replay_show_cursor_cb.setChecked(True)
-        cf.addRow(self._replay_show_cursor_cb)
-
-        layout.addWidget(capture_gb)
-
-        # Overlay
-        overlay_gb = QGroupBox("Overlay")
-        of = QFormLayout(overlay_gb)
-
-        self._hotkey_edit = QLineEdit()
-        self._hotkey_edit.setPlaceholderText("Alt+Z")
-        self._hotkey_edit.setToolTip(
-            "Global hotkey to show/hide the overlay. "
-            "On KDE, this intercepts GSR's built-in hotkey."
-        )
-        of.addRow("Save hotkey:", self._hotkey_edit)
-
-        self._overlay_auto_hide_sb = QSpinBox()
-        self._overlay_auto_hide_sb.setRange(4, 15)
-        self._overlay_auto_hide_sb.setValue(8)
-        self._overlay_auto_hide_sb.setSuffix(" s")
-        self._overlay_auto_hide_sb.setToolTip(
-            "Seconds of inactivity before the overlay auto-hides"
-        )
-        of.addRow("Auto-hide:", self._overlay_auto_hide_sb)
-
-        layout.addWidget(overlay_gb)
-
-        layout.addStretch()
-        return tab
-
-    def _build_appearance_tab(self) -> QWidget:
-        """Appearance tab — live color swatches showing the Moment palette."""
-        # Resolve palette from resources if available, else fall back to hex
-        if _palette_color is not None:
-            _swatch_colors: dict[str, str] = {
-                name: _palette_color(token)
-                for name, token, _hex in _APPEARANCE_SWATCHES
-            }
-        else:
-            _swatch_colors = {}
-
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        gb = QGroupBox("Theme Palette")
-        gb_layout = QVBoxLayout(gb)
-        gb_layout.setSpacing(8)
+    def _build_hotkeys_page(self) -> QWidget:
+        page = self._make_page()
+        layout = page.layout()
+        layout.addWidget(self._make_section_title("Hotkeys"))
+        layout.addWidget(self._make_separator())
 
         desc = QLabel(
-            "Moment uses a dark palette. Below are the current theme colors.\n"
-            "Theme switching (light/dark) is planned for a future release."
+            "Double-click a shortcut to edit it. Press Esc to cancel, Backspace to clear."
         )
-        desc.setObjectName("muted")
+        desc.setStyleSheet(
+            "font-size: 12px; color: var(--text-secondary); background: transparent;"
+        )
         desc.setWordWrap(True)
-        gb_layout.addWidget(desc)
+        layout.addWidget(desc)
 
-        # Color swatches grid
-        swatch_grid = QHBoxLayout()
-        swatch_grid.setSpacing(6)
-
-        for label, token, fallback_hex in _APPEARANCE_SWATCHES:
-            hex_val = _swatch_colors.get(label, fallback_hex)
-            swatch_widget = QWidget()
-            swatch_widget.setFixedSize(64, 64)
-            swatch_layout = QVBoxLayout(swatch_widget)
-            swatch_layout.setContentsMargins(0, 0, 0, 0)
-            swatch_layout.setSpacing(4)
-
-            swatch = QLabel()
-            swatch.setFixedSize(48, 48)
-            swatch.setStyleSheet(
-                f"background-color: {hex_val};"
-                "border-radius: 8px;"
-                "border: 1px solid var(--bg-hover);"
-            )
-            swatch.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            swatch_layout.addWidget(swatch, alignment=Qt.AlignmentFlag.AlignCenter)
-
-            swatch_label = QLabel(label)
-            swatch_label.setObjectName("cardMeta")
-            swatch_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            swatch_label.setStyleSheet("font-size: 10px;")
-            swatch_layout.addWidget(swatch_label)
-
-            swatch_grid.addWidget(swatch_widget)
-
-        gb_layout.addLayout(swatch_grid)
-
-        # Theme note
-        theme_note = QLabel(
-            "Custom themes, font scaling, and accent color overrides are coming soon."
+        self._hotkeys_table = QTableWidget(4, 2)
+        self._hotkeys_table.setHorizontalHeaderLabels(["Action", "Shortcut"])
+        self._hotkeys_table.horizontalHeader().setStretchLastSection(True)
+        self._hotkeys_table.horizontalHeader().setSectionResizeMode(
+            0, self._hotkeys_table.horizontalHeader().ResizeMode.Stretch
         )
-        theme_note.setObjectName("muted")
-        theme_note.setWordWrap(True)
-        gb_layout.addWidget(theme_note)
+        self._hotkeys_table.verticalHeader().setVisible(False)
+        self._hotkeys_table.setShowGrid(False)
+        self._hotkeys_table.setAlternatingRowColors(True)
+        self._hotkeys_table.setStyleSheet("""
+            QTableWidget {
+                background-color: transparent;
+                border: none;
+                color: var(--text-secondary);
+                font-size: 12px;
+            }
+            QTableWidget::item {
+                padding: 6px 8px;
+            }
+            QTableWidget::item:selected {
+                background-color: #323232;
+            }
+            QHeaderView::section {
+                background-color: #1e1e1e;
+                color: #a0a0a0;
+                border: none;
+                border-bottom: 1px solid #3d3d3d;
+                padding: 6px 8px;
+                font-weight: 600;
+                font-size: 12px;
+            }
+            QTableWidget {
+                alternate-background-color: #1e1e1e;
+            }
+        """)
 
-        layout.addWidget(gb)
-        layout.addStretch()
-        return tab
-
-    def _build_storage_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-
-        # Path fields: (key, label, is_directory)
-        self._storage_fields: dict[str, QLineEdit] = {}
-        path_fields: list[tuple[str, str]] = [
-            ("db_dir", "Database directory"),
-            ("data_dir", "Data directory"),
-            ("encode_dir", "Encode output"),
-            ("thumb_dir", "Thumbnail cache"),
-            ("temp_dir", "Temporary files"),
-            ("log_dir", "Log directory"),
-            ("recordings_dir", "Recordings (source)"),
+        # Populate rows
+        actions = [
+            ("Save clip", "save_clip"),
+            ("Save with replay", "save_with_replay"),
+            ("Toggle recording", "toggle_recording"),
+            ("Open overlay", "open_overlay"),
         ]
+        for row, (label, key) in enumerate(actions):
+            self._hotkeys_table.setItem(row, 0, QTableWidgetItem(label))
+            edit = QKeySequenceEdit()
+            edit.setClearButtonEnabled(True)
+            edit.setProperty("_config_key", key)
+            edit.setStyleSheet(
+                "QKeySequenceEdit { background-color: transparent; border: 1px solid"
+                " #3d3d3d; border-radius: 3px; padding: 4px 8px; color: var(--text-primary); }"
+            )
+            self._hotkeys_table.setCellWidget(row, 1, edit)
 
-        gb_paths = QGroupBox("Storage Paths")
-        pf = QFormLayout(gb_paths)
-        for key, label in path_fields:
-            row = QHBoxLayout()
-            edit = QLineEdit()
-            edit.setReadOnly(True)
-            edit.setPlaceholderText(self._get_path_default(key))
-            self._storage_fields[key] = edit
-            row.addWidget(edit, 1)
-            browse_btn = QPushButton("Browse…")
-            browse_btn.clicked.connect(lambda checked, k=key: self._on_browse_path(k))
-            row.addWidget(browse_btn)
-            pf.addRow(f"{label}:", row)
-        layout.addWidget(gb_paths)
+        layout.addWidget(self._hotkeys_table)
+        layout.addStretch()
+        return page
 
-        # Non-path fields
-        gb_rclone = QGroupBox("Cloud Storage")
-        rf = QFormLayout(gb_rclone)
+    # ── Output ────────────────────────────────────────────────────────
 
-        self._rclone_remote_edit = QLineEdit()
-        self._rclone_remote_edit.setPlaceholderText(self._get_path_default("rclone_remote"))
-        rf.addRow("Rclone remote:", self._rclone_remote_edit)
+    def _build_output_page(self) -> QWidget:
+        page = self._make_page()
+        layout = page.layout()
+        layout.addWidget(self._make_section_title("Output"))
+        layout.addWidget(self._make_separator())
 
-        self._rclone_bucket_edit = QLineEdit()
-        self._rclone_bucket_edit.setPlaceholderText(self._get_path_default("rclone_bucket"))
-        rf.addRow("Rclone bucket:", self._rclone_bucket_edit)
+        form = QFormLayout()
+        form.setVerticalSpacing(10)
 
-        self._base_url_edit = QLineEdit()
-        self._base_url_edit.setPlaceholderText("(empty)")
-        rf.addRow("Base URL:", self._base_url_edit)
-        layout.addWidget(gb_rclone)
+        # Auto-upload target
+        self._upload_target_cb = QComboBox()
+        self._upload_target_cb.addItems(["None", "rclone", "Google Drive"])
+        self._upload_target_cb.setFixedHeight(28)
+        self._make_form_row("Upload to:", self._upload_target_cb, form)
 
-        # Reset button
-        reset_btn = QPushButton("Reset Storage to Defaults")
-        reset_btn.clicked.connect(self._on_reset_storage)
-        layout.addWidget(reset_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        # Naming pattern
+        self._naming_edit = QLineEdit()
+        self._naming_edit.setPlaceholderText("{game}_{date}_{time}")
+        self._naming_edit.setFixedHeight(28)
+        self._make_form_row("File naming:", self._naming_edit, form)
+
+        # Auto-open after recording toggle
+        row_open = QHBoxLayout()
+        row_open.setSpacing(8)
+        self._auto_open_ts = ToggleSwitch()
+        row_open.addWidget(self._auto_open_ts)
+        row_open.addWidget(QLabel("Auto-open player after recording"))
+        row_open.addStretch()
+        form.addRow(QLabel(""), row_open)
+
+        # Keep N clips
+        self._keep_clips_sb = QSpinBox()
+        self._keep_clips_sb.setRange(0, 9999)
+        self._keep_clips_sb.setValue(500)
+        self._keep_clips_sb.setSpecialValueText("Unlimited")
+        self._keep_clips_sb.setFixedHeight(28)
+        self._make_form_row("Keep clips:", self._keep_clips_sb, form)
+
+        # Storage limit
+        row_limit = QHBoxLayout()
+        row_limit.setSpacing(6)
+        self._storage_limit_sb = QSpinBox()
+        self._storage_limit_sb.setRange(10, 9999)
+        self._storage_limit_sb.setValue(100)
+        self._storage_limit_sb.setFixedHeight(28)
+        self._storage_limit_sb.setFixedWidth(80)
+        row_limit.addWidget(self._storage_limit_sb)
+        row_limit.addWidget(QLabel("GB"))
+        row_limit.addStretch()
+        self._make_form_row("Storage limit:", row_limit, form)
+
+        layout.addLayout(form)
+        layout.addStretch()
+        return page
+
+    # ── Cloud & Storage ───────────────────────────────────────────────
+
+    def _build_cloud_page(self) -> QWidget:
+        page = self._make_page()
+        layout = page.layout()
+        layout.addWidget(self._make_section_title("Cloud && Storage"))
+        layout.addWidget(self._make_separator())
+
+        # Connected accounts
+        accts_label = QLabel("Connected accounts")
+        accts_label.setStyleSheet(
+            "font-size: 13px; font-weight: 600; color: var(--text-primary);background: transparent;"
+        )
+        layout.addWidget(accts_label)
+
+        self._cloud_accounts_list = QListWidget()
+        self._cloud_accounts_list.setMaximumHeight(60)
+        self._cloud_accounts_list.setStyleSheet(
+            "QListWidget { background-color: #242424; border: 1px solid #3d3d3d;"
+            "border-radius: 4px; color: var(--text-secondary); }"
+        )
+        layout.addWidget(self._cloud_accounts_list)
+
+        add_btn = QPushButton("Add Account")
+        add_btn.setObjectName("secondary")
+        add_btn.setFixedHeight(28)
+        layout.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        layout.addSpacing(16)
+
+        # Storage bar
+        storage_label = QLabel("Storage usage")
+        storage_label.setStyleSheet(
+            "font-size: 13px; font-weight: 600; color: var(--text-primary);background: transparent;"
+        )
+        layout.addWidget(storage_label)
+
+        self._storage_bar = QProgressBar()
+        self._storage_bar.setRange(0, 100)
+        self._storage_bar.setValue(0)
+        self._storage_bar.setTextVisible(True)
+        self._storage_bar.setFormat("0 / 0 GB")
+        self._storage_bar.setFixedHeight(8)
+        self._storage_bar.setStyleSheet("""
+            QProgressBar {
+                background-color: #3d3d3d;
+                border: none;
+                border-radius: 4px;
+            }
+            QProgressBar::chunk {
+                background-color: #4a9eff;
+                border-radius: 4px;
+            }
+        """)
+        layout.addWidget(self._storage_bar)
+
+        layout.addSpacing(8)
+
+        # Sync toggles
+        row_wifi = QHBoxLayout()
+        row_wifi.setSpacing(8)
+        self._wifi_only_ts = ToggleSwitch()
+        self._wifi_only_ts.setChecked(True)
+        row_wifi.addWidget(self._wifi_only_ts)
+        row_wifi.addWidget(QLabel("WiFi-only sync"))
+        row_wifi.addStretch()
+        layout.addLayout(row_wifi)
+
+        row_auto_upload = QHBoxLayout()
+        row_auto_upload.setSpacing(8)
+        self._auto_upload_ts = ToggleSwitch()
+        row_auto_upload.addWidget(self._auto_upload_ts)
+        row_auto_upload.addWidget(QLabel("Auto-upload on clip save"))
+        row_auto_upload.addStretch()
+        layout.addLayout(row_auto_upload)
 
         layout.addStretch()
-        return tab
+        return page
 
-    @staticmethod
-    def _get_path_default(key: str) -> str:
-        """Return a human-readable default for display in placeholder text."""
-        val = _PATH_DEFAULTS.get(key, "")
-        if val and key not in ("rclone_remote", "rclone_bucket", "base_url"):
-            val = os.path.expanduser(val)
-        return val
+    # ── About ─────────────────────────────────────────────────────────
 
-    def _on_browse_path(self, key: str) -> None:
-        """Open a directory picker for a storage path field."""
-        current = self._storage_fields[key].text() or self._get_path_default(key)
-        directory = QFileDialog.getExistingDirectory(self, f"Select {key}", current)
-        if directory:
-            self._storage_fields[key].setText(directory)
+    def _build_about_page(self) -> QWidget:
+        page = self._make_page()
+        layout = page.layout()
+        layout.addWidget(self._make_section_title("About"))
+        layout.addWidget(self._make_separator())
 
-    def _on_reset_storage(self) -> None:
-        """Clear all storage path overrides."""
-        reply = QMessageBox.question(
-            self,
-            "Reset Storage",
-            "Reset all storage paths to their default locations?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+        # Version
+        ver_label = QLabel("Moment v0.2.1")
+        ver_label.setStyleSheet(
+            "font-size: 18px; font-weight: 700; color: var(--text-primary);background: transparent;"
         )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        for edit in self._storage_fields.values():
-            edit.clear()
-        self._rclone_remote_edit.clear()
-        self._rclone_bucket_edit.clear()
-        self._base_url_edit.clear()
-        if self._config is not None:
-            self._config.reset_paths()
-        logger.info("Storage paths reset to defaults")
+        layout.addWidget(ver_label)
+
+        desc = QLabel(
+            "GPU-accelerated game clip manager for Linux.\n"
+            "Built with PyQt6 · GSR · NVENC · sqlcipher3."
+        )
+        desc.setStyleSheet(
+            "font-size: 12px; color: var(--text-secondary); background: transparent;"
+        )
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        layout.addSpacing(16)
+
+        # License
+        lic = QLabel("License: MIT")
+        lic.setStyleSheet("font-size: 12px; color: var(--text-secondary); background: transparent;")
+        layout.addWidget(lic)
+
+        # Update button
+        update_btn = QPushButton("Check for Updates")
+        update_btn.setObjectName("secondary")
+        update_btn.setFixedHeight(28)
+        layout.addWidget(update_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        layout.addStretch()
+        return page
 
     # ==================================================================
-    # Persistence
+    # Bottom button bar
+    # ==================================================================
+
+    def _build_button_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setFixedHeight(48)
+        bar.setStyleSheet("background-color: #1a1a1a; border-top: 1px solid #2a2a2a;")
+
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(16, 0, 16, 0)
+        layout.setSpacing(8)
+
+        layout.addStretch()
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setObjectName("secondary")
+        cancel_btn.setFixedHeight(32)
+        cancel_btn.clicked.connect(self.reject)
+        layout.addWidget(cancel_btn)
+
+        apply_btn = QPushButton("Apply")
+        apply_btn.setObjectName("primary")
+        apply_btn.setFixedHeight(32)
+        apply_btn.clicked.connect(self._on_apply)
+        layout.addWidget(apply_btn)
+
+        ok_btn = QPushButton("OK")
+        ok_btn.setObjectName("primary")
+        ok_btn.setFixedHeight(32)
+        ok_btn.clicked.connect(self._on_ok)
+        layout.addWidget(ok_btn)
+
+        return bar
+
+    # ==================================================================
+    # Load / Save
     # ==================================================================
 
     def _load_settings(self) -> None:
-        """Load settings from config if available."""
+        """Populate controls from Config or defaults."""
         if self._config is None:
             return
-        self._autostart_cb.setChecked(
-            self._config.get("autostart", False)
-        )
-        self._minimize_tray_cb.setChecked(
-            self._config.get("minimize_to_tray", True)
-        )
-        timing = self._config.get("encode_timing", "after_game")
-        idx = self._encode_timing_cb.findText(timing)
-        if idx >= 0:
-            self._encode_timing_cb.setCurrentIndex(idx)
 
-        # Load encoding settings
+        # General
+        self._autostart_ts.setChecked(self._config.get("autostart", False))
+        self._minimize_tray_ts.setChecked(self._config.get("minimize_to_tray", True))
+        # Recording
+        recordings = self._config.get_path("recordings_dir")
+        if recordings and recordings != _PATH_DEFAULTS.get("recordings_dir", ""):
+            self._recordings_path_edit.setText(recordings)
+        mode = self._config.get_gsr_setting("replay_record_area")
+        if isinstance(mode, str):
+            idx = self._record_mode_cb.findText(mode, Qt.MatchFlag.MatchFixedString)
+            if idx < 0:
+                # Try case-insensitive
+                idx = self._record_mode_cb.findText(
+                    mode.capitalize(), Qt.MatchFlag.MatchFixedString
+                )
+            if idx >= 0:
+                self._record_mode_cb.setCurrentIndex(idx)
+        replay_fps = self._config.get_gsr_setting("replay_fps")
+        if isinstance(replay_fps, int):
+            idx = self._fps_cb.findText(str(replay_fps))
+            if idx >= 0:
+                self._fps_cb.setCurrentIndex(idx)
+        replay_duration = self._config.get_gsr_setting("replay_duration")
+        if isinstance(replay_duration, int):
+            self._buffer_duration_sb.setValue(replay_duration)
+        self._capture_audio_ts.setChecked(
+            self._config.get_gsr_setting("replay_audio_device") is not None
+        )
+
+        # Video
         preferred_codec = self._config.get_preferred_codec()
-        for i, (label, value) in enumerate(_VIDEO_ENCODER_OPTIONS):
+        for i, (_, value) in enumerate(_VIDEO_ENCODER_OPTIONS):
             if value == preferred_codec:
                 self._video_encoder_cb.setCurrentIndex(i)
                 break
+        replay_quality = self._config.get_gsr_setting("replay_quality")
+        if isinstance(replay_quality, str):
+            idx = self._quality_cb.findText(replay_quality)
+            if idx >= 0:
+                self._quality_cb.setCurrentIndex(idx)
         preset = self._config.get("preset", "p6")
         idx = self._preset_cb.findText(str(preset))
         if idx >= 0:
             self._preset_cb.setCurrentIndex(idx)
-        self._cq_slider.setValue(self._config.get("cq", 23))
         self._bitrate_sb.setValue(self._config.get("bitrate_mbps", 12))
-        audio = self._config.get("audio_codec", "aac")
-        idx = self._audio_codec_cb.findText(str(audio))
-        if idx >= 0:
-            self._audio_codec_cb.setCurrentIndex(idx)
-        self._noise_supp_cb.setChecked(
-            self._config.get("noise_suppression", False)
-        )
 
-        # Load recording settings
-        self._replay_enabled_cb.setChecked(
-            self._config.get_gsr_setting("replay_enabled") is True
-        )
-        replay_fps = self._config.get_gsr_setting("replay_fps")
-        if isinstance(replay_fps, int):
-            self._replay_fps_sb.setValue(replay_fps)
-        replay_quality = self._config.get_gsr_setting("replay_quality")
-        if isinstance(replay_quality, str):
-            idx = self._replay_quality_cb.findText(replay_quality)
-            if idx >= 0:
-                self._replay_quality_cb.setCurrentIndex(idx)
-        replay_container = self._config.get_gsr_setting("replay_container")
-        if isinstance(replay_container, str):
-            idx = self._replay_container_cb.findText(replay_container)
-            if idx >= 0:
-                self._replay_container_cb.setCurrentIndex(idx)
-        replay_codec = self._config.get_gsr_setting("replay_codec")
-        if isinstance(replay_codec, str) and replay_codec:
-            self._replay_codec_edit.setText(replay_codec)
-        replay_duration = self._config.get_gsr_setting("replay_duration")
-        if isinstance(replay_duration, int):
-            self._replay_duration_sb.setValue(replay_duration)
-        replay_audio = self._config.get_gsr_setting("replay_audio_device")
-        if isinstance(replay_audio, str) and replay_audio:
-            self._replay_audio_edit.setText(replay_audio)
-        replay_area = self._config.get_gsr_setting("replay_record_area")
-        if isinstance(replay_area, str):
-            idx = self._replay_area_cb.findText(replay_area)
-            if idx >= 0:
-                self._replay_area_cb.setCurrentIndex(idx)
-        self._replay_show_cursor_cb.setChecked(
-            self._config.get_gsr_setting("replay_show_cursor") is not False
-        )
-        hotkey = self._config.get_hotkey()
-        if hotkey and hotkey != "Alt+Z":
-            self._hotkey_edit.setText(hotkey)
-        overlay_auto_hide = self._config.get_gsr_setting("overlay_auto_hide")
-        if isinstance(overlay_auto_hide, int):
-            self._overlay_auto_hide_sb.setValue(overlay_auto_hide)
-
-        # Storage path overrides
-        for key in self._storage_fields:
-            val = self._config.get(f"path_{key}", None)
-            if val is not None and isinstance(val, str) and val.strip():
-                self._storage_fields[key].setText(val)
-        rclone_remote = self._config.get("path_rclone_remote", None)
-        if rclone_remote:
-            self._rclone_remote_edit.setText(str(rclone_remote))
-        rclone_bucket = self._config.get("path_rclone_bucket", None)
-        if rclone_bucket:
-            self._rclone_bucket_edit.setText(str(rclone_bucket))
-        base_url = self._config.get("path_base_url", None)
-        if base_url:
-            self._base_url_edit.setText(str(base_url))
+        # Hotkeys
+        for row in range(self._hotkeys_table.rowCount()):
+            item = self._hotkeys_table.item(row, 0)
+            if item is None:
+                continue
+            label = item.text()
+            key = _HOTKEY_KEY_MAP.get(label, "")
+            if key == "hotkey_show_overlay":
+                val = self._config.get_hotkey()
+            elif key:
+                val = self._config.get(key, None)
+            else:
+                continue
+            if val and isinstance(val, str) and val.strip():
+                widget = self._hotkeys_table.cellWidget(row, 1)
+                if isinstance(widget, QKeySequenceEdit):
+                    try:
+                        widget.setKeySequence(QKeySequence.fromString(val))
+                    except Exception:
+                        pass
 
     def _save_settings(self) -> None:
         """Persist all settings to config."""
         if self._config is None:
             return
-        self._config.set("autostart", self._autostart_cb.isChecked())
-        self._config.set("minimize_to_tray", self._minimize_tray_cb.isChecked())
-        self._config.set("encode_timing", self._encode_timing_cb.currentText())
-        # Video codec (GPU-agnostic encoder selection)
-        encoder_label = self._video_encoder_cb.currentText()
-        encoder_value = None
+
+        # General
+        self._config.set("autostart", self._autostart_ts.isChecked())
+        self._config.set("minimize_to_tray", self._minimize_tray_ts.isChecked())
+
+        # Recording
+        recordings = self._recordings_path_edit.text().strip()
+        if recordings:
+            self._config.set_path("recordings_dir", recordings)
+        self._config.set_gsr_setting(
+            "replay_record_area", self._record_mode_cb.currentText().lower()
+        )
+
+        try:
+            self._config.set_gsr_setting("replay_fps", int(self._fps_cb.currentText()))
+        except ValueError:
+            pass
+
+        self._config.set_gsr_setting("replay_duration", self._buffer_duration_sb.value())
+        if not self._capture_audio_ts.isChecked():
+            self._config.set_gsr_setting("replay_audio_device", None)
+        else:
+            # Keep whatever was set
+            pass
+
+        # Video
+        sel = self._video_encoder_cb.currentText()
         for label, value in _VIDEO_ENCODER_OPTIONS:
-            if label == encoder_label:
-                encoder_value = value
+            if label == sel:
+                self._config.set_preferred_codec(value)
                 break
-        if encoder_value is not None:
-            self._config.set_preferred_codec(encoder_value)
+
+        self._config.set_gsr_setting("replay_quality", self._quality_cb.currentText())
         self._config.set("preset", self._preset_cb.currentText())
-        self._config.set("cq", self._cq_slider.value())
         self._config.set("bitrate_mbps", self._bitrate_sb.value())
-        self._config.set("audio_codec", self._audio_codec_cb.currentText())
-        self._config.set("noise_suppression", self._noise_supp_cb.isChecked())
-        self._config.set("toast_success", self._toast_success_cb.isChecked())
-        self._config.set("toast_info", self._toast_info_cb.isChecked())
-        self._config.set("toast_warning", self._toast_warning_cb.isChecked())
-        self._config.set("toast_error", self._toast_error_cb.isChecked())
-        self._config.set("review_cards", self._review_card_cb.isChecked())
-        self._config.set("sounds", self._sound_cb.isChecked())
-        self._config.set("auto_detect_games", self._auto_detect_cb.isChecked())
-        self._config.set("game_processes", self._process_list_edit.text())
-        self._config.set("game_scan_interval", self._scan_interval_sb.value())
-        self._config.set("pause_encode_during_game", self._pause_encode_cb.isChecked())
-        self._config.set("pause_thumbnail_during_game", self._pause_thumbnail_cb.isChecked())
-        self._config.set("minimize_during_game", self._minimize_during_game_cb.isChecked())
-        self._config.set("game_exit_behavior", self._game_exit_cb.currentText())
 
-        # Recording (GSR) settings
-        self._config.set_gsr_setting(
-            "replay_enabled", self._replay_enabled_cb.isChecked()
-        )
-        self._config.set_gsr_setting("replay_fps", self._replay_fps_sb.value())
-        self._config.set_gsr_setting(
-            "replay_quality", self._replay_quality_cb.currentText()
-        )
-        self._config.set_gsr_setting(
-            "replay_container", self._replay_container_cb.currentText()
-        )
-        self._config.set_gsr_setting(
-            "replay_codec", self._replay_codec_edit.text().strip()
-        )
-        self._config.set_gsr_setting(
-            "replay_duration", self._replay_duration_sb.value()
-        )
-        self._config.set_gsr_setting(
-            "replay_audio_device", self._replay_audio_edit.text().strip()
-        )
-        self._config.set_gsr_setting(
-            "replay_record_area", self._replay_area_cb.currentText()
-        )
-        self._config.set_gsr_setting(
-            "replay_show_cursor", self._replay_show_cursor_cb.isChecked()
-        )
-        self._config.set_gsr_setting(
-            "hotkey_show_overlay", self._hotkey_edit.text().strip() or "Alt+Z"
-        )
-        self._config.set_gsr_setting(
-            "overlay_auto_hide", self._overlay_auto_hide_sb.value()
-        )
-
-        # Storage path overrides
-        for key, edit in self._storage_fields.items():
-            val = edit.text().strip()
-            if val:
-                self._config.set_path(key, val)
-            else:
-                self._config.delete(f"path_{key}")
-
-        for key, edit in (
-            ("rclone_remote", self._rclone_remote_edit),
-            ("rclone_bucket", self._rclone_bucket_edit),
-            ("base_url", self._base_url_edit),
-        ):
-            val = edit.text().strip()
-            if val:
-                self._config.set_path(key, val)
-            else:
-                self._config.delete(f"path_{key}")
+        # Hotkeys
+        for row in range(self._hotkeys_table.rowCount()):
+            item = self._hotkeys_table.item(row, 0)
+            if item is None:
+                continue
+            label = item.text()
+            key = _HOTKEY_KEY_MAP.get(label, "")
+            widget = self._hotkeys_table.cellWidget(row, 1)
+            if isinstance(widget, QKeySequenceEdit):
+                seq = widget.keySequence().toString()
+                if key == "hotkey_show_overlay":
+                    self._config.set_gsr_setting("hotkey_show_overlay", seq if seq else "Alt+Z")
+                elif key and seq:
+                    self._config.set(key, seq)
 
     # ==================================================================
     # Handlers
     # ==================================================================
 
-    def _on_tab_changed(self, index: int) -> None:
-        """Save settings when switching tabs."""
+    def _on_apply(self) -> None:
         self._save_settings()
+        logger.info("Settings applied")
 
-    def _on_close(self) -> None:
-        """Save and close."""
+    def _on_ok(self) -> None:
         self._save_settings()
         self.accept()
 
-    def _on_reset_defaults(self) -> None:
-        """Confirm and reset all settings to defaults."""
-        reply = QMessageBox.question(
+    def _on_browse_recordings(self) -> None:
+        current = self._recordings_path_edit.text() or "~/Videos"
+        directory = QFileDialog.getExistingDirectory(
             self,
-            "Reset Defaults",
-            "Reset all settings to their default values?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+            "Select recordings directory",
+            current,
         )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        # Reset checkboxes
-        for cb in [
-            self._autostart_cb, self._minimize_tray_cb,
-            self._noise_supp_cb, self._toast_success_cb, self._toast_info_cb,
-            self._toast_warning_cb, self._toast_error_cb, self._review_card_cb,
-            self._sound_cb, self._auto_detect_cb,
-            self._pause_encode_cb, self._pause_thumbnail_cb,
-            self._minimize_during_game_cb,
-        ]:
-            cb.setChecked(True)
-        self._autostart_cb.setChecked(False)
-        self._noise_supp_cb.setChecked(False)
-        self._sound_cb.setChecked(False)
-        self._encode_timing_cb.setCurrentIndex(1)  # after_game
-        self._video_encoder_cb.setCurrentIndex(0)  # Auto
-        self._preset_cb.setCurrentIndex(5)
-        self._cq_slider.setValue(23)
-        self._bitrate_sb.setValue(12)
-        self._audio_codec_cb.setCurrentIndex(0)
-        self._process_list_edit.clear()
-        self._scan_interval_sb.setValue(3)
-        self._game_exit_cb.setCurrentIndex(0)
+        if directory:
+            self._recordings_path_edit.setText(directory)
 
-        # Reset recording settings
-        self._replay_enabled_cb.setChecked(False)
-        self._replay_fps_sb.setValue(60)
-        self._replay_quality_cb.setCurrentText("very_high")
-        self._replay_container_cb.setCurrentIndex(0)
-        self._replay_codec_edit.clear()
-        self._replay_duration_sb.setValue(120)
-        self._replay_audio_edit.clear()
-        self._replay_area_cb.setCurrentIndex(0)
-        self._replay_show_cursor_cb.setChecked(True)
-        self._hotkey_edit.clear()
-        self._overlay_auto_hide_sb.setValue(8)
+    # ==================================================================
+    # QSettings geometry persistence
+    # ==================================================================
 
-        # Reset storage paths
-        for edit in self._storage_fields.values():
-            edit.clear()
-        self._rclone_remote_edit.clear()
-        self._rclone_bucket_edit.clear()
-        self._base_url_edit.clear()
-        if self._config is not None:
-            self._config.reset_paths()
+    def _restore_geometry(self) -> None:
+        s = QSettings("moment", "settings_dialog")
+        geo = s.value("geometry")
+        if geo is not None:
+            self.restoreGeometry(geo)
 
-        self._save_settings()
-        logger.info("Settings reset to defaults")
+    def _save_geometry(self) -> None:
+        s = QSettings("moment", "settings_dialog")
+        s.setValue("geometry", self.saveGeometry())
 
-    def _on_reset_database(self) -> None:
-        """Confirm and reset (delete) the database."""
-        reply = QMessageBox.critical(
-            self,
-            "Reset Database",
-            "This will permanently delete ALL clips, tags, profiles, "
-            "and settings from the database.\n\nThis action cannot be undone.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        db_path = os.path.expanduser("~/.config/moment/clips.db")
-        if self._config is not None:
-            db_path = os.path.join(self._config.get_path("db_dir"), "clips.db")
-        try:
-            os.unlink(db_path)
-            QMessageBox.information(
-                self, "Database Reset",
-                "Database deleted. Restart Moment to recreate it."
-            )
-        except FileNotFoundError:
-            QMessageBox.information(
-                self, "Database Reset",
-                "No database found to delete."
-            )
-        except OSError as exc:
-            QMessageBox.warning(
-                self, "Database Reset",
-                f"Could not delete database: {exc}"
-            )
+    def closeEvent(self, event) -> None:
+        self._save_geometry()
+        super().closeEvent(event)
+
+    def accept(self) -> None:
+        self._save_geometry()
+        super().accept()
+
+    def reject(self) -> None:
+        self._save_geometry()
+        super().reject()

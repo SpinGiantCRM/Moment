@@ -85,12 +85,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Open the encoded clips directory in the file manager.",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable debug-level logging.",
     )
     parser.add_argument(
-        "--version", "-V",
+        "--version",
+        "-V",
         action="store_true",
         help="Print version and exit.",
     )
@@ -125,14 +127,12 @@ def _global_excepthook(exc_type, exc_value, exc_tb) -> None:
         msg.setIcon(QMessageBox.Icon.Critical)
         msg.setWindowTitle("Moment — Error")
         msg.setText(str(exc_value))
-        msg.setDetailedText(
-            "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-        )
+        msg.setDetailedText("".join(traceback.format_exception(exc_type, exc_value, exc_tb)))
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
         msg.exec()
     except Exception:
-            logger.debug("Error dialog failed in global excepthook")  # nosec B110
-            # If even the dialog fails, just log and continue
+        logger.debug("Error dialog failed in global excepthook")  # nosec B110
+        # If even the dialog fails, just log and continue
 
 
 # ===========================================================================
@@ -160,7 +160,7 @@ class AppManager(QObject):
     _pipeline_status = pyqtSignal(str)
     # GSR replay import signals (GSRWatcher may fire from background thread)
     _gsr_import_success = pyqtSignal(str, str)  # stem, message
-    _gsr_import_error = pyqtSignal(str)          # error message
+    _gsr_import_error = pyqtSignal(str)  # error message
 
     # ---- Store recovery signal (emitted on successful retry) ----
     store_recovered = pyqtSignal()
@@ -174,7 +174,7 @@ class AppManager(QObject):
 
     def __init__(self, args: argparse.Namespace | None = None) -> None:
         """Args:
-            args: Parsed CLI arguments.  If ``None``, parses ``sys.argv``.
+        args: Parsed CLI arguments.  If ``None``, parses ``sys.argv``.
         """
         super().__init__()
         self._args = args or _parse_args()
@@ -268,6 +268,7 @@ class AppManager(QObject):
         # --- Startup banner (log diagnostic info) ---
         try:
             from moment.utils.logging import startup_banner
+
             startup_banner(config=self._config)
         except Exception as exc:
             logger.debug("Startup banner logging skipped: %s", exc)
@@ -275,13 +276,16 @@ class AppManager(QObject):
         # --- Install crash dump handler (alongside the GUI excepthook) ---
         try:
             from moment.utils.logging import CrashDump
+
             self._crash_dump = CrashDump()
             # Wire into the existing excepthook chain — our hook logs first,
             # then falls through to the GUI dialog via _global_excepthook
             _existing_hook = sys.excepthook
+
             def _chained_excepthook(et, ev, tb):
                 self._crash_dump.excepthook(et, ev, tb)
                 _existing_hook(et, ev, tb)
+
             sys.excepthook = _chained_excepthook
         except Exception as exc:
             logger.debug("Crash dump handler install failed: %s", exc)
@@ -465,6 +469,7 @@ class AppManager(QObject):
         if self._store is not None:
             try:
                 from moment.core.bookmarker import Bookmarker
+
                 self._bookmarker = Bookmarker(self._store)
             except Exception as exc:
                 logger.warning("Bookmarker init failed: %s", exc)
@@ -502,6 +507,7 @@ class AppManager(QObject):
         if self._bookmarker is None and self._store is not None:
             try:
                 from moment.core.bookmarker import Bookmarker
+
                 self._bookmarker = Bookmarker(self._store)
             except Exception as exc:
                 logger.warning("Bookmarker init failed after retry: %s", exc)
@@ -569,25 +575,13 @@ class AppManager(QObject):
 
         self._gsr_controller = GSRController(
             output_dir=self._config.get_path("recordings_dir"),
-            fps=int(
-                self._config.get_gsr_setting("replay_fps") or 60
-            ),
-            quality=str(
-                self._config.get_gsr_setting("replay_quality") or "very_high"
-            ),
-            container=str(
-                self._config.get_gsr_setting("replay_container") or "mp4"
-            ),
-            replay_duration=int(
-                self._config.get_gsr_setting("replay_duration") or 120
-            ),
+            fps=int(self._config.get_gsr_setting("replay_fps") or 60),
+            quality=str(self._config.get_gsr_setting("replay_quality") or "very_high"),
+            container=str(self._config.get_gsr_setting("replay_container") or "mp4"),
+            replay_duration=int(self._config.get_gsr_setting("replay_duration") or 120),
             audio_device=str(audio) if audio else None,
-            record_area=str(
-                self._config.get_gsr_setting("replay_record_area") or "screen"
-            ),
-            show_cursor=bool(
-                self._config.get_gsr_setting("replay_show_cursor")
-            ),
+            record_area=str(self._config.get_gsr_setting("replay_record_area") or "screen"),
+            show_cursor=bool(self._config.get_gsr_setting("replay_show_cursor")),
             video_codec=str(codec) if codec else None,
         )
 
@@ -608,9 +602,7 @@ class AppManager(QObject):
 
         # --- Overlay ---
         self._overlay = Overlay(
-            auto_hide_seconds=int(
-                self._config.get_gsr_setting("overlay_auto_hide") or 8
-            ),
+            auto_hide_seconds=int(self._config.get_gsr_setting("overlay_auto_hide") or 8),
         )
         self._overlay.save_requested.connect(self._on_overlay_save)
         self._overlay.open_moment.connect(self._toggle_window)
@@ -820,6 +812,7 @@ class AppManager(QObject):
             logger.exception("Screenshot failed: %s", exc)
             try:
                 from moment.ui.widgets.toast import toast_manager
+
                 toast_manager.show_toast("error", "Screenshot failed", str(exc))
             except Exception:
                 logger.debug("Screenshot error toast fallback failed")
@@ -847,6 +840,7 @@ class AppManager(QObject):
             logger.exception("Bookmark failed: %s", exc)
             try:
                 from moment.ui.widgets.toast import toast_manager
+
                 toast_manager.show_toast("error", "Bookmark failed", str(exc))
             except Exception:
                 logger.debug("Bookmark error toast fallback failed")
@@ -867,6 +861,7 @@ class AppManager(QObject):
                 return
 
             from moment.core.models import ClipStatus
+
             clips = self._store.list_clips(
                 status=ClipStatus.UPLOADED,
                 limit=1,
@@ -882,8 +877,7 @@ class AppManager(QObject):
 
                 display_url = url if len(url) <= 80 else url[:77] + "..."
                 toast_manager.show_toast(
-                    "copy_success", "URL copied",
-                    f"{display_url} — clipboard clears in 60s"
+                    "copy_success", "URL copied", f"{display_url} — clipboard clears in 60s"
                 )
             else:
                 toast_manager.show_toast("info", "No uploads yet", "Upload a clip first")
@@ -891,6 +885,7 @@ class AppManager(QObject):
             logger.exception("Copy URL failed: %s", exc)
             try:
                 from moment.ui.widgets.toast import toast_manager
+
                 toast_manager.show_toast("error", "Copy failed", str(exc))
             except Exception:
                 logger.debug("Copy URL error toast fallback failed")
@@ -903,6 +898,7 @@ class AppManager(QObject):
         """Show success toast for GSR replay import."""
         try:
             from moment.ui.widgets.toast import toast_manager
+
             toast_manager.show_toast("success", "Replay saved", f"{stem} — {message}")
         except Exception as exc:
             logger.exception("Toast error in _on_gsr_import_toast_success: %s", exc)
@@ -911,6 +907,7 @@ class AppManager(QObject):
         """Show error toast for GSR replay import failure."""
         try:
             from moment.ui.widgets.toast import toast_manager
+
             toast_manager.show_toast("error", "Import failed", error)
         except Exception as exc:
             logger.exception("Toast error in _on_gsr_import_toast_error: %s", exc)
@@ -939,8 +936,7 @@ class AppManager(QObject):
             file_size = path.stat().st_size if path.is_file() else 0
 
             video_stream = next(
-                (s for s in probe_data.get("streams", [])
-                 if s.get("codec_type") == "video"),
+                (s for s in probe_data.get("streams", []) if s.get("codec_type") == "video"),
                 None,
             )
             video_codec = video_stream.get("codec_name", "") if video_stream else ""
@@ -950,19 +946,15 @@ class AppManager(QObject):
                 logger.debug("parse_fps returned 0.0 — falling back to 30fps")
             resolution = (
                 (video_stream.get("width", 0), video_stream.get("height", 0))
-                if video_stream else (0, 0)
+                if video_stream
+                else (0, 0)
             )
 
             audio_streams = [
-                s for s in probe_data.get("streams", [])
-                if s.get("codec_type") == "audio"
+                s for s in probe_data.get("streams", []) if s.get("codec_type") == "audio"
             ]
-            has_game_audio = any(
-                s.get("codec_name") != "opus" for s in audio_streams
-            )
-            has_mic_audio = any(
-                s.get("codec_name") == "opus" for s in audio_streams
-            )
+            has_game_audio = any(s.get("codec_name") != "opus" for s in audio_streams)
+            has_mic_audio = any(s.get("codec_name") == "opus" for s in audio_streams)
 
             stem = path.stem
             clip_id = str(uuid.uuid4())
@@ -1033,6 +1025,7 @@ class AppManager(QObject):
         """Called when a clip finishes encoding."""
         try:
             from moment.ui.widgets.toast import toast_manager
+
             toast_manager.show_toast("success", "Clip encoded", stem)
         except Exception as exc:
             logger.exception("Toast error in _on_pipeline_clip_encoded: %s", exc)
@@ -1041,6 +1034,7 @@ class AppManager(QObject):
         """Called when a clip finishes uploading."""
         try:
             from moment.ui.widgets.toast import toast_manager
+
             display_url = url if len(url) <= 60 else url[:57] + "..."
             toast_manager.show_toast("success", "Clip uploaded", f"{stem} → {display_url}")
         except Exception as exc:
@@ -1050,6 +1044,7 @@ class AppManager(QObject):
         """Called when a clip processing step fails."""
         try:
             from moment.ui.widgets.toast import toast_manager
+
             toast_manager.show_toast("error", "Processing failed", f"{stem}: {error}")
         except Exception as exc:
             logger.exception("Toast error in _on_pipeline_clip_errored: %s", exc)
@@ -1068,6 +1063,7 @@ class AppManager(QObject):
         """Handle :meth:`EventBus.toast_requested` events."""
         try:
             from moment.ui.widgets.toast import toast_manager
+
             toast_manager.show_toast(toast_type, message)
         except Exception as exc:
             logger.exception("EventBus toast error: %s", exc)
@@ -1105,6 +1101,7 @@ class AppManager(QObject):
                 # No running event loop — schedule via QTimer
                 def _run_check() -> None:
                     asyncio.run(_check())
+
                 QTimer.singleShot(0, _run_check)
             else:
                 asyncio.ensure_future(_check())
@@ -1140,6 +1137,7 @@ class AppManager(QObject):
 
         try:
             from moment.ui.widgets.toast import toast_manager
+
             toast_manager.show_toast(
                 "info",
                 f"Update available: v{latest}",

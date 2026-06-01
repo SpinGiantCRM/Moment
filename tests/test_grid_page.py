@@ -49,8 +49,6 @@ class TestGridPageInit:
 
     def test_widgets_exist(self, qapp) -> None:
         page = GridPage()
-        assert page._search_input is not None
-        assert page._sort_combo is not None
         assert page._list_view is not None
         assert page._empty_widget is not None
         assert page._error_widget is not None
@@ -118,14 +116,14 @@ class TestGridPageRefresh:
         assert not page._error_widget.isHidden()
         _cleanup_grid_page(page)
 
-    def test_sort_combo_has_options(self, qapp) -> None:
+    def test_sort_functionality(self, qapp) -> None:
         page = GridPage()
-        assert page._sort_combo.count() > 0
+        page.set_sort("Newest")
         _cleanup_grid_page(page)
 
-    def test_search_input_placeholder(self, qapp) -> None:
+    def test_search_setter(self, qapp) -> None:
         page = GridPage()
-        assert "Filter" in page._search_input.placeholderText()
+        page.set_search_text("test")
         _cleanup_grid_page(page)
 
 

@@ -1,26 +1,61 @@
-"""Player page — clip playback with controls, audio mixer, and URL bar.
+"""Player page — video playback, transport overlay, seek bar, metadata, and actions.
 
-Provides a ``QVideoWidget`` for playback, a custom seek bar, per-track
-audio volume sliders, metadata display, and a copyable R2 URL bar.
-Keyboard shortcuts follow the spec (Space/K, Arrows, F, Esc, etc.).
+Layout (ui-revamp Phase 4)::
+
+    ┌──────────────────────────────────────────┐
+    │                                          │
+    │  Video Display  (#0a0a0a bg, aspect)     │
+    │                                          │
+    │  ┌─ Transport overlay (48px, auto-hide) ┐│
+    │  │ 0:00  ═══════●═══════  2:30        ││
+    │  |◁  ▶/⏸  ▻|  🔊 ═══  |      [⛶]  ││
+    │  └──────────────────────────────────────┘│
+    ├──────────────────────────────────────────┤
+    │  Clip Title (18px bold)                  │
+    │  [Game] · Date · Duration · Size   [Btns]│
+    └──────────────────────────────────────────┘
+
+Provides QVideoWidget playback, custom-painted seek bar, transport
+controls overlay with auto-hide, metadata row, and action buttons.
+Keyboard shortcuts preserved (Space/K, Arrows, F, Esc, etc.).
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import (
+    QEasingCurve,
+    QPoint,
+    QPropertyAnimation,
+    QRect,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    QUrl,
+    pyqtSignal,
+)
+from PyQt6.QtGui import (
+    QColor,
+    QFont,
+    QFontDatabase,
+    QMouseEvent,
+    QPainter,
+    QPen,
+)
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtWidgets import (
-    QApplication,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPushButton,
     QSizePolicy,
     QSlider,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -33,333 +68,568 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _fmt_ms(ms: int) -> str:
+    """Format milliseconds as ``M:SS`` or ``H:MM:SS``."""
+    total = max(abs(ms) // 1000, 0)
+    if total < 3600:
+        return f"{total // 60}:{total % 60:02d}"
+    h = total // 3600
+    m = (total % 3600) // 60
+    s = total % 60
+    return f"{h}:{m:02d}:{s:02d}"
+
+
+def _fmt_size(size_bytes: int) -> str:
+    """Format bytes as human-readable size."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.0f} KB"
+    if size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.0f} MB"
+    return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+# ---------------------------------------------------------------------------
+# Seek Bar — custom-painted
+# ---------------------------------------------------------------------------
+
 
 class SeekBar(QWidget):
-    """Custom seek bar with elapsed/total time labels."""
+    """Custom seek bar with track, fill, hidden thumb, and time labels.
+
+    - 4px track, expands to 6px on hover
+    - Track bg: rgba(255,255,255,0.2), fill: #4a9eff
+    - Thumb: hidden by default, 14px white circle + 2px blue border on hover
+    - 24px hit area
+    - Click/drag to seek
+    - Time labels at ends (11px monospace)
+    """
 
     seeked = pyqtSignal(int)  # position in ms
 
-    def __init__(self, parent=None) -> None:
+    TRACK_HEIGHT = 4
+    TRACK_HOVER_HEIGHT = 6
+    THUMB_RADIUS = 7
+    THUMB_BORDER = 2
+    HIT_HEIGHT = 24
+
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._duration_ms = 0
         self._position_ms = 0
+        self._hovering = False
         self._dragging = False
+        self._thumb_visible = False
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        self.setMinimumHeight(self.HIT_HEIGHT)
+        self.setMaximumHeight(self.HIT_HEIGHT)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._elapsed_label = QLabel("0:00")
-        self._elapsed_label.setObjectName("cardMeta")
-        self._elapsed_label.setFixedWidth(40)
-        layout.addWidget(self._elapsed_label)
+        # Try to get a monospace font for time labels
+        mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        if not mono.exactMatch():
+            mono = QFont("monospace", 10)
+        self._mono_font = QFont(mono)
+        self._mono_font.setPointSize(10)
 
-        self._slider = QSlider(Qt.Orientation.Horizontal)
-        self._slider.setRange(0, 1000)
-        self._slider.sliderPressed.connect(self._on_slider_pressed)
-        self._slider.sliderReleased.connect(self._on_slider_released)
-        self._slider.valueChanged.connect(self._on_slider_value_changed)
-        layout.addWidget(self._slider, stretch=1)
-
-        self._total_label = QLabel("0:00")
-        self._total_label.setObjectName("cardMeta")
-        self._total_label.setFixedWidth(40)
-        layout.addWidget(self._total_label)
+    # ── Public API ────────────────────────────────────────────────────
 
     def set_duration(self, ms: int) -> None:
         """Set the total duration in milliseconds."""
-        self._duration_ms = ms
-        self._total_label.setText(_fmt_ms(ms))
-        self._slider.setRange(0, max(ms, 1))
+        self._duration_ms = max(ms, 1)
+        self.update()
 
     def set_position(self, ms: int) -> None:
         """Update the current position without emitting ``seeked``."""
         if not self._dragging:
             self._position_ms = ms
-            self._slider.blockSignals(True)
-            self._slider.setValue(ms)
-            self._slider.blockSignals(False)
-            self._elapsed_label.setText(_fmt_ms(ms))
+            self.update()
 
-    def _on_slider_pressed(self) -> None:
-        self._dragging = True
+    # ── Paint ──────────────────────────────────────────────────────────
 
-    def _on_slider_released(self) -> None:
-        self._dragging = False
-        self.seeked.emit(self._slider.value())
+    def paintEvent(self, event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-    def _on_slider_value_changed(self, value: int) -> None:
+        w = self.width()
+        h = self.height()
+        track_y = (h - (self.TRACK_HOVER_HEIGHT if self._hovering else self.TRACK_HEIGHT)) // 2
+        track_h = self.TRACK_HOVER_HEIGHT if self._hovering else self.TRACK_HEIGHT
+        thumb_r = self.THRUMB_RADIUS
+
+        label_w = 44  # space for time labels on each side
+        track_l = label_w + 4
+        track_r = w - label_w - 4
+        track_w = track_r - track_l
+
+        # ── Time labels ──────────────────────────────────────────────
+        p.setFont(self._mono_font)
+        p.setPen(QColor("#ffffff"))
+        # Elapsed (left)
+        p.drawText(
+            QRect(0, 0, label_w, h),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            _fmt_ms(self._position_ms),
+        )
+        # Total (right)
+        p.setPen(QColor("#a0a0a0"))
+        p.drawText(
+            QRect(w - label_w, 0, label_w, h),
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+            _fmt_ms(self._duration_ms),
+        )
+
+        # ── Track background ─────────────────────────────────────────
+        track_rect = QRectF(float(track_l), float(track_y), float(track_w), float(track_h))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(255, 255, 255, 51))  # rgba(255,255,255,0.2)
+        p.drawRoundedRect(track_rect, float(track_h) / 2, float(track_h) / 2)
+
+        # ── Fill ─────────────────────────────────────────────────────
+        if self._duration_ms > 0:
+            fraction = min(self._position_ms / self._duration_ms, 1.0)
+            fill_w = int(track_w * fraction)
+            if fill_w > 0:
+                fill_rect = QRectF(
+                    float(track_l),
+                    float(track_y),
+                    float(fill_w),
+                    float(track_h),
+                )
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor("#4a9eff"))
+                p.drawRoundedRect(fill_rect, float(track_h) / 2, float(track_h) / 2)
+
+        # ── Thumb (visible on hover or drag) ─────────────────────────
+        if self._thumb_visible and self._duration_ms > 0:
+            fraction = min(self._position_ms / self._duration_ms, 1.0)
+            thumb_x = track_l + int(track_w * fraction)
+            thumb_y = h // 2
+
+            # Outer ring (blue)
+            p.setPen(QPen(QColor("#4a9eff"), self.THRUMB_BORDER))
+            p.setBrush(QColor("#ffffff"))
+            p.drawEllipse(QPoint(thumb_x, thumb_y), thumb_r, thumb_r)
+
+        p.end()
+
+    # ── Mouse events ──────────────────────────────────────────────────
+
+    def _x_to_ms(self, x: int) -> int:
+        """Convert an x-coordinate to a millisecond position."""
+        label_w = 44
+        track_l = label_w + 4
+        track_r = self.width() - label_w - 4
+        track_w = max(track_r - track_l, 1)
+        fraction = max(0.0, min(1.0, (x - track_l) / track_w))
+        return int(fraction * self._duration_ms)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self._thumb_visible = True
+            pos = self._x_to_ms(int(event.position().x()))
+            self._position_ms = pos
+            self.update()
+            self.seeked.emit(pos)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._dragging:
-            self._elapsed_label.setText(_fmt_ms(value))
+            pos = self._x_to_ms(int(event.position().x()))
+            self._position_ms = pos
+            self.update()
+            self.seeked.emit(pos)
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._dragging:
+            self._dragging = False
+            if not self._hovering:
+                self._thumb_visible = False
+                self.update()
+
+    def enterEvent(self, event) -> None:
+        self._hovering = True
+        self._thumb_visible = True
+        self.update()
+
+    def leaveEvent(self, event) -> None:
+        self._hovering = False
+        if not self._dragging:
+            self._thumb_visible = False
+            self.update()
+
+
+# ---------------------------------------------------------------------------
+# Player Page
+# ---------------------------------------------------------------------------
 
 
 class PlayerPage(QWidget):
-    """Player page with video playback, controls, and metadata.
+    """Player page with video playback, transport overlay, and metadata.
 
     Signals:
         back_requested: Emitted when the user clicks the back button or
-            presses Esc.
+            presses Esc (if not fullscreen / playing).
         fullscreen_toggled(bool): Emitted when fullscreen state changes.
+        share_requested: Emitted when Share is clicked.
+        download_requested: Emitted when Download is clicked.
+        edit_requested: Emitted when Edit is clicked.
+        delete_requested: Emitted when Delete is clicked.
     """
 
     back_requested = pyqtSignal()
     fullscreen_toggled = pyqtSignal(bool)
+    share_requested = pyqtSignal()
+    download_requested = pyqtSignal()
+    edit_requested = pyqtSignal()
+    delete_requested = pyqtSignal()
 
-    def __init__(self, store: "Store | None" = None, parent=None) -> None:
+    def __init__(self, store: "Store | None" = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._store = store
         self._current_clip: dict[str, Any] | None = None
         self._fullscreen = False
-        self._hide_controls_timer = QTimer()
-        self._hide_controls_timer.setSingleShot(True)
-        self._hide_controls_timer.setInterval(3000)
-        self._hide_controls_timer.timeout.connect(self._hide_overlay_controls)
+        self._controls_visible = True
 
-        # --- Media player ---
+        # ── Media player ─────────────────────────────────────────────────
         self._player = QMediaPlayer()
         self._audio_output = QAudioOutput()
         self._player.setAudioOutput(self._audio_output)
         self._audio_output.setVolume(0.8)
-
-        # --- Video widget ---
-        self._video_widget = QVideoWidget()
-        self._video_widget.setMinimumSize(640, 360)
-        self._video_widget.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
-        self._player.setVideoOutput(self._video_widget)
-        self._video_widget.mouseDoubleClickEvent = self._on_double_click
-        self._video_widget.mouseMoveEvent = self._on_video_mouse_move
-        self._video_widget.setMouseTracking(True)
-
-        # Player signals
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.errorOccurred.connect(self._on_player_error)
 
-        # --- Seek bar ---
-        self._seek_bar = SeekBar()
-        self._seek_bar.seeked.connect(self._player.setPosition)
+        # ── Controls auto-hide timer ─────────────────────────────────────
+        self._hide_timer = QTimer(self)
+        self._hide_timer.setSingleShot(True)
+        self._hide_timer.setInterval(3000)
+        self._hide_timer.timeout.connect(self._fade_out_controls)
 
-        # --- Transport controls (minimal, overlay-style) ---
-        transport = QWidget()
-        transport_layout = QHBoxLayout(transport)
-        transport_layout.setContentsMargins(12, 6, 12, 6)
-        transport_layout.setSpacing(8)
+        # ── Controls fade animation ──────────────────────────────────────
+        self._controls_opacity = QGraphicsOpacityEffect()
+        self._controls_opacity.setOpacity(1.0)
 
-        self._play_btn = QPushButton("Play")
-        self._play_btn.setFixedSize(36, 36)
-        self._play_btn.setStyleSheet(
-            "QPushButton {"
-            "   background-color: rgba(255,255,255,0.10);"
-            "   color: #ffffff;"
-            "   border: none;"
-            "   border-radius: 18px;"
-            "   font-size: 16px;"
-            "}"
-            "QPushButton:hover {"
-            "   background-color: rgba(255,255,255,0.20);"
-            "}"
-        )
-        self._play_btn.clicked.connect(self._toggle_play)
-        transport_layout.addWidget(self._play_btn)
+        # ── Build layout ─────────────────────────────────────────────────
+        self._build_ui()
 
-        transport_layout.addSpacing(8)
-
-        self._volume_slider = QSlider(Qt.Orientation.Horizontal)
-        self._volume_slider.setRange(0, 200)
-        self._volume_slider.setValue(80)
-        self._volume_slider.setFixedWidth(100)
-        self._volume_slider.setStyleSheet(
-            "QSlider::groove:horizontal {"
-            "   background-color: rgba(255,255,255,0.15);"
-            "   border-radius: 2px; height: 3px;"
-            "}"
-            "QSlider::handle:horizontal {"
-            "   background-color: #ffffff; border: none;"
-            "   border-radius: 6px; width: 12px; height: 12px; margin: -4px 0;"
-            "}"
-            "QSlider::sub-page:horizontal {"
-            "   background-color: #ffffff; border-radius: 2px;"
-            "}"
-        )
-        self._volume_slider.valueChanged.connect(
-            lambda v: self._audio_output.setVolume(v / 100.0)
-        )
-        transport_layout.addWidget(self._volume_slider)
-
-        self._mute_btn = QPushButton("Mute")
-        self._mute_btn.setFixedSize(32, 32)
-        self._mute_btn.setStyleSheet(
-            "QPushButton {"
-            "   background-color: transparent;"
-            "   border: none; font-size: 14px;"
-            "}"
-        )
-        self._mute_btn.clicked.connect(self._toggle_mute)
-        transport_layout.addWidget(self._mute_btn)
-
-        transport_layout.addStretch()
-
-        # --- Metadata (game • size • duration) ---
-        self._meta_label = QLabel()
-        self._meta_label.setObjectName("cardMeta")
-        self._meta_label.setStyleSheet(
-            "color: #cccccc; font-size: 12px; background: transparent;"
-        )
-        transport_layout.addWidget(self._meta_label)
-
-        transport_layout.addStretch()
-
-        # --- Audio mixer (compact row inside transport) ---
-        mixer_label = QLabel("Game")
-        mixer_label.setStyleSheet("color: #999; font-size: 10px; background: transparent;")
-        transport_layout.addWidget(mixer_label)
-        self._game_vol_slider = QSlider(Qt.Orientation.Horizontal)
-        self._game_vol_slider.setRange(0, 200)
-        self._game_vol_slider.setValue(100)
-        self._game_vol_slider.setFixedWidth(60)
-        transport_layout.addWidget(self._game_vol_slider)
-
-        mic_label = QLabel("Mic")
-        mic_label.setStyleSheet("color: #999; font-size: 10px; background: transparent;")
-        transport_layout.addWidget(mic_label)
-        self._mic_vol_slider = QSlider(Qt.Orientation.Horizontal)
-        self._mic_vol_slider.setRange(0, 200)
-        self._mic_vol_slider.setValue(100)
-        self._mic_vol_slider.setFixedWidth(60)
-        transport_layout.addWidget(self._mic_vol_slider)
-
-        # --- URL bar ---
-        url_row = QHBoxLayout()
-        url_row.setSpacing(6)
-
-        self._url_input = QLineEdit()
-        self._url_input.setReadOnly(True)
-        self._url_input.setPlaceholderText("No URL — clip not yet uploaded")
-        self._url_input.setStyleSheet(
-            "background-color: rgba(255,255,255,0.08);"
-            "border: 1px solid rgba(255,255,255,0.10);"
-            "border-radius: 4px;"
-            "color: #cccccc;"
-            "font-size: 12px;"
-            "padding: 4px 8px;"
-        )
-        url_row.addWidget(self._url_input, stretch=1)
-
-        copy_btn = QPushButton("Copy")
-        copy_btn.setStyleSheet(
-            "QPushButton {"
-            "   background-color: rgba(255,255,255,0.08);"
-            "   color: #cccccc;"
-            "   border: 1px solid rgba(255,255,255,0.10);"
-            "   border-radius: 4px;"
-            "   padding: 4px 12px;"
-            "   font-size: 12px;"
-            "}"
-            "QPushButton:hover {"
-            "   background-color: rgba(255,255,255,0.15);"
-            "}"
-        )
-        copy_btn.clicked.connect(self._copy_url)
-        url_row.addWidget(copy_btn)
-
-        # --- Back button ---
-        back_btn = QPushButton("Back")
-        back_btn.setStyleSheet(
-            "QPushButton {"
-            "   background-color: transparent;"
-            "   color: #cccccc;"
-            "   border: 1px solid rgba(255,255,255,0.15);"
-            "   border-radius: 4px;"
-            "   padding: 4px 12px;"
-            "   font-size: 12px;"
-            "}"
-            "QPushButton:hover {"
-            "   background-color: rgba(255,255,255,0.10);"
-            "}"
-        )
-        back_btn.clicked.connect(self.back_requested.emit)
-
-        # --- Edit button ---
-        edit_btn = QPushButton("Edit")
-        edit_btn.setToolTip("Open in advanced editor")
-        edit_btn.setStyleSheet(
-            "QPushButton {"
-            "   background-color: rgba(88, 101, 242, 0.15);"
-            "   color: var(--accent-blue);"
-            "   border: 1px solid rgba(88, 101, 242, 0.25);"
-            "   border-radius: 4px;"
-            "   padding: 4px 12px;"
-            "   font-size: 12px;"
-            "}"
-            "QPushButton:hover {"
-            "   background-color: rgba(88, 101, 242, 0.25);"
-            "}"
-        )
-        edit_btn.clicked.connect(self._on_edit_clicked)
-
-        # --- Empty state ---
-        self._empty_label = QLabel("Select a clip to play")
-        self._empty_label.setObjectName("muted")
-        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._empty_label.setStyleSheet("font-size: 16px;")
-
-        # Editor window reference
+        # ── Editor reference ─────────────────────────────────────────────
         self._editor: EditorWindow | None = None
 
-        # Loading spinner overlay
-        self._spinner_label = QLabel("Loading…")
-        self._spinner_label.setObjectName("pageTitle")
-        self._spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._spinner_label.setStyleSheet("font-size: 20px; color: var(--text-secondary);")
-        self._spinner_label.setVisible(False)
-
-        # Async loader
+        # ── Async loader ─────────────────────────────────────────────────
         self._loader: AsyncDataLoader | None = None
 
-        # --- Controls overlay (translucent, overlays video) ---
-        self._controls = QWidget()
-        self._controls.setStyleSheet(
-            "QWidget {"
-            "   background-color: rgba(15, 15, 15, 0.85);"
-            "   border-radius: 8px;"
-            "}"
-        )
-        controls_layout = QVBoxLayout(self._controls)
-        controls_layout.setContentsMargins(12, 8, 12, 8)
-        controls_layout.setSpacing(6)
+        # Show empty state by default
+        self._show_empty("Select a clip to preview")
 
-        top_row = QHBoxLayout()
-        top_row.addWidget(back_btn)
-        top_row.addWidget(edit_btn)
-        top_row.addStretch()
-        controls_layout.addLayout(top_row)
-        controls_layout.addWidget(self._seek_bar)
-        controls_layout.addWidget(transport)
-        controls_layout.addLayout(url_row)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        # --- Main layout (video fills space, controls overlay at bottom) ---
+    # ==================================================================
+    # UI Construction
+    # ==================================================================
+
+    def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Video fills the page
-        layout.addWidget(self._video_widget, stretch=1)
-        layout.addWidget(self._empty_label, stretch=1)
-        layout.addWidget(self._spinner_label, stretch=1)
+        # ── Video display area ───────────────────────────────────────────
+        self._video_container = QWidget()
+        self._video_container.setStyleSheet("background-color: #0a0a0a; border: none;")
+        self._video_container.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self._video_container.setMouseTracking(True)
+        self._video_container.mouseMoveEvent = self._on_video_hover
+        self._video_container.mouseDoubleClickEvent = self._on_double_click
 
-        # Controls overlay at the bottom
-        controls_overlay = QHBoxLayout()
-        controls_overlay.setContentsMargins(12, 0, 12, 12)
-        controls_overlay.addWidget(self._controls)
-        layout.addLayout(controls_overlay)
+        # Video widget (inside container)
+        self._video_widget = QVideoWidget(self._video_container)
+        self._video_widget.setMinimumSize(640, 360)
+        self._video_widget.setMouseTracking(True)
+        self._player.setVideoOutput(self._video_widget)
+        # Also track mouse on the video widget directly (needed for fullscreen)
+        self._video_widget.mouseMoveEvent = self._on_video_widget_hover
 
-        self._empty_label.setVisible(True)
-        self._video_widget.setVisible(False)
+        # Stack: video fills container, transport overlay at bottom
+        video_layout = QVBoxLayout(self._video_container)
+        video_layout.setContentsMargins(0, 0, 0, 0)
+        video_layout.setSpacing(0)
+        video_layout.addWidget(self._video_widget, stretch=1)
+
+        # ── Transport overlay (semi-transparent, at bottom of video) ────
+        self._transport_overlay = self._build_transport_overlay()
+        self._transport_overlay.setGraphicsEffect(self._controls_opacity)
+        video_layout.addWidget(self._transport_overlay)
+
+        # ── Empty state (shown when no clip loaded) ────────────────────
+        self._empty_state = self._build_empty_state()
+        self._empty_state.setVisible(True)
+        layout.addWidget(self._empty_state)
+
+        # ── Loading spinner ──────────────────────────────────────────
+        self._spinner_label = QLabel("Loading…")
+        self._spinner_label.setObjectName("pageTitle")
+        self._spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._spinner_label.setStyleSheet(
+            "font-size: 20px; color: var(--text-secondary); background: transparent;"
+        )
         self._spinner_label.setVisible(False)
+        layout.addWidget(self._spinner_label)
 
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        # ── Video display area (hidden until clip loaded) ─────────────
+        layout.addWidget(self._video_container, stretch=1)
+
+        # ── Metadata + actions row ───────────────────────────────────────
+        self._meta_section = self._build_meta_section()
+        self._meta_section.setVisible(False)
+        layout.addWidget(self._meta_section)
+
+        # Start with video hidden
+        self._video_widget.setVisible(False)
+
+    def _build_transport_overlay(self) -> QWidget:
+        """Build the semi-transparent transport controls overlay."""
+        overlay = QWidget()
+        overlay.setObjectName("transportOverlay")
+        overlay.setFixedHeight(48)
+        overlay.setStyleSheet("""
+            QWidget#transportOverlay {
+                background-color: rgba(0, 0, 0, 0.70);
+                border: none;
+            }
+        """)
+        overlay.setMouseTracking(True)
+
+        outer = QVBoxLayout(overlay)
+        outer.setContentsMargins(8, 2, 8, 4)
+        outer.setSpacing(1)
+
+        # ── Seek bar ──────────────────────────────────────────────────
+        self._seek_bar = SeekBar()
+        self._seek_bar.seeked.connect(self._player.setPosition)
+        outer.addWidget(self._seek_bar)
+
+        # ── Controls row ──────────────────────────────────────────────
+        controls_row = QHBoxLayout()
+        controls_row.setContentsMargins(8, 0, 8, 0)
+        controls_row.setSpacing(6)
+        controls_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        icon_color = "#e0e0e0"
+
+        # Skip back 10s
+        self._skip_back_btn = self._make_icon_button(
+            "skip-back",
+            "Skip back 10s",
+            icon_color,
+            24,
+        )
+        self._skip_back_btn.clicked.connect(self._skip_back)
+        controls_row.addWidget(self._skip_back_btn)
+
+        # Play / Pause (larger)
+        self._play_btn = self._make_icon_button(
+            "play",
+            "Play",
+            icon_color,
+            28,
+        )
+        self._play_btn.clicked.connect(self._toggle_play)
+        controls_row.addWidget(self._play_btn)
+
+        # Skip forward 10s
+        self._skip_fwd_btn = self._make_icon_button(
+            "skip-forward",
+            "Skip forward 10s",
+            icon_color,
+            24,
+        )
+        self._skip_fwd_btn.clicked.connect(self._skip_forward)
+        controls_row.addWidget(self._skip_fwd_btn)
+
+        controls_row.addSpacing(12)
+
+        # Volume icon + mute toggle
+        self._volume_icon_btn = self._make_icon_button(
+            "volume",
+            "Mute",
+            icon_color,
+            24,
+        )
+        self._volume_icon_btn.clicked.connect(self._toggle_mute)
+        controls_row.addWidget(self._volume_icon_btn)
+
+        # Volume slider
+        self._volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self._volume_slider.setRange(0, 200)
+        self._volume_slider.setValue(80)
+        self._volume_slider.setFixedWidth(80)
+        self._volume_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                background-color: rgba(255,255,255,0.15);
+                border-radius: 2px; height: 4px;
+            }
+            QSlider::handle:horizontal {
+                background-color: #ffffff; border: none;
+                border-radius: 6px; width: 12px; height: 12px; margin: -4px 0;
+            }
+            QSlider::sub-page:horizontal {
+                background-color: #e0e0e0; border-radius: 2px;
+            }
+        """)
+        self._volume_slider.valueChanged.connect(lambda v: self._audio_output.setVolume(v / 100.0))
+        controls_row.addWidget(self._volume_slider)
+
+        controls_row.addStretch()
+
+        # Fullscreen toggle
+        self._fullscreen_btn = self._make_icon_button(
+            "fullscreen",
+            "Fullscreen",
+            icon_color,
+            24,
+        )
+        self._fullscreen_btn.clicked.connect(self._toggle_fullscreen)
+        controls_row.addWidget(self._fullscreen_btn)
+
+        outer.addLayout(controls_row)
+
+        return overlay
+
+    def _make_icon_button(
+        self,
+        icon_name: str,
+        tooltip: str,
+        color: str,
+        size: int,
+    ) -> QToolButton:
+        """Create a transparent QToolButton with an SVG icon."""
+        from moment.ui.resources import load_icon
+
+        btn = QToolButton()
+        btn.setIcon(load_icon(icon_name, color))
+        btn.setIconSize(QSize(size, size))
+        btn.setToolTip(tooltip)
+        btn.setStyleSheet("""
+            QToolButton {
+                background-color: transparent;
+                border: none;
+            }
+            QToolButton:hover {
+                background-color: rgba(255,255,255,0.10);
+                border-radius: 4px;
+            }
+        """)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        return btn
+
+    def _build_empty_state(self) -> QWidget:
+        """Build the empty state: icon + 'Select a clip to preview'."""
+        from moment.ui.resources import load_icon
+
+        widget = QWidget()
+        widget.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(widget)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(12)
+
+        icon_label = QLabel()
+        icon = load_icon("empty-library", "#555555")
+        if not icon.isNull():
+            icon_label.setPixmap(icon.pixmap(64, 64))
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon_label)
+
+        heading = QLabel("Select a clip to preview")
+        heading.setObjectName("emptyStateHeading")
+        heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        heading.setStyleSheet(
+            "color: var(--text-secondary); font-size: 16px; background: transparent;"
+        )
+        layout.addWidget(heading)
+
+        return widget
+
+    def _build_meta_section(self) -> QWidget:
+        """Build the metadata row + action buttons below the video."""
+        section = QWidget()
+        section.setStyleSheet("""
+            QWidget {
+                background-color: var(--bg-window);
+                border-top: 1px solid var(--border-subtle);
+            }
+        """)
+
+        layout = QHBoxLayout(section)
+        layout.setContentsMargins(16, 10, 16, 10)
+        layout.setSpacing(12)
+
+        # ── Left: metadata ────────────────────────────────────────────
+        meta_layout = QVBoxLayout()
+        meta_layout.setSpacing(4)
+
+        self._title_label = QLabel()
+        self._title_label.setObjectName("playerTitle")
+        self._title_label.setStyleSheet(
+            "font-size: 18px; font-weight: bold; color: var(--text-primary);"
+            "background: transparent;"
+        )
+        meta_layout.addWidget(self._title_label)
+
+        self._info_label = QLabel()
+        self._info_label.setObjectName("playerInfo")
+        self._info_label.setStyleSheet(
+            "font-size: 13px; color: var(--text-secondary); background: transparent;"
+        )
+        meta_layout.addWidget(self._info_label)
+
+        layout.addLayout(meta_layout, stretch=1)
+
+        # ── Right: action buttons ─────────────────────────────────────
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(8)
+        actions_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        # Share (primary)
+        self._share_btn = QPushButton("Share")
+        self._share_btn.setObjectName("primary")
+        self._share_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._share_btn.clicked.connect(self.share_requested.emit)
+        actions_layout.addWidget(self._share_btn)
+
+        # Download (primary)
+        self._download_btn = QPushButton("Download")
+        self._download_btn.setObjectName("primary")
+        self._download_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._download_btn.clicked.connect(self.download_requested.emit)
+        actions_layout.addWidget(self._download_btn)
+
+        # Edit (secondary — line style)
+        self._edit_btn = QPushButton("Edit")
+        self._edit_btn.setObjectName("secondary")
+        self._edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._edit_btn.clicked.connect(self._on_edit_clicked)
+        self._edit_btn.clicked.connect(self.edit_requested.emit)
+        actions_layout.addWidget(self._edit_btn)
+
+        # Delete (danger — line style)
+        self._delete_btn = QPushButton("Delete")
+        self._delete_btn.setObjectName("danger")
+        self._delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._delete_btn.clicked.connect(self.delete_requested.emit)
+        actions_layout.addWidget(self._delete_btn)
+
+        layout.addLayout(actions_layout)
+
+        return section
 
     # ==================================================================
     # Public API
@@ -370,22 +640,18 @@ class PlayerPage(QWidget):
 
         Shows a loading spinner immediately, cancels any in-flight loader,
         then loads clip data on a background thread.
-
-        Args:
-            clip_id: UUID of the clip to load.
         """
         if self._store is None:
             return
 
-        # Cancel any previous loader (also disconnects signals)
         self._cancel_loader()
 
-        # Show loading spinner
-        self._empty_label.setVisible(False)
+        # Show loading state
+        self._empty_state.setVisible(False)
+        self._video_container.setVisible(False)
         self._video_widget.setVisible(False)
         self._spinner_label.setVisible(True)
 
-        # Fire async load
         self._loader = AsyncDataLoader(self._store.get_clip, clip_id)
         self._loader.data_ready.connect(self._on_data_ready)
         self._loader.error_occurred.connect(self._on_load_error)
@@ -410,30 +676,73 @@ class PlayerPage(QWidget):
             "encoded_path": str(clip.encoded_path) if clip.encoded_path else "",
             "source_path": str(clip.source_path),
             "edit_version": getattr(clip, "edit_version", 0),
+            "created_at": getattr(clip, "created_at", None),
+            "favorite": getattr(clip, "favorite", False),
         }
 
-        video_path = (
-            self._current_clip.get("encoded_path")
-            or self._current_clip.get("source_path", "")
+        video_path = self._current_clip.get("encoded_path") or self._current_clip.get(
+            "source_path", ""
         )
 
-        self._empty_label.setVisible(False)
+        # Show video area
+        self._empty_state.setVisible(False)
+        self._video_container.setVisible(True)
         self._video_widget.setVisible(True)
+        self._meta_section.setVisible(True)
 
+        # Start playback
         self._player.stop()
         self._player.setSource(QUrl.fromLocalFile(video_path))
         self._player.play()
 
-        game = self._current_clip.get("game", "")
-        duration = _fmt_ms(int(self._current_clip.get("duration", 0) * 1000))
-        edited = "  •  Edited" if self._current_clip.get("edit_version", 0) > 0 else ""
-        self._meta_label.setText(f"{game}{edited}  •  {duration}")
+        # Update metadata
+        self._update_metadata()
+        self._update_play_icon("pause")
 
-        r2_url = self._current_clip.get("r2_url", "")
-        self._url_input.setText(r2_url)
+        # Show controls overlay
+        self._show_controls()
 
-        self._play_btn.setText("Pause")
         logger.info("Loaded clip: %s", self._current_clip["title"])
+
+    def _update_metadata(self) -> None:
+        """Populate the metadata section from the current clip."""
+        if self._current_clip is None:
+            return
+
+        clip = self._current_clip
+        self._title_label.setText(clip["title"])
+
+        parts: list[str] = []
+
+        # Game pill
+        game = clip.get("game", "")
+        if game:
+            parts.append(game)
+
+        # Date
+        created = clip.get("created_at")
+        if created:
+            if isinstance(created, str):
+                try:
+                    created = datetime.fromisoformat(created)
+                except ValueError:
+                    created = None
+            if isinstance(created, datetime):
+                parts.append(created.strftime("%b %d, %Y"))
+            else:
+                parts.append(str(created)[:10])
+
+        # Duration
+        dur = clip.get("duration", 0)
+        if dur:
+            parts.append(_fmt_ms(int(float(dur) * 1000)))
+
+        # File size
+        size = clip.get("file_size", 0)
+        if size:
+            parts.append(_fmt_size(int(size)))
+
+        self._info_label.setText(" · ".join(parts))
 
     def _on_load_error(self, error: str) -> None:
         """Handle async load failure."""
@@ -454,6 +763,174 @@ class PlayerPage(QWidget):
         """Cancel in-flight loaders when the page is hidden."""
         self._cancel_loader()
         super().hideEvent(event)
+
+    def stop(self) -> None:
+        """Stop playback, cancel loader, and release the media player."""
+        self._cancel_loader()
+        self._player.stop()
+        self._player.setSource(QUrl())
+
+    # ==================================================================
+    # Transport controls visibility
+    # ==================================================================
+
+    def _show_controls(self) -> None:
+        """Show the transport overlay (cancel any hide timer)."""
+        self._hide_timer.stop()
+
+        if not self._controls_visible:
+            self._controls_visible = True
+            self._fade_controls(0.0, 1.0)
+
+        # Restart hide timer (3s) — but only if actually playing
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._hide_timer.start()
+
+    def _fade_out_controls(self) -> None:
+        """Fade out the transport overlay after inactivity."""
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._controls_visible = False
+            self._fade_controls(1.0, 0.0)
+
+    def _fade_controls(self, from_val: float, to_val: float) -> None:
+        """Animate the transport overlay opacity over 200ms."""
+        anim = QPropertyAnimation(self._controls_opacity, b"opacity")
+        anim.setDuration(200)
+        anim.setStartValue(from_val)
+        anim.setEndValue(to_val)
+        anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        anim.start()
+        # Keep a reference to prevent garbage collection
+        setattr(self, "_fade_anim", anim)
+
+    def _on_video_hover(self, event) -> None:
+        """Show controls when hovering over the video container."""
+        self._show_controls()
+        QWidget.mouseMoveEvent(self._video_container, event)
+
+    def _on_video_widget_hover(self, event) -> None:
+        """Show controls when hovering over the video widget (needed in fullscreen)."""
+        if self._fullscreen:
+            self._show_controls()
+        QVideoWidget.mouseMoveEvent(self._video_widget, event)
+
+    # ==================================================================
+    # Playback controls
+    # ==================================================================
+
+    def _toggle_play(self) -> None:
+        """Toggle between play and pause."""
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self._player.pause()
+            self._update_play_icon("play")
+            # Keep controls visible while paused
+            self._hide_timer.stop()
+            if not self._controls_visible:
+                self._show_controls()
+        else:
+            self._player.play()
+            self._update_play_icon("pause")
+            self._hide_timer.start()
+
+    def _update_play_icon(self, state: str) -> None:
+        """Swap the play button icon between play and pause."""
+        from moment.ui.resources import load_icon
+
+        self._play_btn.setIcon(load_icon(state, "#e0e0e0"))
+        self._play_btn.setText("Play" if state == "play" else "Pause")
+
+    def _skip_back(self) -> None:
+        """Skip back 10 seconds."""
+        new_pos = max(0, self._player.position() - 10000)
+        self._player.setPosition(new_pos)
+
+    def _skip_forward(self) -> None:
+        """Skip forward 10 seconds."""
+        new_pos = min(self._player.duration(), self._player.position() + 10000)
+        self._player.setPosition(new_pos)
+
+    def _toggle_mute(self) -> None:
+        """Toggle mute on the audio output."""
+        from moment.ui.resources import load_icon
+
+        muted = not self._audio_output.isMuted()
+        self._audio_output.setMuted(muted)
+        if muted:
+            self._volume_icon_btn.setIcon(load_icon("volume-muted", "#e0e0e0"))
+            self._volume_icon_btn.setToolTip("Unmute")
+        else:
+            self._volume_icon_btn.setIcon(load_icon("volume", "#e0e0e0"))
+            self._volume_icon_btn.setToolTip("Mute")
+
+    # ==================================================================
+    # Fullscreen
+    # ==================================================================
+
+    def _on_double_click(self, event) -> None:
+        """Toggle fullscreen on double-click."""
+        self._toggle_fullscreen()
+
+    def _toggle_fullscreen(self) -> None:
+        """Enter or exit fullscreen mode."""
+        self._fullscreen = not self._fullscreen
+
+        if self._fullscreen:
+            # Always show controls in fullscreen initially
+            self._show_controls()
+
+            # Remove from layout and make it a top-level window
+            self._video_widget.setParent(None)
+            self._video_widget.setWindowFlags(Qt.WindowType.Window)
+            # Need to re-apply mouse tracking after reparenting
+            self._video_widget.setMouseTracking(True)
+            self._video_widget.mouseMoveEvent = self._on_video_widget_hover
+            self._video_widget.mouseDoubleClickEvent = self._on_double_click
+            self._video_widget.showFullScreen()
+
+            # Reparent the transport overlay to the video widget
+            self._transport_overlay.setParent(self._video_widget)
+            self._transport_overlay.setGeometry(
+                0,
+                self._video_widget.height() - 48,
+                self._video_widget.width(),
+                48,
+            )
+        else:
+            # Exit fullscreen
+            self._video_widget.setWindowFlags(Qt.WindowType.Widget)
+            self._video_widget.showNormal()
+
+            # Re-parent back
+            self._video_widget.setParent(self._video_container)
+            self._video_container.layout().insertWidget(0, self._video_widget, stretch=1)
+
+            self._transport_overlay.setParent(self._video_container)
+            self._video_container.layout().addWidget(self._transport_overlay)
+
+            self._show_controls()
+
+        self.fullscreen_toggled.emit(self._fullscreen)
+
+    # ==================================================================
+    # Player signal handlers
+    # ==================================================================
+
+    def _on_duration_changed(self, duration_ms: int) -> None:
+        """Update the seek bar when the duration is known."""
+        self._seek_bar.set_duration(duration_ms)
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        """Update the seek bar position during playback."""
+        self._seek_bar.set_position(position_ms)
+
+    def _on_player_error(self, error, error_string: str) -> None:
+        """Handle media player errors."""
+        logger.error("Player error: %s", error_string)
+        self._show_empty(f"Playback error: {error_string}")
+
+    # ==================================================================
+    # Editor window
+    # ==================================================================
 
     def _on_edit_clicked(self) -> None:
         """Open the EditorWindow for the current clip."""
@@ -480,107 +957,20 @@ class PlayerPage(QWidget):
         if self._current_clip is not None:
             self.load_clip(self._current_clip["id"])
 
-    def stop(self) -> None:
-        """Stop playback, cancel loader, and release the media player."""
-        self._cancel_loader()
-        self._player.stop()
-        self._player.setSource(QUrl())
-
-    # ==================================================================
-    # Playback controls
-    # ==================================================================
-
-    def _toggle_play(self) -> None:
-        """Toggle between play and pause."""
-        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self._player.pause()
-            self._play_btn.setText("Play")
-        else:
-            self._player.play()
-            self._play_btn.setText("Pause")
-
-    def _toggle_mute(self) -> None:
-        """Toggle mute on the audio output."""
-        muted = self._audio_output.isMuted()
-        self._audio_output.setMuted(not muted)
-        self._mute_btn.setText("Unmute" if not muted else "Mute")
-
-    def _copy_url(self) -> None:
-        """Copy the R2 URL to the clipboard."""
-        url = self._url_input.text()
-        if url:
-            QApplication.clipboard().setText(url)
-            logger.info("URL copied to clipboard")
-
-    # ==================================================================
-    # Fullscreen
-    # ==================================================================
-
-    def _on_double_click(self, event) -> None:
-        """Toggle fullscreen on double-click."""
-        self._toggle_fullscreen()
-
-    def _toggle_fullscreen(self) -> None:
-        """Enter or exit fullscreen mode."""
-        self._fullscreen = not self._fullscreen
-        if self._fullscreen:
-            self._controls.setVisible(False)
-            # Remove from layout before making it a top-level window
-            idx = self.layout().indexOf(self._video_widget)
-            if idx >= 0:
-                self.layout().removeWidget(self._video_widget)
-            self._video_widget.setParent(None)
-            self._video_widget.setWindowFlags(Qt.WindowType.Window)
-            self._video_widget.showFullScreen()
-        else:
-            self._video_widget.setWindowFlags(Qt.WindowType.Widget)
-            self._video_widget.showNormal()
-            # Re-parent the video widget back into the layout
-            self._video_widget.setParent(self)
-            self.layout().insertWidget(1, self._video_widget, stretch=1)
-            self._controls.setVisible(True)
-
-        self.fullscreen_toggled.emit(self._fullscreen)
-
-    def _on_video_mouse_move(self, event) -> None:
-        """Show controls on mouse move when in fullscreen."""
-        if self._fullscreen:
-            self._controls.setVisible(True)
-            self._hide_controls_timer.start()
-        # Call original handler
-        QVideoWidget.mouseMoveEvent(self._video_widget, event)
-
-    def _hide_overlay_controls(self) -> None:
-        """Hide overlay controls after the timer expires."""
-        if self._fullscreen:
-            self._controls.setVisible(False)
-
-    # ==================================================================
-    # Player signal handlers
-    # ==================================================================
-
-    def _on_duration_changed(self, duration_ms: int) -> None:
-        """Update the seek bar when the duration is known."""
-        self._seek_bar.set_duration(duration_ms)
-
-    def _on_position_changed(self, position_ms: int) -> None:
-        """Update the seek bar position during playback."""
-        self._seek_bar.set_position(position_ms)
-
-    def _on_player_error(self, error, error_string: str) -> None:
-        """Handle media player errors."""
-        logger.error("Player error: %s", error_string)
-        self._show_empty(f"Playback error: {error_string}")
-
     # ==================================================================
     # States
     # ==================================================================
 
     def _show_empty(self, message: str) -> None:
         """Show the empty-state placeholder."""
-        self._empty_label.setText(message)
-        self._empty_label.setVisible(True)
-        self._video_widget.setVisible(False)
+        self._spinner_label.setVisible(False)
+        self._video_container.setVisible(False)
+        self._meta_section.setVisible(False)
+        # Update the heading text and show
+        heading = self._empty_state.findChild(QLabel, "emptyStateHeading")
+        if heading:
+            heading.setText(message)
+        self._empty_state.setVisible(True)
 
     # ==================================================================
     # Keyboard shortcuts
@@ -612,41 +1002,13 @@ class PlayerPage(QWidget):
             self._toggle_mute()
         elif key == Qt.Key.Key_F:
             self._toggle_fullscreen()
-        # Escape is handled context-aware by MainWindow QShortcut
-        # (stop video → close editor → clear search → exit selection → grid)
         elif key == Qt.Key.Key_Escape:
+            # Handled context-aware by MainWindow QShortcut
             return
-        elif key >= Qt.Key.Key_0 and key <= Qt.Key.Key_9:
+        elif Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
             fraction = (key - Qt.Key.Key_0) / 10.0
             duration = self._player.duration()
             if duration > 0:
                 self._player.setPosition(int(duration * fraction))
         else:
             super().keyPressEvent(event)
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _fmt_ms(ms: int) -> str:
-    """Format milliseconds as ``M:SS`` or ``H:MM:SS``."""
-    total = max(ms // 1000, 0)
-    if total < 3600:
-        return f"{total // 60}:{total % 60:02d}"
-    h = total // 3600
-    m = (total % 3600) // 60
-    s = total % 60
-    return f"{h}:{m:02d}:{s:02d}"
-
-
-def _fmt_size(size_bytes: int) -> str:
-    """Format bytes as human-readable size."""
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    if size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.0f} KB"
-    if size_bytes < 1024 * 1024 * 1024:
-        return f"{size_bytes / (1024 * 1024):.0f} MB"
-    return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
