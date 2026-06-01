@@ -50,14 +50,106 @@ def _get_or_create_db_key() -> bytes | None:
         return None
 
 
+def _is_plaintext_sqlite(db_path: str) -> bool:
+    """Check if *db_path* exists and starts with the SQLite magic header."""
+    if not os.path.isfile(db_path):
+        return False
+    try:
+        with open(db_path, "rb") as f:
+            header = f.read(16)
+        return header == b"SQLite format 3\0"
+    except OSError:
+        return False
+
+
+def _migrate_plaintext_to_encrypted(db_path: str, key: bytes, sqlcipher_module: Any) -> None:
+    """Export a plaintext DB into an encrypted one by copying data via
+    standard sqlite3, then re-encrypting the copy in-place.
+
+    Uses a temporary file alongside the original, then swaps them once
+    the export is verified.
+    """
+    tmp_path = db_path + ".enc-tmp"
+    import shutil
+
+    try:
+        # ── 1. Read schema + data from the plaintext source ─────────────
+        src_conn = sqlite3.connect(db_path)
+        src_conn.row_factory = sqlite3.Row
+        src_conn.execute("PRAGMA journal_mode = OFF")
+        tables = src_conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+        indexes = src_conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+
+        # Gather all rows per table
+        table_data: dict[str, list[dict[str, Any]]] = {}
+        for t in tables:
+            name = t["name"]
+            rows = src_conn.execute(f"SELECT * FROM [{name}]").fetchall()
+            table_data[name] = [dict(r) for r in rows]
+
+        src_conn.close()
+
+        # ── 2. Create fresh encrypted DB with identical schema ─────────
+        conn_enc = sqlcipher_module.connect(tmp_path, check_same_thread=False)
+        conn_enc.execute(f"PRAGMA key = \"x'{key.decode()}'\"")
+        conn_enc.execute("PRAGMA cipher_compatibility = 4")
+
+        for t in tables:
+            if t["sql"]:
+                conn_enc.execute(t["sql"])
+        for idx in indexes:
+            if idx["sql"]:
+                conn_enc.execute(idx["sql"])
+
+        # ── 3. Copy data rows ────────────────────────────────────────────
+        for name, rows in table_data.items():
+            if not rows:
+                continue
+            cols = ", ".join(f"[{c}]" for c in rows[0])
+            placeholders = ", ".join("?" for _ in rows[0])
+            for row in rows:
+                conn_enc.execute(
+                    f"INSERT INTO [{name}] ({cols}) VALUES ({placeholders})",
+                    list(row.values()),
+                )
+
+        conn_enc.commit()
+        conn_enc.close()
+
+        # ── 4. Verify the encrypted copy is readable ─────────────────────
+        conn_check = sqlcipher_module.connect(tmp_path, check_same_thread=False)
+        conn_check.execute(f"PRAGMA key = \"x'{key.decode()}'\"")
+        conn_check.execute("SELECT count(*) FROM sqlite_master")
+        conn_check.close()
+
+        # ── 5. Swap ──────────────────────────────────────────────────────
+        backup_path = db_path + ".pre-encrypted.bak"
+        shutil.move(db_path, backup_path)
+        shutil.move(tmp_path, db_path)
+        logger.info(
+            "Migrated plaintext DB to sqlcipher encryption (backup saved: %s)",
+            backup_path,
+        )
+    except Exception as exc:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise RuntimeError(f"Failed to migrate plaintext DB to encrypted: {exc}") from exc
+
+
 def connect_encrypted(db_path: str) -> sqlite3.Connection:
-    """Open an encrypted SQLite connection via sqlcipher3."""
+    """Open an encrypted SQLite connection via sqlcipher3.
+
+    If the database file exists but is plaintext SQLite (e.g. upgraded from
+    an older version), it is automatically re-encrypted in-place.
+    """
     try:
         import sqlcipher3.dbapi2 as sqlcipher  # type: ignore[import-untyped]
     except ImportError:
-        raise ImportError(
-            "sqlcipher3 is required — install with: pip install moment"
-        ) from None
+        raise ImportError("sqlcipher3 is required — install with: pip install moment") from None
 
     key = _get_or_create_db_key()
     if key is None:
@@ -66,11 +158,20 @@ def connect_encrypted(db_path: str) -> sqlite3.Connection:
             "Install keyring: pip install keyring"
         )
 
+    # ── If the file exists but is plain SQLite, migrate it ─────────────
+    if _is_plaintext_sqlite(db_path):
+        logger.info(
+            "Detected plaintext SQLite DB at %s – migrating to encrypted",
+            db_path,
+        )
+        _migrate_plaintext_to_encrypted(db_path, key, sqlcipher)
+
     try:
         conn = sqlcipher.connect(db_path, check_same_thread=False)
         # key is bytes of a hex string (e.g. b"a1b2c3d4...");
         # decode back to hex string for the PRAGMA.
         conn.execute(f"PRAGMA key = \"x'{key.decode()}'\"")
+        conn.execute("PRAGMA cipher_compatibility = 4")
         conn.execute("SELECT count(*) FROM sqlite_master")
         logger.info("Opened encrypted database with sqlcipher3")
         return conn
@@ -358,9 +459,7 @@ def _migration_002_add_discord_user_id(conn: sqlite3.Connection) -> None:
     rows = conn.execute("PRAGMA table_info(clips)").fetchall()
     columns = {r["name"] for r in rows}
     if "discord_user_id" not in columns:
-        conn.execute(
-            "ALTER TABLE clips ADD COLUMN discord_user_id TEXT NOT NULL DEFAULT ''"
-        )
+        conn.execute("ALTER TABLE clips ADD COLUMN discord_user_id TEXT NOT NULL DEFAULT ''")
         logger.info("Migration 002: Added discord_user_id column")
 
 
@@ -369,9 +468,7 @@ def _migration_003_add_include_clip_url(conn: sqlite3.Connection) -> None:
     rows = conn.execute("PRAGMA table_info(webhooks)").fetchall()
     columns = {r["name"] for r in rows}
     if "include_clip_url" not in columns:
-        conn.execute(
-            "ALTER TABLE webhooks ADD COLUMN include_clip_url INTEGER NOT NULL DEFAULT 0"
-        )
+        conn.execute("ALTER TABLE webhooks ADD COLUMN include_clip_url INTEGER NOT NULL DEFAULT 0")
         logger.info("Migration 003: Added include_clip_url column")
 
 
@@ -584,7 +681,7 @@ class BaseRepository:
             except sqlite3.OperationalError as exc:
                 if "database is locked" in str(exc).lower():
                     last_err = exc
-                    delay = 0.01 * (2 ** attempt)
+                    delay = 0.01 * (2**attempt)
                     logger.debug(
                         "SQLITE_BUSY on attempt %d/%d — sleeping %.3fs",
                         attempt + 1,
@@ -611,7 +708,7 @@ class BaseRepository:
                         break
                     except sqlite3.OperationalError as exc:
                         if "database is locked" in str(exc).lower():
-                            delay = 0.01 * (2 ** attempt)
+                            delay = 0.01 * (2**attempt)
                             logger.debug(
                                 "SQLITE_BUSY on commit attempt %d/5 — sleeping %.3fs",
                                 attempt + 1,
@@ -622,18 +719,14 @@ class BaseRepository:
                             raise
                 else:
                     self._conn.rollback()
-                    raise sqlite3.OperationalError(
-                        "database is locked (commit retries exhausted)"
-                    )
+                    raise sqlite3.OperationalError("database is locked (commit retries exhausted)")
             except Exception:
                 self._conn.rollback()
                 raise
             finally:
                 cur.close()
 
-    def execute_many(
-        self, sql: str, params_list: list[tuple[Any, ...]]
-    ) -> sqlite3.Cursor:
+    def execute_many(self, sql: str, params_list: list[tuple[Any, ...]]) -> sqlite3.Cursor:
         """Batch execute with retry."""
         with self._lock:
             cur = self._conn.cursor()
