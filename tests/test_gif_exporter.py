@@ -1,10 +1,12 @@
 """Tests for moment.ui.editor.gif_exporter — GifExporter."""
 
 from __future__ import annotations
+import pytest
 
 from unittest.mock import patch
 
 from moment.ui.editor.gif_exporter import GifExporter
+pytestmark = [pytest.mark.gui]
 
 
 class TestGifExporterInit:
@@ -44,7 +46,6 @@ class TestGifExporterInit:
         dialog = GifExporter(clip_id="test", duration=10.0)
         assert dialog.isModal()
 
-
 class TestGifExporterSettings:
     def test_resolution_change(self, qapp):
         dialog = GifExporter(clip_id="test", duration=10.0)
@@ -61,7 +62,6 @@ class TestGifExporterSettings:
         dialog._fps = 15
         dialog._on_fps("not-a-number")
         assert dialog._fps == 15  # unchanged
-
 
 class TestGifExporterExport:
     def test_export_no_source(self, qapp):
@@ -89,7 +89,6 @@ class TestGifExporterExport:
         dialog._on_export()
         assert dialog._running
 
-
 class TestGifExporterFinish:
     def test_finish_re_enables_ui(self, qapp):
         dialog = GifExporter(clip_id="test", duration=10.0)
@@ -109,7 +108,6 @@ class TestGifExporterFinish:
         assert not dialog._running
         assert dialog._export_btn.isEnabled()
 
-
 class TestGifExporterClose:
     def test_close_event_stops_running(self, qapp):
         dialog = GifExporter(clip_id="test", duration=10.0)
@@ -117,7 +115,6 @@ class TestGifExporterClose:
         from PyQt6.QtGui import QCloseEvent
         dialog.closeEvent(QCloseEvent())
         assert not dialog._running
-
 
 class TestGifExporterBrowse:
     @patch("moment.ui.editor.gif_exporter.QFileDialog.getSaveFileName")
@@ -135,3 +132,5 @@ class TestGifExporterBrowse:
         original = dialog._output_path
         dialog._on_browse_output()
         assert dialog._output_path == original  # unchanged
+
+

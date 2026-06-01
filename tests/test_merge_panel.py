@@ -9,9 +9,11 @@ from PyQt6.QtCore import Qt
 
 from moment.core.models import Clip, ClipStatus, ClipType
 from moment.ui.editor.merge_panel import MergePanel
+pytestmark = [pytest.mark.gui]
 
 
 @pytest.fixture
+
 def mock_store():
     store = MagicMock()
     store.get_clip.return_value = Clip(
@@ -26,7 +28,6 @@ def mock_store():
         clip_type=ClipType.VIDEO,
     )
     return store
-
 
 class TestMergePanelInit:
     def test_creates_with_store(self, qapp, mock_store):
@@ -45,7 +46,6 @@ class TestMergePanelInit:
         panel = MergePanel(mock_store)
         assert hasattr(panel, "profile_changed")
         assert hasattr(panel, "preview_requested")
-
 
 class TestMergePanelClipOps:
     def test_add_clip(self, qapp, mock_store):
@@ -89,7 +89,6 @@ class TestMergePanelClipOps:
         panel._on_remove_clip()
         assert panel.clip_ids == []
 
-
 class TestMergePanelReorder:
     def test_move_up(self, qapp, mock_store):
         panel = MergePanel(mock_store)
@@ -125,7 +124,6 @@ class TestMergePanelReorder:
         panel._on_move_down()
         assert panel.clip_ids == ["a", "b"]
 
-
 class TestMergePanelPreview:
     def test_preview_no_clips(self, qapp, mock_store):
         panel = MergePanel(mock_store)
@@ -143,7 +141,6 @@ class TestMergePanelPreview:
         panel._on_preview()
         assert fired == [["a", "b"]]
 
-
 class TestMergePanelRefreshList:
     def test_refresh_list_labels(self, qapp, mock_store):
         panel = MergePanel(mock_store)
@@ -152,3 +149,5 @@ class TestMergePanelRefreshList:
         assert panel._list.count() == 2
         item0 = panel._list.item(0)
         assert item0.data(Qt.ItemDataRole.UserRole) == "abc"
+
+

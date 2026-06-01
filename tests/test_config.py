@@ -10,11 +10,14 @@ from unittest.mock import patch
 import pytest
 
 from moment.core.config import Config
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def tmp_db() -> str:
     """Return a path to a temporary SQLite database for config testing."""
+
     fd, path = tempfile.mkstemp(suffix=".db", prefix="config_test_")
     os.close(fd)
     yield path
@@ -25,11 +28,9 @@ def tmp_db() -> str:
     except FileNotFoundError:
         pass
 
-
 @pytest.fixture
 def config(tmp_db: str) -> Config:
     return Config(db_path=tmp_db)
-
 
 class TestConfig:
     def test_get_default(self, config: Config) -> None:
@@ -72,7 +73,6 @@ class TestConfig:
         config.set("autostart", True)
         config.set("autostart", False)
         assert config.get("autostart") is False
-
 
 class TestKeyWhitelist:
     """Spec 19 — Config key whitelist and path validation."""
@@ -136,7 +136,6 @@ class TestKeyWhitelist:
         for key in known:
             config.set(key, "test_value")
 
-
 class TestGetPath:
     def test_get_path_default(self, config: Config) -> None:
         """get_path returns default when no override is set."""
@@ -162,7 +161,6 @@ class TestGetPath:
         """An empty path override string falls back to default."""
         config.set_path("thumb_dir", "")
         assert config.get_path("thumb_dir") == os.path.expanduser("~/.local/share/moment/thumbnails")
-
 
 class TestGSRSettings:
     def test_get_gsr_setting_default(self, config: Config) -> None:
@@ -194,7 +192,6 @@ class TestGSRSettings:
         config.set_gsr_setting("replay_enabled", True)
         assert config.replay_enabled is True
 
-
 class TestCodecPreferences:
     def test_get_preferred_codec_default(self, config: Config) -> None:
         """get_preferred_codec returns 'auto' by default."""
@@ -216,7 +213,6 @@ class TestCodecPreferences:
         with patch("moment.utils.ffmpeg.reset_best_encoder") as mock_reset:
             config.set_preferred_codec("auto")
             mock_reset.assert_called_once()
-
 
 class TestConfigPathTraversal:
     def test_path_traversal_rejected(self, config: Config) -> None:
@@ -253,7 +249,6 @@ class TestConfigPathTraversal:
         """Setting a key not in _ALLOWED_KEYS or _ALLOWED_PREFIXES raises ValueError."""
         with pytest.raises(ValueError, match="Unknown config key"):
             config.set("nonexistent_key", "value")
-
 
 class TestConfigThreadSafety:
     def test_concurrent_writes_do_not_corrupt(self, config: Config) -> None:
@@ -338,7 +333,6 @@ class TestConfigThreadSafety:
 
         assert len(errors) == 0, f"Errors: {errors}"
 
-
 class TestConfigDelete:
     def test_delete_nonexistent_key_does_not_raise(self, config: Config) -> None:
         """Deleting a non-existent key should not raise."""
@@ -349,7 +343,6 @@ class TestConfigDelete:
         config.set("toast_success", False)
         config.delete("toast_success")
         assert config.get("toast_success", default=True) is True
-
 
 class TestConfigGetAll:
     def test_get_all_returns_dict(self, config: Config) -> None:
@@ -367,7 +360,6 @@ class TestConfigGetAll:
         all_settings = config.get_all()
         # There may be leftover keys from other tests
         assert isinstance(all_settings, dict)
-
 
 class TestAutostart:
     def test_is_autostart_enabled_initially_false(self, config: Config) -> None:
@@ -438,3 +430,5 @@ class TestAutostart:
             assert config.is_autostart_enabled() is True
             assert config.disable_autostart() is True
             assert config.is_autostart_enabled() is False
+
+

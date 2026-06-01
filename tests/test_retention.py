@@ -21,18 +21,20 @@ import pytest
 from moment.core.config import Config
 from moment.core.models import Clip, ClipStatus
 from moment.core.retention import (
+
     CLOUD_SIZE_LIMIT_BYTES,
     RetentionManager,
     _age_str,
 )
 from moment.core.store import Store
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def trash_dir(tmp_path: Path) -> str:
     """Use a temporary directory as the trash dir."""
     return str(tmp_path / "trash")
-
 
 @pytest.fixture
 def manager(store: Store, trash_dir: str) -> RetentionManager:
@@ -45,7 +47,6 @@ def manager(store: Store, trash_dir: str) -> RetentionManager:
     )
     yield m
     m.stop()
-
 
 def _make_clip(
     store: Store, *, id: str, stem: str = "", source_path: str = "",
@@ -60,7 +61,6 @@ def _make_clip(
     )
     store.insert_clip(clip)
     return clip
-
 
 # ---------------------------------------------------------------------------
 # Age string helper
@@ -82,7 +82,6 @@ class TestAgeString:
     def test_minutes(self) -> None:
         dt = datetime.now(timezone.utc) - timedelta(minutes=30)
         assert _age_str(dt) == "30m"
-
 
 # ---------------------------------------------------------------------------
 # Source age enforcement
@@ -138,7 +137,6 @@ class TestSourceAge:
             purged, _ = manager._enforce_source_age()
             assert purged == 0
 
-
 # ---------------------------------------------------------------------------
 # Encoded age enforcement
 # ---------------------------------------------------------------------------
@@ -183,7 +181,6 @@ class TestEncodedAge:
 
         purged, _ = manager._enforce_encoded_age()
         assert purged == 0
-
 
 # ---------------------------------------------------------------------------
 # Error / Corrupt clips are skipped by default
@@ -257,7 +254,6 @@ class TestErrorCorruptSkipping:
 
         m.stop()
 
-
 # ---------------------------------------------------------------------------
 # Trash days = 0 (permanent delete)
 # ---------------------------------------------------------------------------
@@ -297,7 +293,6 @@ class TestTrashDaysZero:
             mock_move.assert_not_called()
 
         m.stop()
-
 
 # ---------------------------------------------------------------------------
 # Cloud FIFO enforcement (unchanged — soft-deletes, no file ops)
@@ -360,7 +355,6 @@ class TestCloudFIFO:
         purged, _ = manager._enforce_cloud_limit()
         assert purged == 0
 
-
 # ---------------------------------------------------------------------------
 # Full enforce
 # ---------------------------------------------------------------------------
@@ -377,7 +371,6 @@ class TestEnforce:
         purged, freed = manager.enforce()
         assert purged == 0
         assert freed == 0
-
 
 # ---------------------------------------------------------------------------
 # Callbacks
@@ -424,7 +417,6 @@ class TestCallbacks:
         m.enforce()
         assert len(purged_data) == 0
         m.stop()
-
 
 # ---------------------------------------------------------------------------
 # Start / Stop
@@ -511,7 +503,6 @@ class TestStartStop:
             # Should be 0 because move failed but the exception was caught
             assert purged >= 0
 
-
 class TestOSErrorHandlers:
     def test_encoded_oserror_logged(self, manager: RetentionManager, store: Store) -> None:
         """OSError during encoded file trash is logged, not fatal."""
@@ -533,11 +524,9 @@ class TestOSErrorHandlers:
             purged, freed = manager._enforce_encoded_age()
             assert purged >= 0
 
-
 # ---------------------------------------------------------------------------
 # Concurrent insert + enforce
 # ---------------------------------------------------------------------------
-
 
 class TestConcurrentInsertEnforce:
     def test_insert_during_enforce_does_not_crash(self, manager: RetentionManager, store: Store) -> None:
@@ -580,11 +569,9 @@ class TestConcurrentInsertEnforce:
         for i in range(50):
             assert store.get_clip(f"concurrent-{i}") is not None
 
-
 # ---------------------------------------------------------------------------
 # Retention startup edge cases
 # ---------------------------------------------------------------------------
-
 
 class TestRetentionStartup:
     def test_startup_enforce_does_not_raise_on_empty_db(self, store: Store, trash_dir: str) -> None:
@@ -627,11 +614,9 @@ class TestRetentionStartup:
             assert m.is_running
             m.stop()
 
-
 # ---------------------------------------------------------------------------
 # Trash file path injection
 # ---------------------------------------------------------------------------
-
 
 class TestTrashPathInjection:
     def test_trash_path_with_special_chars(self, manager: RetentionManager, store: Store, tmp_path: Path) -> None:
@@ -681,3 +666,5 @@ class TestTrashPathInjection:
             assert purged >= 1
             dest = mock_move.call_args[0][1]
             assert str(dest).startswith(manager._trash_dir)
+
+

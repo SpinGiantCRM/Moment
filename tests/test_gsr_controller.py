@@ -12,23 +12,24 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from moment.core.gsr_controller import (
+
     _MAX_RESTARTS,
     GSR_BINARY,
     GSRController,
     GSRControllerError,
 )
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def gsr() -> GSRController:
     """Return a GSRController with defaults — no real subprocess."""
     return GSRController(output_dir="/tmp/test_videos")
 
-
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
-
 
 class TestInit:
     def test_defaults(self) -> None:
@@ -47,11 +48,9 @@ class TestInit:
         assert ctrl._on_crash is not None
         assert len(called) == 0
 
-
 # ---------------------------------------------------------------------------
 # Binary check
 # ---------------------------------------------------------------------------
-
 
 class TestBinaryCheck:
     def test_missing_binary_raises(self, gsr: GSRController) -> None:
@@ -75,11 +74,9 @@ class TestBinaryCheck:
             assert gsr.is_recording
             mock_popen.assert_called_once()
 
-
 # ---------------------------------------------------------------------------
 # Process lifecycle
 # ---------------------------------------------------------------------------
-
 
 class TestLifecycle:
     def test_start_creates_output_dir(self, gsr: GSRController) -> None:
@@ -138,11 +135,9 @@ class TestLifecycle:
     def test_stop_when_not_running_is_noop(self, gsr: GSRController) -> None:
         gsr.stop()  # should not raise
 
-
 # ---------------------------------------------------------------------------
 # save_replay (SIGUSR1)
 # ---------------------------------------------------------------------------
-
 
 class TestSaveReplay:
     def test_sends_sigusr1(self, gsr: GSRController) -> None:
@@ -203,11 +198,9 @@ class TestSaveReplay:
             gsr.save_replay()
             mock_kill.assert_not_called()
 
-
 # ---------------------------------------------------------------------------
 # Command building
 # ---------------------------------------------------------------------------
-
 
 class TestBuildCommand:
     def test_minimal_command(self, gsr: GSRController) -> None:
@@ -229,11 +222,9 @@ class TestBuildCommand:
         assert "-a" in cmd
         assert "default" in cmd
 
-
 # ---------------------------------------------------------------------------
 # Crash recovery (monitor thread)
 # ---------------------------------------------------------------------------
-
 
 class TestCrashRecovery:
     def test_crash_auto_restart(self, gsr: GSRController) -> None:
@@ -317,11 +308,9 @@ class TestCrashRecovery:
             gsr._monitor_process()
             mock_spawn.assert_not_called()
 
-
 # ---------------------------------------------------------------------------
 # Restart budget
 # ---------------------------------------------------------------------------
-
 
 class TestCanRestart:
     def test_under_limit(self, gsr: GSRController) -> None:
@@ -333,11 +322,9 @@ class TestCanRestart:
         gsr._restart_timestamps = deque([now] * (_MAX_RESTARTS + 1), maxlen=11)
         assert not gsr._can_restart()
 
-
 # ---------------------------------------------------------------------------
 # is_recording / pid
 # ---------------------------------------------------------------------------
-
 
 class TestQueries:
     def test_not_recording_initially(self, gsr: GSRController) -> None:
@@ -359,11 +346,9 @@ class TestQueries:
             assert gsr.is_recording
             assert gsr.pid == 42
 
-
 # ---------------------------------------------------------------------------
 # _stop_process_unlocked
 # ---------------------------------------------------------------------------
-
 
 class TestStopProcess:
     def test_sigterm_then_sigkill(self, gsr: GSRController) -> None:
@@ -386,3 +371,5 @@ class TestStopProcess:
     def test_none_proc(self, gsr: GSRController) -> None:
         gsr._proc = None
         gsr._stop_process_unlocked()  # should not raise
+
+

@@ -1,13 +1,16 @@
 """Tests for context_menu.py — right-click clip context menu builder."""
 
 from __future__ import annotations
+import pytest
 
 from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 from moment.ui.widgets.context_menu import ContextMenuBuilder
+pytestmark = [pytest.mark.gui]
 
 
 def _make_clip(**kwargs) -> Clip:
     """Create a minimal Clip for testing."""
+
     defaults = {
         "id": "test-id",
         "stem": "test",
@@ -19,7 +22,6 @@ def _make_clip(**kwargs) -> Clip:
     }
     defaults.update(kwargs)
     return Clip(**defaults)
-
 
 class TestContextMenuBuilderInit:
     """Tests for ContextMenuBuilder construction."""
@@ -44,7 +46,6 @@ class TestContextMenuBuilderInit:
         ]
         for name in signal_names:
             assert hasattr(ContextMenuBuilder, name), f"Missing signal: {name}"
-
 
 class TestContextMenuBuilderBuild:
     """Tests for build() method."""
@@ -147,7 +148,6 @@ class TestContextMenuBuilderBuild:
             if action and "Unprotect" in (action.text() or ""):
                 assert "Unprotect" in action.text()
 
-
 class TestContextMenuBuilderSignals:
     """Tests for actions exist and are wired to the correct clip_id.
 
@@ -202,3 +202,5 @@ class TestContextMenuBuilderSignals:
         menu = builder.build()
         texts = [a.text() for a in menu.actions() if a]
         assert any("encode" in t.lower() for t in texts)
+
+

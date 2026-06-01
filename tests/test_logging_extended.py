@@ -138,6 +138,8 @@ class TestLogDuration:
     def test_context_manager_reports_elapsed_seconds(self, caplog: pytest.LogCaptureFixture) -> None:
         """Duration is logged in seconds with 3 decimal places."""
         caplog.set_level(logging.DEBUG, logger="moment.performance")
+        # Intentional small sleep: LogDuration measures wall-clock time; a
+        # deterministic replacement would require mocking time.monotonic.
         with LogDuration("sleep op"):
             time.sleep(0.01)
         match = None
@@ -165,6 +167,8 @@ class TestLogDuration:
     def test_warn_threshold_triggers_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """When duration exceeds warn_threshold, log level is WARNING."""
         caplog.set_level(logging.WARNING, logger="moment.performance")
+        # Intentional small sleep: LogDuration measures wall-clock time;
+        # mocking time.monotonic would bypass the real logging path.
         with LogDuration("slow op", warn_threshold=0.001):
             time.sleep(0.01)
         assert any(

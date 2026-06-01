@@ -12,6 +12,7 @@ import os
 import sqlite3
 import threading
 from pathlib import Path
+from os.path import commonpath
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -210,9 +211,18 @@ class Config:
         # Path validation for path_* keys
         if key.startswith("path_") and isinstance(value, str) and value.strip():
             resolved = Path(os.path.expanduser(value)).resolve()
-            if not any(
-                str(resolved).startswith(root) for root in _ALLOWED_PATH_ROOTS
-            ):
+            # Use commonpath to prevent prefix-matching bypass
+            # (e.g. /tmp_evil must not match allowed root /tmp)
+            resolved_str = str(resolved)
+            ok = False
+            for root in _ALLOWED_PATH_ROOTS:
+                try:
+                    if commonpath([resolved_str, root]) == root:
+                        ok = True
+                        break
+                except ValueError:
+                    continue
+            if not ok:
                 caller = _caller_frame()
                 logger.warning(
                     "Rejected config write for '%s': path %s outside allowed roots (caller: %s)",

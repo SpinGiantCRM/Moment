@@ -96,15 +96,27 @@ def _sandbox_preexec() -> None:
     # Drop setuid / setgid privileges if elevated
     try:
         if os.getuid() == 0:
-            # Running as root — drop to the original real user
+            # Running as root — drop supplementary groups first, then uid/gid
+            os.setgroups([])
             os.setgid(os.getgid())
             os.setuid(os.getuid())
     except OSError:
         logger.debug("Failed to drop privileges in sandbox")  # non-fatal — not running as root
 
-    # Close inherited file descriptors beyond stdin/stdout/stderr
+    # Close inherited file descriptors beyond stdin/stdout/stderr.
+    # Use /proc/self/fd for dynamic upper bound on Linux (avoids FD 257+ leaks).
     try:
-        os.closerange(3, _FD_CLOSE_MAX)
+        fd_dir = "/proc/self/fd"
+        if os.path.isdir(fd_dir):
+            for entry in os.listdir(fd_dir):
+                try:
+                    fd = int(entry)
+                    if fd > 2:
+                        os.close(fd)
+                except (ValueError, OSError):
+                    pass
+        else:
+            os.closerange(3, _FD_CLOSE_MAX)
     except OSError:
         logger.debug("Failed to close inherited file descriptors in sandbox")  # non-fatal
 
@@ -362,6 +374,11 @@ def _try_qprocess(
     finished = proc.waitForFinished(
         int(timeout * 1000) if timeout is not None else 300000  # 5 min default
     )
+
+    # Kill on timeout to prevent zombie process accumulation
+    if not finished:
+        proc.kill()
+        proc.waitForFinished(5000)  # 5s grace for cleanup
 
     stdout = bytes(proc.readAllStandardOutput()).decode(errors="replace")
     stderr = bytes(proc.readAllStandardError()).decode(errors="replace")

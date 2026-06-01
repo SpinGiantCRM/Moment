@@ -11,17 +11,17 @@ import pytest
 from moment.core.models import Clip
 from moment.core.thumbnail import DEFAULT_CACHE_SIZE, Thumbnailer
 from moment.utils.ffmpeg import FFmpegError
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def thumb_dir(tmp_path: Path) -> str:
     return str(tmp_path / "thumbnails")
-
 
 @pytest.fixture
 def thumbnailer(thumb_dir: str) -> Thumbnailer:
     return Thumbnailer(thumb_dir=thumb_dir, max_cache=5, max_workers=1)
-
 
 @pytest.fixture
 def clip() -> Clip:
@@ -37,7 +37,6 @@ def clip() -> Clip:
         title="Test Thumb Clip",
     )
 
-
 # ---------------------------------------------------------------------------
 # Cache behavior
 # ---------------------------------------------------------------------------
@@ -51,6 +50,7 @@ class TestCache:
 
     def test_generate_returns_none_for_new_clip(self, clip: Clip, thumbnailer: Thumbnailer) -> None:
         """generate() returns None because generation happens async."""
+
         result = thumbnailer.generate(clip)
         assert result is None
 
@@ -67,7 +67,6 @@ class TestCache:
 
         result = thumbnailer.generate(clip)
         assert result == thumb_path
-
 
 # ---------------------------------------------------------------------------
 # Deduplication
@@ -99,7 +98,6 @@ class TestDeduplication:
 
         thumbnailer.generate(clip, callback=cb)
         assert clip.stem in thumbnailer._callbacks
-
 
 # ---------------------------------------------------------------------------
 # Frame extraction (mocked)
@@ -159,7 +157,6 @@ class TestExtractFrame:
                 call_time = mock_extract.call_args[0][2]
                 assert call_time >= 1.0
 
-
 # ---------------------------------------------------------------------------
 # Cache eviction
 # ---------------------------------------------------------------------------
@@ -193,7 +190,6 @@ class TestCacheEviction:
         assert "clip_0" not in thumbnailer._cache
         assert clip.stem in thumbnailer._cache
 
-
 # ---------------------------------------------------------------------------
 # Default thumbnail directory
 # ---------------------------------------------------------------------------
@@ -209,14 +205,12 @@ class TestConfig:
         t = Thumbnailer(config=None, max_cache=100)
         assert t._max_cache == 100
 
-
 class TestDefaultDir:
     def test_default_thumb_dir_is_expanded(self) -> None:
         """Default thumb_dir (no Config) should resolve to an absolute path."""
         t = Thumbnailer(config=None)
         result = str(t._thumb_dir)
         assert result.startswith("/"), f"Expected absolute path, got: {result!r}"
-
 
 # ---------------------------------------------------------------------------
 # Batch generation
@@ -253,7 +247,6 @@ class TestBatch:
         thumbnailer.generate_batch([clip], callback=cb)
         assert clip.stem in thumbnailer._callbacks
 
-
 # ---------------------------------------------------------------------------
 # Shutdown
 # ---------------------------------------------------------------------------
@@ -267,7 +260,6 @@ class TestShutdown:
         """Shutdown twice should not raise."""
         thumbnailer.shutdown()
         thumbnailer.shutdown()  # no-op on second call
-
 
 # ---------------------------------------------------------------------------
 # Config integration
@@ -326,3 +318,5 @@ class TestConfigIntegration:
         with patch.object(t._executor, "shutdown") as mock_shutdown:
             t.__del__()
             mock_shutdown.assert_called_once_with(wait=False)
+
+

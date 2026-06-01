@@ -322,11 +322,10 @@ if _DISCORD_AVAILABLE:
                 )
                 return
 
-            # Visibility enforcement
+            # Visibility enforcement — deny by default when ownership is ambiguous
             if (
                 clip.visibility == ClipVisibility.PRIVATE
-                and clip.discord_user_id
-                and clip.discord_user_id != owner_id
+                and (not clip.discord_user_id or clip.discord_user_id != owner_id)
             ):
                 await interaction.response.send_message(
                     f"❌ Clip `{clip_id}` not found.", ephemeral=True

@@ -1,14 +1,17 @@
 """Tests for ui/editor/music_panel.py — background music configuration."""
 
 from __future__ import annotations
+import pytest
 
 from moment.ui.editor.music_panel import MusicPanel
+pytestmark = [pytest.mark.gui]
 
 
 class TestMusicPanelInit:
     """Tests for MusicPanel construction."""
 
     def test_create(self, qapp) -> None:
+
         panel = MusicPanel()
         assert panel is not None
         assert panel._music_path == ""
@@ -29,7 +32,6 @@ class TestMusicPanelInit:
         panel = MusicPanel()
         assert hasattr(panel, "profile_changed")
 
-
 class TestMusicPanelWidgets:
     """Tests for widget existence."""
 
@@ -49,7 +51,6 @@ class TestMusicPanelWidgets:
     def test_loop_checkbox_exists(self, qapp) -> None:
         panel = MusicPanel()
         assert panel._loop_check is not None
-
 
 class TestMusicPanelStateChanges:
     """Tests for state mutation handlers."""
@@ -94,3 +95,5 @@ class TestMusicPanelStateChanges:
         assert panel.fade_in == 1.0
         assert panel.fade_out == 2.0
         assert panel.loop is True
+
+

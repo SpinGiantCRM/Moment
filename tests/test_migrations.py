@@ -16,6 +16,7 @@ from moment.core.migrations import (
     migrate_from_json,
     migrate_old_dirs,
 )
+pytestmark = [pytest.mark.integration]
 
 
 class TestMigrateOldDirs:
@@ -66,10 +67,10 @@ class TestMigrateOldDirs:
             # Old should still exist since rename failed
             assert old.is_dir()
 
-
 class TestMigrateFromJson:
     def test_no_file_returns_zero(self, store, tmp_path: Path) -> None:
         """When old_path doesn't exist, returns 0."""
+
         result = migrate_from_json(store, tmp_path / "nonexistent.json")
         assert result == 0
 
@@ -144,3 +145,5 @@ class TestMigrateFromJson:
         with patch("os.rename", side_effect=OSError("read-only filesystem")):
             result = migrate_from_json(store, json_path)
             assert result == 0  # empty array, no clips imported
+
+

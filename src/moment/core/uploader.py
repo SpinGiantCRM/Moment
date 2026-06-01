@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import subprocess  # nosec B404 — required for CalledProcessError exception type
 import threading
@@ -78,6 +79,18 @@ class Uploader:
             base_url or _cfg_path("base_url")
             or _env("MOMENT_BASE_URL", "")
         ).rstrip("/")
+
+        # Validate remote and bucket names to prevent rclone flag injection
+        if not re.match(r'^[a-zA-Z0-9_-]+$', self._remote):
+            raise UploaderError(
+                f"Invalid rclone remote name: {self._remote!r} — "
+                f"must contain only alphanumeric characters, hyphens, and underscores"
+            )
+        if not re.match(r'^[a-zA-Z0-9_.-]+$', self._bucket):
+            raise UploaderError(
+                f"Invalid rclone bucket name: {self._bucket!r} — "
+                f"must contain only alphanumeric characters, dots, hyphens, and underscores"
+            )
 
         # Lazily check rclone availability
         self._rclone_path: str | None = None

@@ -1,9 +1,17 @@
 """Tests for dialogs/trim_dialog.py — dual-handle timeline trim dialog."""
 
 from __future__ import annotations
+import pytest
 
 from moment.ui.dialogs.trim_dialog import TrimDialog, _format_time
+pytestmark = [pytest.mark.gui]
 
+
+def _cleanup_trim_dlg(dlg: TrimDialog) -> None:
+    """Close and schedule a TrimDialog for deferred deletion."""
+
+    dlg.close()
+    dlg.deleteLater()
 
 class TestFormatTime:
     """Tests for the _format_time helper."""
@@ -26,7 +34,6 @@ class TestFormatTime:
     def test_negative_clamped(self) -> None:
         assert _format_time(-10) == "0:00"
 
-
 class TestTrimDialogInit:
     """Tests for TrimDialog construction."""
 
@@ -36,42 +43,50 @@ class TestTrimDialogInit:
         assert dlg._duration == 60.0
         assert dlg._start == 0.0
         assert dlg._end == 60.0
+        _cleanup_trim_dlg(dlg)
 
     def test_create_with_custom_range(self, qapp) -> None:
         dlg = TrimDialog(duration=120.0, start=10.0, end=110.0)
         assert dlg._start == 10.0
         assert dlg._end == 110.0
+        _cleanup_trim_dlg(dlg)
 
     def test_duration_clamped_min(self, qapp) -> None:
         dlg = TrimDialog(duration=0.0)
         assert dlg._duration == 0.1
+        _cleanup_trim_dlg(dlg)
 
     def test_negative_start_clamped(self, qapp) -> None:
         dlg = TrimDialog(duration=60.0, start=-5.0)
         assert dlg._start == 0.0
+        _cleanup_trim_dlg(dlg)
 
     def test_end_exceeds_duration_clamped(self, qapp) -> None:
         dlg = TrimDialog(duration=30.0, end=50.0)
         assert dlg._end == 30.0
+        _cleanup_trim_dlg(dlg)
 
     def test_is_modal(self, qapp) -> None:
         dlg = TrimDialog(duration=10.0)
         assert dlg.isModal()
+        _cleanup_trim_dlg(dlg)
 
     def test_apply_button_initially_enabled(self, qapp) -> None:
         dlg = TrimDialog(duration=60.0, start=10.0, end=50.0)
         assert dlg._apply_btn.isEnabled()
+        _cleanup_trim_dlg(dlg)
 
     def test_apply_button_disabled_when_invalid(self, qapp) -> None:
         dlg = TrimDialog(duration=60.0, start=50.0, end=10.0)
         dlg._apply_btn.setEnabled(False)
         assert not dlg._apply_btn.isEnabled()
+        _cleanup_trim_dlg(dlg)
 
     def test_minimum_size(self, qapp) -> None:
         dlg = TrimDialog(duration=60.0)
         assert dlg.minimumWidth() >= 400
         assert dlg.minimumHeight() >= 150
-
+        _cleanup_trim_dlg(dlg)
 
 class TestTrimDialogProperties:
     """Tests for trim_start and trim_end properties."""
@@ -79,11 +94,12 @@ class TestTrimDialogProperties:
     def test_trim_start_property(self, qapp) -> None:
         dlg = TrimDialog(duration=60.0, start=15.0, end=45.0)
         assert dlg.trim_start == 15.0
+        _cleanup_trim_dlg(dlg)
 
     def test_trim_end_property(self, qapp) -> None:
         dlg = TrimDialog(duration=60.0, start=15.0, end=45.0)
         assert dlg.trim_end == 45.0
-
+        _cleanup_trim_dlg(dlg)
 
 class TestTrimDialogApply:
     """Tests for the Apply button behavior."""
@@ -95,6 +111,7 @@ class TestTrimDialogApply:
         dlg._apply()
         assert emitted == [(10.0, 50.0)]
         assert dlg.result() == 1
+        _cleanup_trim_dlg(dlg)
 
     def test_apply_ignored_when_start_equals_end(self, qapp) -> None:
         dlg = TrimDialog(duration=60.0, start=30.0, end=30.0)
@@ -103,7 +120,7 @@ class TestTrimDialogApply:
         dlg._apply()
         assert emitted == []
         assert dlg.result() == 1
-
+        _cleanup_trim_dlg(dlg)
 
 class TestTrimDialogLabels:
     """Tests for time label updates."""
@@ -116,17 +133,19 @@ class TestTrimDialogLabels:
         assert "In: 0:10" in dlg._in_label.text()
         assert "Out: 1:30" in dlg._out_label.text()
         assert dlg._apply_btn.isEnabled()
+        _cleanup_trim_dlg(dlg)
 
     def test_trim_changed_invalid_disables_apply(self, qapp) -> None:
         dlg = TrimDialog(duration=120.0, start=10.0, end=90.0)
         dlg._on_trim_changed(80.0, 20.0)
         assert not dlg._apply_btn.isEnabled()
+        _cleanup_trim_dlg(dlg)
 
     def test_cancel_closes(self, qapp) -> None:
         dlg = TrimDialog(duration=60.0)
         dlg.reject()
         assert dlg.result() == 0
-
+        _cleanup_trim_dlg(dlg)
 
 class TestTrimDialogKeyboard:
     """Tests for keyboard shortcuts."""
@@ -139,6 +158,7 @@ class TestTrimDialogKeyboard:
         event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_I,
                           Qt.KeyboardModifier.NoModifier)
         dlg.keyPressEvent(event)  # Should not raise
+        _cleanup_trim_dlg(dlg)
 
     def test_o_key_marks_out(self, qapp) -> None:
         from PyQt6.QtCore import Qt
@@ -148,6 +168,7 @@ class TestTrimDialogKeyboard:
         event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_O,
                           Qt.KeyboardModifier.NoModifier)
         dlg.keyPressEvent(event)  # Should not raise
+        _cleanup_trim_dlg(dlg)
 
     def test_enter_applies(self, qapp) -> None:
         from PyQt6.QtCore import Qt
@@ -158,6 +179,7 @@ class TestTrimDialogKeyboard:
                           Qt.KeyboardModifier.NoModifier)
         dlg.keyPressEvent(event)
         assert dlg.result() == 1
+        _cleanup_trim_dlg(dlg)
 
     def test_escape_cancels(self, qapp) -> None:
         from PyQt6.QtCore import Qt
@@ -168,3 +190,6 @@ class TestTrimDialogKeyboard:
                           Qt.KeyboardModifier.NoModifier)
         dlg.keyPressEvent(event)
         assert dlg.result() == 0
+        _cleanup_trim_dlg(dlg)
+
+

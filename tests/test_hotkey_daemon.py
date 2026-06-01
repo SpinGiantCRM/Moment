@@ -20,6 +20,7 @@ from moment.core.hotkey_daemon import (
 # ---------------------------------------------------------------------------
 # HotkeyAction enum
 # ---------------------------------------------------------------------------
+pytestmark = [pytest.mark.integration]
 
 
 class TestHotkeyAction:
@@ -30,11 +31,9 @@ class TestHotkeyAction:
         assert hasattr(HotkeyAction, "SCREENSHOT")
         assert hasattr(HotkeyAction, "BOOKMARK")
 
-
 # ---------------------------------------------------------------------------
 # SigrtminBackend
 # ---------------------------------------------------------------------------
-
 
 class TestSigrtminBackend:
     def test_start_stop_noop(self) -> None:
@@ -43,11 +42,9 @@ class TestSigrtminBackend:
         backend.stop()
         # Should not raise
 
-
 # ---------------------------------------------------------------------------
 # KdeBackend
 # ---------------------------------------------------------------------------
-
 
 class TestKdeBackend:
     def test_unavailable_when_no_dbus(self) -> None:
@@ -64,11 +61,9 @@ class TestKdeBackend:
             with pytest.raises(RuntimeError, match="dbus"):
                 backend.start()
 
-
 # ---------------------------------------------------------------------------
 # X11Backend
 # ---------------------------------------------------------------------------
-
 
 class TestX11Backend:
     def test_lifecycle(self) -> None:
@@ -79,16 +74,13 @@ class TestX11Backend:
             assert backend._thread is not None
             backend.stop()
 
-
 # ---------------------------------------------------------------------------
 # HotkeyDaemon
 # ---------------------------------------------------------------------------
 
-
 @pytest.fixture
 def daemon() -> HotkeyDaemon:
     return HotkeyDaemon()
-
 
 class TestHotkeyDaemon:
     def test_not_running_initially(self, daemon: HotkeyDaemon) -> None:
@@ -97,6 +89,7 @@ class TestHotkeyDaemon:
 
     def test_start_uses_sigrtmin_fallback(self, daemon: HotkeyDaemon) -> None:
         """With no KDE or X11 available, falls back to sigrtmin."""
+
         with (
             patch(
                 "moment.core.hotkey_daemon._KdeBackend",
@@ -134,11 +127,9 @@ class TestHotkeyDaemon:
         daemon = HotkeyDaemon(bindings=custom)
         assert daemon._bindings == custom
 
-
 # ---------------------------------------------------------------------------
 # Hotkey trigger + debounce
 # ---------------------------------------------------------------------------
-
 
 class TestHotkeyTrigger:
     def test_trigger_fires_callback(self) -> None:
@@ -261,3 +252,5 @@ class TestHotkeyTrigger:
         daemon._handle_action(HotkeyAction.SAVE_30S)
 
         daemon.stop()
+
+

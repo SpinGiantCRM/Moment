@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+pytestmark = [pytest.mark.integration]
 
 
 class TestCheckAvailable:
@@ -18,11 +19,11 @@ class TestCheckAvailable:
             from moment.mcp.server import check_available
             assert check_available() is False
 
-
 class TestResolveOrGenerateToken:
     def test_returns_existing_token(self):
         """When a token is passed explicitly, it becomes the mutation token."""
         from moment.mcp.server import _resolve_or_generate_token
+
         result = _resolve_or_generate_token("existing-token")
         assert result == ("existing-token", None)
 
@@ -64,7 +65,6 @@ class TestResolveOrGenerateToken:
             from moment.mcp.server import _resolve_or_generate_token
             result = _resolve_or_generate_token(None)
             assert result == ("new-mutation", "ro-token-123")
-
 
 class TestCreateServer:
     @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
@@ -109,7 +109,6 @@ class TestCreateServer:
         create_server(allow_mutations=True, api_token="my-token")
         mock_resolve.assert_called_once_with("my-token")
 
-
 class TestAuthAllRoutes:
     """Verify auth covers ALL routes, not just mutations."""
 
@@ -125,7 +124,6 @@ class TestAuthAllRoutes:
         from moment.mcp import server as mcp_server
         # The middleware applies to all paths now
         assert not hasattr(mcp_server, "_MUTATION_ROUTES")
-
 
 class TestAuthMiddleware:
     @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
@@ -167,7 +165,6 @@ class TestAuthMiddleware:
         create_server(allow_mutations=True, api_token="tok")
         mock_server._app.middleware.assert_called_once()
 
-
 class TestScopedTokens:
     """Tests for read-only vs mutation token scoping."""
 
@@ -200,3 +197,5 @@ class TestScopedTokens:
         with patch("moment.mcp.server._add_auth_middleware") as mock_mw:
             create_server(allow_mutations=True)
             mock_mw.assert_called_once_with(mock_server, "mut", "ro")
+
+

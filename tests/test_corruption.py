@@ -16,14 +16,15 @@ from moment.core.corruption import (
 )
 from moment.core.models import Clip, ClipStatus
 from moment.core.store import Store
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def detector(store: Store) -> CorruptionDetector:
     d = CorruptionDetector(store, check_interval=999.0)
     yield d
     d.stop()
-
 
 # ---------------------------------------------------------------------------
 # Initialization
@@ -37,7 +38,6 @@ class TestInitialization:
     def test_default_interval(self, store: Store) -> None:
         d = CorruptionDetector(store)
         assert d._interval == CHECK_INTERVAL
-
 
 # ---------------------------------------------------------------------------
 # Clip corruption detection
@@ -87,7 +87,6 @@ class TestCheckClip:
         with patch("pathlib.Path.is_file", return_value=False):
             result = detector.check_clip(clip)
             assert result == ClipStatus.CORRUPT
-
 
 # ---------------------------------------------------------------------------
 # Health checks
@@ -150,7 +149,6 @@ class TestHealthCheck:
             issues = detector.check()
             assert not any("Database integrity check failed" in i for i in issues)
 
-
 # ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
@@ -190,7 +188,6 @@ class TestCallbacks:
             assert any("CRITICAL" in c for c in criticals)
         d.stop()
 
-
 # ---------------------------------------------------------------------------
 # Pipeline stuck detection
 # ---------------------------------------------------------------------------
@@ -201,6 +198,7 @@ class TestPipelineStuck:
         import time
 
         # Mock get_pending_tasks to return a consistent count
+
         detector._last_task_count = 3
         detector._last_task_time = time.monotonic() - (PIPELINE_STUCK_MINUTES + 1) * 60
 
@@ -208,7 +206,6 @@ class TestPipelineStuck:
              patch.object(detector, "_check_db_integrity", return_value=[]):
             issues = detector.check()
             assert any("stuck" in i for i in issues)
-
 
 # ---------------------------------------------------------------------------
 # Start / Stop
@@ -263,7 +260,6 @@ class TestCheckClipOSError:
             result = detector.check_clip(clip)
             assert result is None
 
-
 class TestCheckTempOSError:
     def test_temp_cleanup_oserror_logged(self, detector: CorruptionDetector, tmp_path: Path) -> None:
         """OSError during temp file cleanup is handled gracefully."""
@@ -292,7 +288,6 @@ class TestCheckTempOSError:
             # File still exists
             assert stale_file.exists()
 
-
 class TestStartStop:
     def test_start_stop_lifecycle(self, store: Store) -> None:
         d = CorruptionDetector(store, check_interval=999.0)
@@ -319,7 +314,6 @@ class TestStartStop:
         d.stop()
         assert d._timer is None
 
-
 class TestOnTick:
     def test_on_tick_schedules_next(self, store: Store) -> None:
         """_on_tick schedules the next check."""
@@ -340,7 +334,6 @@ class TestOnTick:
             d._on_tick()
             mock_schedule.assert_called_once()
 
-
 class TestWatchdog:
     def test_watchdog_stops_when_not_running(self, store: Store) -> None:
         """Watchdog exits when _running is False."""
@@ -360,3 +353,5 @@ class TestWatchdog:
             d._watchdog_loop()
         # Should have logged a warning about stuck timer (not easily assertable but shouldn't crash)
         assert d._watchdog_thread is None  # wasn't started as a thread
+
+

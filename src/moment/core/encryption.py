@@ -46,11 +46,12 @@ def get_or_create_fernet() -> "Fernet":
             keyring.set_password("moment", "webhook_encryption_key", key.decode())
             logger.info("Generated and stored new webhook encryption key")
         except Exception as exc:
-            logger.warning(
-                "Failed to persist webhook key in system keyring: %s. "
-                "Webhook encryption key will be ephemeral (in-memory only) "
-                "and will not survive a restart.", exc
-            )
+            _fernet_cache = None
+            raise RuntimeError(
+                "System keyring is required but unavailable. "
+                "Webhook encryption cannot operate without persistent key storage. "
+                "Install and configure a supported keyring backend."
+            ) from exc
         return _fernet_cache
 
 

@@ -1,9 +1,11 @@
 """Tests for moment.ui.editor.timeline_panel — TimelinePanel + _TimelineWidget."""
 
 from __future__ import annotations
+import pytest
 
 from moment.core.models import SegmentEdit
 from moment.ui.editor.timeline_panel import TimelinePanel, _fmt, _Segment, _TimelineWidget
+pytestmark = [pytest.mark.gui]
 
 
 class TestTimelineWidgetInit:
@@ -25,7 +27,6 @@ class TestTimelineWidgetInit:
         widget = _TimelineWidget(total_duration=10.0)
         assert hasattr(widget, "timeline_changed")
         assert hasattr(widget, "seek_requested")
-
 
 class TestTimelineWidgetSegmentOps:
     def test_segments_property(self, qapp):
@@ -97,7 +98,6 @@ class TestTimelineWidgetSegmentOps:
         assert widget.trim_start == 0.0
         assert widget.trim_end == 60.0
 
-
 class TestTimelineWidgetRebuildSegments:
     def test_rebuild_from_split_points(self, qapp):
         widget = _TimelineWidget(total_duration=30.0)
@@ -121,7 +121,6 @@ class TestTimelineWidgetRebuildSegments:
         widget._rebuild_segments()
         assert widget.segment_count() == 3
 
-
 class TestTimelineWidgetPaint:
     def test_paint_does_not_crash(self, qapp):
         widget = _TimelineWidget(total_duration=30.0)
@@ -129,7 +128,6 @@ class TestTimelineWidgetPaint:
         widget.split_at_playhead(15.0)
         widget.set_bookmarks([5.0, 10.0])
         widget.repaint()  # triggers paintEvent
-
 
 class TestTimelinePanelInit:
     def test_create(self, qapp):
@@ -153,7 +151,6 @@ class TestTimelinePanelInit:
         assert panel.trim_start == 10.0
         assert panel.trim_end == 50.0
         assert panel.split_points == [30.0]
-
 
 class TestTimelinePanelSpeed:
     def test_speed_combo_updates_segment(self, qapp):
@@ -180,7 +177,6 @@ class TestTimelinePanelSpeed:
         # Speed should remain unchanged after invalid input
         assert panel._timeline._segments[0].speed == original_speed
 
-
 class TestFmt:
     def test_fmt_seconds(self):
         assert _fmt(0) == "0:00"
@@ -191,7 +187,6 @@ class TestFmt:
     def test_fmt_negative_clamped(self):
         assert _fmt(-5) == "0:00"
 
-
 class TestSegmentDataclass:
     def test_segment_defaults(self):
         s = _Segment(start=0.0, end=10.0)
@@ -199,3 +194,5 @@ class TestSegmentDataclass:
         assert s.end == 10.0
         assert s.speed == 1.0
         assert s.color == ""
+
+

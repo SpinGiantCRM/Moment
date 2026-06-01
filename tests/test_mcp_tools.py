@@ -9,18 +9,20 @@ import pytest
 
 from moment.core.models import Clip, ClipStatus, ClipType, GameProfile
 
-
 # We test the module-level functions, so we need to mock _get_store
+pytestmark = [pytest.mark.integration]
+
 @pytest.fixture
+
 def mock_store():
     store = MagicMock()
     return store
-
 
 class TestListClips:
     @patch("moment.mcp.tools._get_store")
     def test_list_clips_no_paths(self, mock_get_store, mock_store):
         """list_clips must not include _path fields."""
+
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="test-id",
@@ -116,7 +118,6 @@ class TestListClips:
         assert call_kwargs["limit"] == 10
         assert call_kwargs["offset"] == 0
 
-
 class TestSearchClips:
     @patch("moment.mcp.tools._get_store")
     def test_search_clips_no_paths(self, mock_get_store, mock_store):
@@ -143,7 +144,6 @@ class TestSearchClips:
         assert "source_path" not in result[0]
         assert "encoded_path" not in result[0]
         assert "thumb_path" not in result[0]
-
 
 class TestGetClip:
     @patch("moment.mcp.tools._get_store")
@@ -238,7 +238,6 @@ class TestGetClip:
         result = get_clip("missing-id")
         assert result is None
 
-
 class TestGetStats:
     @patch("moment.mcp.tools._get_store")
     def test_get_stats(self, mock_get_store, mock_store):
@@ -248,7 +247,6 @@ class TestGetStats:
         from moment.mcp.tools import get_stats
         result = get_stats()
         assert result == {"total_clips": 42}
-
 
 class TestListGameProfiles:
     @patch("moment.mcp.tools._get_store")
@@ -270,7 +268,6 @@ class TestListGameProfiles:
         assert len(result) == 1
         assert result[0]["game_name"] == "Elden Ring"
         assert result[0]["capture_fps"] == 60
-
 
 class TestEnqueueEncode:
     @patch("moment.mcp.tools._get_store")
@@ -302,7 +299,6 @@ class TestEnqueueEncode:
         from moment.mcp.tools import enqueue_encode
         result = enqueue_encode("missing")
         assert "error" in result
-
 
 class TestEnqueueUpload:
     @patch("moment.mcp.tools._get_store")
@@ -356,7 +352,6 @@ class TestEnqueueUpload:
         result = enqueue_upload("missing")
         assert "error" in result
 
-
 class TestSaveGameProfile:
     @patch("moment.mcp.tools._get_store")
     @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
@@ -392,7 +387,6 @@ class TestSaveGameProfile:
         assert "error" in result
         assert "game_name" in result["error"]
 
-
 class TestWebhookRateLimit:
     @patch("moment.mcp.tools._get_store")
     def test_rate_limit_blocks_second_call(self, mock_get_store):
@@ -421,7 +415,6 @@ class TestWebhookRateLimit:
         result = _check_webhook_rate_limit("hash-a")
         assert result is not None
 
-
 class TestRegisterTools:
     def test_register_read_tools(self):
         mock_server = MagicMock()
@@ -437,11 +430,9 @@ class TestRegisterTools:
         # 7 read + 6 mutation = 13
         assert mock_server.tool.call_count == 13
 
-
 # ---------------------------------------------------------------------------
 # Visibility enforcement in MCP (Spec 24)
 # ---------------------------------------------------------------------------
-
 
 class TestMCPVisibility:
     @patch("moment.mcp.tools._get_store")
@@ -537,7 +528,6 @@ class TestMCPVisibility:
         assert len(result) == 1
         assert result[0]["visibility"] == "unlisted"
 
-
 class TestMCPScopedTokens:
     """Tests for scoped token enforcement."""
 
@@ -573,7 +563,6 @@ class TestMCPScopedTokens:
         result = enqueue_encode("enc-id")
         assert result["status"] == "queued"
 
-
 class TestPersistentRateLimit:
     """Tests for persistent SQLite-based rate limiting."""
 
@@ -597,3 +586,5 @@ class TestPersistentRateLimit:
         from moment.mcp.tools import _check_webhook_rate_limit
         result = _check_webhook_rate_limit("blocked")
         assert "wait" in result.lower()
+
+

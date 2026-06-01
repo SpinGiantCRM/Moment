@@ -16,11 +16,13 @@ from moment.core.repositories.base import (
 from moment.core.repositories.base import (
     connect_encrypted as _connect_encrypted,
 )
+pytestmark = [pytest.mark.integration]
 
 
 class TestGetOrCreateDbKey:
     def test_returns_none_no_keyring(self) -> None:
         """_get_or_create_db_key returns None when keyring is not installed."""
+
         with patch("builtins.__import__", side_effect=ImportError):
             result = _get_or_create_db_key()
             assert result is None
@@ -40,7 +42,6 @@ class TestGetOrCreateDbKey:
             assert len(key_str) == 64
             assert all(c in "0123456789abcdef" for c in key_str)
             mock_keyring.set_password.assert_called_once()
-
 
 class TestConnectEncrypted:
     def test_raises_import_error_no_sqlcipher3(self) -> None:
@@ -90,7 +91,6 @@ class TestConnectEncrypted:
                 except FileNotFoundError:
                     pass
 
-
 class TestStoreOpensWithEncryption:
     def test_store_uses_encrypted_connect(self) -> None:
         """Store.__init__ calls _connect_encrypted, not plain sqlite3.connect."""
@@ -138,3 +138,5 @@ class TestStoreOpensWithEncryption:
                     os.unlink(db_path + sfx)
                 except FileNotFoundError:
                     pass
+
+

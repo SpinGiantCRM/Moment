@@ -12,6 +12,7 @@ from moment.core.updater import (
     _parse_version,
     check_for_updates,
 )
+pytestmark = [pytest.mark.integration]
 
 
 class TestParseVersion:
@@ -38,11 +39,11 @@ class TestParseVersion:
 
     def test_none(self) -> None:
         """parse_version should safely handle None."""
+
         assert _parse_version(None) == (0,)  # type: ignore[arg-type]
 
     def test_partial_numeric(self) -> None:
         assert _parse_version("1.2.3rc1") == (1, 2, 3)
-
 
 class TestIsNewer:
     def test_strictly_newer(self) -> None:
@@ -56,7 +57,6 @@ class TestIsNewer:
 
     def test_calver_newer(self) -> None:
         assert _is_newer("2025.01.0", "2024.12.0") is True
-
 
 class TestCheckForUpdates:
     def test_returns_result_on_success(self) -> None:
@@ -153,3 +153,5 @@ class TestCheckForUpdates:
                 assert result["latest_version"] == "1.0.0"
 
         asyncio.run(run())
+
+

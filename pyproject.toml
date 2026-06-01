@@ -34,6 +34,7 @@ dependencies = [
 bot = ["discord.py>=2.4"]
 mcp = ["fastmcp>=1.0"]
 import-export = ["python-magic>=0.4"]
+test = ["pytest-timeout>=2"]
 all = ["moment[bot,mcp,import-export]"]
 
 [project.scripts]
@@ -62,3 +63,13 @@ line-ending = "lf"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+timeout = 30
+# Thread method avoids SIGALRM conflicts with ffmpeg/GSR subprocesses.
+timeout_method = "thread"
+markers = [
+    "unit: fast unit tests (implicit default for tests with no other marker)",
+    "gui: tests requiring PyQt6 widgets, QApplication, qtbot, or a display",
+    "integration: real filesystem, threads, ffmpeg/GSR/DB workflows",
+    "slow: tests known to take materially longer than typical unit tests",
+    "external: tests requiring real network, GSR, rclone, or OS services",
+]

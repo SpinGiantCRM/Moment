@@ -1,8 +1,10 @@
 """Tests for moment.ui.app — AppManager and CLI entry point."""
 
 from __future__ import annotations
+import pytest
 
 from unittest.mock import MagicMock, patch
+pytestmark = [pytest.mark.gui]
 
 
 class TestParseArgs:
@@ -40,7 +42,6 @@ class TestParseArgs:
         args = _parse_args(["--version"])
         assert args.version is True
 
-
 class TestAppManagerInit:
     def test_init_defaults(self):
         from moment.ui.app import AppManager, _parse_args
@@ -57,7 +58,6 @@ class TestAppManagerInit:
             mgr = AppManager()
             assert mgr._args is not None
 
-
 @patch("sys.exit")
 @patch("builtins.print")
 class TestPrintVersion:
@@ -67,7 +67,6 @@ class TestPrintVersion:
         mgr.init()
         mock_print.assert_called_once()
         mock_exit.assert_called_once_with(0)
-
 
 @patch("sys.exit")
 class TestOpenEncoded:
@@ -89,12 +88,10 @@ class TestOpenEncoded:
         # _open_encoded_dir calls sys.exit(1), then init() calls sys.exit(0)
         mock_exit.assert_any_call(1)
 
-
 class TestPrintVersionStatic:
     def test_print_version(self):
         from moment.ui.app import AppManager
         AppManager._print_version()
-
 
 class TestAppManagerQuit:
     @patch("moment.ui.app.QApplication.quit")
@@ -129,7 +126,6 @@ class TestAppManagerQuit:
         mgr._pipeline.shutdown.assert_called_once()
         mgr._store.close.assert_called_once()
 
-
 class TestAppManagerProperties:
     def test_app_property(self):
         from moment.ui.app import AppManager, _parse_args
@@ -140,7 +136,6 @@ class TestAppManagerProperties:
         from moment.ui.app import AppManager, _parse_args
         mgr = AppManager(_parse_args([]))
         assert mgr.tray is None
-
 
 @patch("sys.exit")
 @patch("moment.ui.app.AppManager._init_services")
@@ -191,19 +186,21 @@ class TestAppManagerInitMocks:
         mock_tray_inst = MagicMock()
         mock_tray.return_value = mock_tray_inst
 
-        # Mock QApplication to avoid real GUI creation
-        # Also mock _detect_high_contrast to avoid MagicMock vs int comparison
-        with patch("moment.ui.app.QApplication"), \
-             patch("moment.ui.app.stylesheet", return_value=""), \
-             patch("moment.ui.app.app_font", return_value=MagicMock()), \
-             patch("moment.ui.app.load_icon", return_value=MagicMock()), \
+        from PyQt6.QtGui import QFont, QIcon
+
+        # Mock _detect_high_contrast to avoid MagicMock vs int comparison;
+        # provide real QFont/QIcon since QApplication is real.
+        # Mock _on_settings because it opens a modal dialog (blocking).
+        with patch("moment.ui.app.stylesheet", return_value=""), \
+             patch("moment.ui.app.app_font", return_value=QFont()), \
+             patch("moment.ui.app.load_icon", return_value=QIcon()), \
              patch("moment.ui.app.sys.excepthook"), \
-             patch.object(AppManager, "_detect_high_contrast", return_value=False):
+             patch.object(AppManager, "_detect_high_contrast", return_value=False), \
+             patch.object(AppManager, "_on_settings"):
             mgr.init()
             # settings_requested should be connected
             # We verify tray was created
             assert mock_tray.called
-
 
 class TestAppManagerToggleWindow:
     @patch("moment.ui.app.AppManager._create_window")
@@ -233,7 +230,6 @@ class TestAppManagerToggleWindow:
         mgr._toggle_window()
         mock_create.assert_called_once()
 
-
 class TestAppManagerWindowHidden:
     def test_window_hidden_updates_tray(self):
         from moment.ui.app import AppManager, _parse_args
@@ -241,7 +237,6 @@ class TestAppManagerWindowHidden:
         mgr._tray = MagicMock()
         mgr._on_window_hidden()
         mgr._tray.update_status.assert_called_once()
-
 
 class TestAppManagerActionHandlers:
     def test_save_replay_action(self):
@@ -256,14 +251,12 @@ class TestAppManagerActionHandlers:
         mgr = AppManager(_parse_args([]))
         mgr._on_action("unknown_action")
 
-
 class TestAppManagerExec:
     def test_exec_returns_1_if_no_qapp(self):
         from moment.ui.app import AppManager, _parse_args
         mgr = AppManager(_parse_args([]))
         result = mgr.exec()
         assert result == 1
-
 
 class TestAppManagerInitServices:
     @patch("moment.core.config.Config")
@@ -289,7 +282,6 @@ class TestAppManagerInitServices:
         mgr._init_services()
         # Should not raise, just logs warning
 
-
 class TestGlobalExcepthook:
     def test_global_excepthook(self):
         from moment.ui.app import _global_excepthook
@@ -301,3 +293,5 @@ class TestGlobalExcepthook:
             exc_type, exc_value, exc_tb = sys.exc_info()
             with patch("PyQt6.QtWidgets.QMessageBox"):
                 _global_excepthook(exc_type, exc_value, exc_tb)
+
+

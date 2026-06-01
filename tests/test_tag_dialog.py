@@ -1,16 +1,19 @@
 """Tests for dialogs/tag_dialog.py — tag management with autocomplete."""
 
 from __future__ import annotations
+import pytest
 
 from unittest.mock import MagicMock
 
 from moment.ui.dialogs.tag_dialog import TagDialog
+pytestmark = [pytest.mark.gui]
 
 
 class TestTagDialogInit:
     """Tests for TagDialog construction."""
 
     def test_create_empty(self, qapp) -> None:
+
         dlg = TagDialog()
         assert dlg.windowTitle() == "Manage Tags"
         assert dlg._batch_count == 1
@@ -42,7 +45,6 @@ class TestTagDialogInit:
     def test_batch_count_negative_clamped(self, qapp) -> None:
         dlg = TagDialog(batch_count=-1)
         assert dlg._batch_count == 1
-
 
 class TestTagOperations:
     """Tests for adding and removing tags."""
@@ -77,7 +79,6 @@ class TestTagOperations:
         dlg._remove_tag("nonexistent")
         assert dlg._tag_list.count() == 1
 
-
 class TestGetTags:
     """Tests for get_tags() result."""
 
@@ -92,7 +93,6 @@ class TestGetTags:
     def test_order_preserved(self, qapp) -> None:
         dlg = TagDialog(current_tags=["z", "a", "m"])
         assert dlg.get_tags() == ["z", "a", "m"]
-
 
 class TestTagDialogModal:
     """Tests for dialog modal behavior."""
@@ -110,3 +110,5 @@ class TestTagDialogModal:
         dlg = TagDialog()
         dlg.reject()
         assert dlg.result() == 0
+
+

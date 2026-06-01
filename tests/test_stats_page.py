@@ -7,11 +7,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from moment.ui.pages.stats_page import StatsPage
+pytestmark = [pytest.mark.gui]
 
 
 @pytest.fixture
+
 def mock_store() -> MagicMock:
     """Store returning valid aggregate stats."""
+
     s = MagicMock()
     s.get_aggregate_stats.return_value = {
         "total_clips": 42,
@@ -35,7 +38,6 @@ def mock_store() -> MagicMock:
     }
     return s
 
-
 class TestStatsPageInit:
     """Tests for StatsPage construction."""
 
@@ -56,7 +58,6 @@ class TestStatsPageInit:
         assert page._donut_chart is not None
         assert page._bar_chart is not None
         assert page._table is not None
-
 
 class TestStatsPageRefresh:
     """Tests for refresh() method."""
@@ -86,3 +87,5 @@ class TestStatsPageRefresh:
         page = StatsPage(store=mock_store)
         page.refresh()
         assert page._table.rowCount() == 1  # one recent upload
+
+

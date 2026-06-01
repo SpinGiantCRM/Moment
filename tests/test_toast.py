@@ -13,12 +13,14 @@ from moment.ui.widgets.toast import (
     ToastWidget,
     toast_manager,
 )
+pytestmark = [pytest.mark.gui]
 
 
 class TestToastWidgetInit:
     """Tests for ToastWidget construction."""
 
     def test_create_success(self, qtbot) -> None:
+
         """ToastWidget can be created with success type."""
         toast = ToastWidget("success", "Title", "Body")
         qtbot.addWidget(toast)
@@ -76,7 +78,6 @@ class TestToastWidgetInit:
         qtbot.addWidget(toast)
         assert toast._body_label.text() == "Body text here"
 
-
 class TestToastWidgetTimer:
     """Tests for timer behavior."""
 
@@ -110,7 +111,6 @@ class TestToastWidgetTimer:
         toast._dismiss()
         assert not toast._timer.isActive()
 
-
 class TestToastWidgetAnimation:
     """Tests for slide-in / slide-out animation."""
 
@@ -138,7 +138,6 @@ class TestToastWidgetAnimation:
         toast.dismissed.connect(lambda t: None)  # just ensure it connects
         toast._on_slide_out_done()  # manual trigger
 
-
 class TestToastManagerInit:
     """Tests for ToastManager."""
 
@@ -150,7 +149,6 @@ class TestToastManagerInit:
     def test_singleton_exists(self) -> None:
         """Global toast_manager singleton exists."""
         assert isinstance(toast_manager, ToastManager)
-
 
 class TestToastManagerShow:
     """Tests for show_toast()."""
@@ -198,7 +196,6 @@ class TestToastManagerShow:
         manager._on_dismissed(toast)
         assert toast not in manager._toasts
 
-
 class TestToastManagerCalcPosition:
     """Tests for _calc_position."""
 
@@ -208,3 +205,5 @@ class TestToastManagerCalcPosition:
         pos = manager._calc_position()
         from PyQt6.QtCore import QPoint
         assert isinstance(pos, QPoint)
+
+

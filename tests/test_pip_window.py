@@ -1,16 +1,19 @@
 """Tests for pip_window.py — PiP floating frameless player."""
 
 from __future__ import annotations
+import pytest
 
 from pathlib import Path
 
 from moment.ui.widgets.pip_window import _PIP_H, _PIP_W, PipWindow
+pytestmark = [pytest.mark.gui]
 
 
 class TestPipWindowInit:
     """Tests for PipWindow construction and basic properties."""
 
     def test_create_basic(self, qtbot) -> None:
+
         """PipWindow can be created with minimal arguments."""
         window = PipWindow(
             clip_id="test-123",
@@ -74,7 +77,6 @@ class TestPipWindowInit:
 
         from PyQt6.QtCore import Qt
         assert window.testAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-
 
 class TestPipWindowSignals:
     """Tests for PipWindow signals."""
@@ -140,7 +142,6 @@ class TestPipWindowSignals:
         with qtbot.waitSignal(window.pip_closed, timeout=1000):
             window.close()
 
-
 class TestPipWindowSingleton:
     """Tests for the singleton show_for_clip classmethod."""
 
@@ -182,7 +183,6 @@ class TestPipWindowSingleton:
             w2.close()
         PipWindow._active.clear()
 
-
 class TestPipWindowStop:
     """Tests for playback stop/cleanup."""
 
@@ -197,3 +197,5 @@ class TestPipWindowStop:
         window._running = True
         window.stop()
         assert not window._running
+
+

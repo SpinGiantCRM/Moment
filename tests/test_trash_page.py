@@ -8,16 +8,18 @@ import pytest
 from PyQt6.QtCore import QSize
 
 from moment.ui.pages.trash_page import TrashPage
+pytestmark = [pytest.mark.gui]
 
 
 @pytest.fixture
+
 def mock_store() -> MagicMock:
     """Store returning empty trash (default)."""
+
     s = MagicMock()
     s.list_clips.return_value = []
     s.empty_trash.return_value = 0
     return s
-
 
 class TestTrashPageInit:
     """Tests for TrashPage construction."""
@@ -41,7 +43,6 @@ class TestTrashPageInit:
         page = TrashPage()
         assert not page._restore_btn.isEnabled()
         assert not page._delete_btn.isEnabled()
-
 
 class TestTrashPageRefresh:
     """Tests for refresh() method."""
@@ -95,3 +96,5 @@ class TestTrashPageRefresh:
         page = TrashPage(store=store)
         page.refresh()
         assert not page._empty_widget.isHidden()
+
+

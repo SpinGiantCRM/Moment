@@ -9,17 +9,17 @@ from unittest.mock import patch
 import pytest
 
 from moment.core.uploader import _MAX_RETRIES, _RETRY_DELAYS, Uploader, UploaderError
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def test_path() -> Path:
     return Path("/tmp/test_upload_clip.mp4")
-
 
 @pytest.fixture
 def uploader() -> Uploader:
     return Uploader(remote="test-remote", bucket="test-bucket", base_url="https://cdn.example.com")
-
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -53,7 +53,6 @@ class TestConfiguration:
             assert u.remote == "prod-r2"
             assert u.bucket == "clips-prod"
 
-
 # ---------------------------------------------------------------------------
 # Upload (mocked rclone)
 # ---------------------------------------------------------------------------
@@ -82,6 +81,7 @@ class TestUpload:
 
     def test_upload_retries_on_failure(self, test_path: Path, uploader: Uploader) -> None:
         """Should retry _MAX_RETRIES times before raising."""
+
         with (
             patch.object(uploader, "_do_copy") as mock_copy,
             patch.object(uploader, "_ensure_rclone"),
@@ -130,7 +130,6 @@ class TestUpload:
             url = u.upload(test_path)
             assert url.startswith("r2:clips/")
 
-
 # ---------------------------------------------------------------------------
 # Re-upload
 # ---------------------------------------------------------------------------
@@ -169,7 +168,6 @@ class TestReUpload:
             url = uploader.re_upload(test_path, "missing.mp4")
             assert url == "https://cdn.example.com/new.mp4"
 
-
 # ---------------------------------------------------------------------------
 # Rclone availability
 # ---------------------------------------------------------------------------
@@ -194,7 +192,6 @@ class TestRcloneAvailability:
             # Should not raise about rclone
             result = u.upload(test_path)
             assert result.startswith("r2:clips/")
-
 
 # ---------------------------------------------------------------------------
 # Log sanitization
@@ -249,7 +246,6 @@ class TestLogSanitization:
                 msg = call[0][0] if call[0] else ""
                 assert "test-remote:test-bucket" not in str(msg)
 
-
 # ---------------------------------------------------------------------------
 # Retry config
 # ---------------------------------------------------------------------------
@@ -263,7 +259,6 @@ class TestRetryConfig:
     def test_retry_delays_are_increasing(self) -> None:
         for i in range(1, len(_RETRY_DELAYS)):
             assert _RETRY_DELAYS[i] > _RETRY_DELAYS[i - 1]
-
 
 # ---------------------------------------------------------------------------
 # Total deadline (Spec 20)
@@ -318,7 +313,6 @@ class TestDeadline:
 
             with pytest.raises(UploaderError, match="deadline exceeded"):
                 u.upload(test_path)
-
 
 # ---------------------------------------------------------------------------
 # Circuit breaker (Spec 20)
@@ -412,3 +406,5 @@ class TestCircuitBreaker:
         # After exactly 3 failures, circuit breaker should be open
         with up_mod.Uploader._failure_lock:
             assert up_mod.Uploader._consecutive_failures >= 3
+
+

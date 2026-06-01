@@ -1,6 +1,7 @@
 """Tests for ui/resources.py — QSS stylesheet, colour tokens, icon loading."""
 
 from __future__ import annotations
+import pytest
 
 from moment.ui.resources import (
     app_font,
@@ -10,12 +11,14 @@ from moment.ui.resources import (
     qss_colors,
     stylesheet,
 )
+pytestmark = [pytest.mark.gui]
 
 
 class TestColorTokens:
     """Tests for colour token resolution."""
 
     def test_known_token_returns_hex(self) -> None:
+
         assert color("--bg-window") == "#3c3c3c"
 
     def test_unknown_token_returns_fallback(self) -> None:
@@ -29,7 +32,6 @@ class TestColorTokens:
         result = color("--bg-surface")
         assert isinstance(result, str)
         assert len(result) > 0
-
 
 class TestQssColors:
     """Tests for the QSS :root colour variable declaration."""
@@ -49,7 +51,6 @@ class TestQssColors:
         result = qss_colors()
         assert "#3c3c3c" in result
         assert "#60a5fa" in result
-
 
 class TestStylesheet:
     """Tests for the full application stylesheet."""
@@ -77,7 +78,6 @@ class TestStylesheet:
         result = stylesheet()
         assert "Noto Sans" in result
 
-
 class TestAppFont:
     """Tests for app font creation."""
 
@@ -94,7 +94,6 @@ class TestAppFont:
         families = font.families()
         assert len(families) > 0
         assert "Noto Sans" in families
-
 
 class TestIconLoading:
     """Tests for SVG icon loading."""
@@ -122,3 +121,5 @@ class TestIconLoading:
     def test_icon_pixmap_alias(self) -> None:
         icon = icon_pixmap("moment")
         assert not icon.isNull()
+
+

@@ -15,18 +15,19 @@ from moment.core.import_export import (
 )
 from moment.core.models import Clip, ClipStatus, ClipType
 from moment.utils.ffmpeg import parse_fps
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def ie(store):
     """Return an ImportExport backed by the test store."""
-    return ImportExport(store)
 
+    return ImportExport(store)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
 
 class TestParseFps:
     def test_simple(self):
@@ -39,11 +40,9 @@ class TestParseFps:
         assert parse_fps("abc") == 0.0
         assert parse_fps("0/0") == 0.0
 
-
 # ---------------------------------------------------------------------------
 # Import
 # ---------------------------------------------------------------------------
-
 
 class TestImport:
     def test_import_file_missing(self, ie):
@@ -279,11 +278,9 @@ class TestImport:
             except FileNotFoundError:
                 pass
 
-
 # ---------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------
-
 
 class TestExport:
     def test_export_empty_list(self, ie):
@@ -365,7 +362,6 @@ class TestExport:
         assert count == 1
         assert (dest / "link.mp4").exists()
 
-
 # ---------------------------------------------------------------------------
 # MIME type checks
 # ---------------------------------------------------------------------------
@@ -411,19 +407,18 @@ class TestMimeType:
             mock_run.return_value.stdout = "video/mp4\n"
             ie._check_mime_type(Path("/tmp/test.mp4"))
 
-    def test_no_mime_checker_available_skips(self, ie) -> None:
-        """If neither magic nor file(1) is available, skip MIME check silently."""
+    def test_no_mime_checker_available_raises(self, ie) -> None:
+        """If neither magic nor file(1) is available, raise ImportError (fail closed)."""
         with (
             patch("moment.core.import_export._HAS_MAGIC", False),
             patch("moment.core.import_export.ExternalCommandRunner.run", side_effect=FileNotFoundError),
         ):
-            ie._check_mime_type(Path("/tmp/test.mp4"))
-
+            with pytest.raises(ImportError, match="Cannot verify file type"):
+                ie._check_mime_type(Path("/tmp/test.mp4"))
 
 # ---------------------------------------------------------------------------
 # Presets
 # ---------------------------------------------------------------------------
-
 
 class TestPresets:
     def test_list_presets_returns_all(self, ie):
@@ -434,3 +429,5 @@ class TestPresets:
         assert presets["game"]["codec"] == "h264"
         assert presets["game"]["quality"] == 23
         assert presets["archive"]["codec"] == "h265"
+
+

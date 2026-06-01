@@ -16,23 +16,24 @@ from moment.core.encryption import (
     reset_fernet_cache,
     run_health_check,
 )
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture(autouse=True)
+
 def _reset_fernet() -> None:
     reset_fernet_cache()
     yield
     reset_fernet_cache()
 
-
 # ---------------------------------------------------------------------------
 # get_or_create_fernet
 # ---------------------------------------------------------------------------
 
-
 class TestGetOrCreateFernet:
     def test_get_or_create_succeeds(self) -> None:
         """Happy path: generates a Fernet key and returns a Fernet instance."""
+
         with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
             f = get_or_create_fernet()
             from cryptography.fernet import Fernet
@@ -72,22 +73,23 @@ class TestGetOrCreateFernet:
                 "moment", "webhook_encryption_key"
             )
 
-    def test_keyring_get_fails_uses_ephemeral(self) -> None:
-        """If keyring.get_password raises, use ephemeral key."""
+    def test_keyring_get_fails_raises_runtime_error(self) -> None:
+        """If keyring.get_password AND set_password both fail, raises RuntimeError."""
         mock_keyring = MagicMock()
         mock_keyring.get_password.side_effect = Exception("keyring error")
+        mock_keyring.set_password.side_effect = Exception("set failed")
         with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
-            f = get_or_create_fernet()
-            assert f is not None
+            with pytest.raises(RuntimeError, match="System keyring"):
+                get_or_create_fernet()
 
-    def test_keyring_set_fails_still_returns_fernet(self) -> None:
-        """If keyring.set_password fails, returns Fernet anyway (ephemeral)."""
+    def test_keyring_set_fails_raises_runtime_error(self) -> None:
+        """If keyring.set_password fails, raises RuntimeError (no ephemeral fallback)."""
         mock_keyring = MagicMock()
         mock_keyring.get_password.return_value = None
         mock_keyring.set_password.side_effect = Exception("set failed")
         with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
-            f = get_or_create_fernet()
-            assert f is not None
+            with pytest.raises(RuntimeError, match="System keyring"):
+                get_or_create_fernet()
 
     def test_reset_clears_cache(self) -> None:
         with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
@@ -96,11 +98,9 @@ class TestGetOrCreateFernet:
             f2 = get_or_create_fernet()
             assert f1 is not f2
 
-
 # ---------------------------------------------------------------------------
 # run_health_check
 # ---------------------------------------------------------------------------
-
 
 class TestRunHealthCheck:
     def test_health_check_encrypted_header(self, tmp_path) -> None:
@@ -183,11 +183,9 @@ class TestRunHealthCheck:
             # Should not raise when db doesn't exist
             run_health_check(str(db_path))
 
-
 # ---------------------------------------------------------------------------
 # Concurrency — Fernet initialization race
 # ---------------------------------------------------------------------------
-
 
 class TestFernetConcurrency:
     def test_concurrent_initialization_returns_same_instance(self) -> None:
@@ -296,3 +294,5 @@ class TestFernetConcurrency:
             ct2 = f2.encrypt(b"test")
             pt2 = f2.decrypt(ct2)
             assert pt2 == b"test"
+
+

@@ -572,7 +572,10 @@ class BaseRepository:
         max_retries: int = 5,
     ) -> sqlite3.Cursor:
         """Execute *sql* with exponential backoff on ``SQLITE_BUSY``."""
-        cur = cursor or self._conn.cursor()
+        cur = cursor
+        if cur is None:
+            with self._lock:
+                cur = self._conn.cursor()
         last_err: sqlite3.OperationalError | None = None
         for attempt in range(max_retries):
             try:

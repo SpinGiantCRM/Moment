@@ -229,7 +229,7 @@ class AppManager(QObject):
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
 
-        self._qapp = QApplication(sys.argv)
+        self._qapp = QApplication.instance() or QApplication(sys.argv)
         self._qapp.setApplicationName("moment")
         self._qapp.setOrganizationName("moment")
         self._qapp.setApplicationVersion(__version__)

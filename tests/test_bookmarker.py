@@ -9,24 +9,24 @@ import pytest
 from moment.core.bookmarker import Bookmarker
 from moment.core.models import Bookmark
 from moment.core.store import Store
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def store() -> MagicMock:
     """Mock Store for bookmark tests."""
+
     s = MagicMock(spec=Store)
     return s
-
 
 @pytest.fixture
 def bookmarker(store: MagicMock) -> Bookmarker:
     return Bookmarker(store=store)
 
-
 # ---------------------------------------------------------------------------
 # Session management
 # ---------------------------------------------------------------------------
-
 
 class TestSession:
     def test_no_session_initially(self, bookmarker: Bookmarker) -> None:
@@ -47,11 +47,9 @@ class TestSession:
         store.get_bookmarks_for_session.assert_called_once_with("session1")
         assert result == []
 
-
 # ---------------------------------------------------------------------------
 # Create bookmark
 # ---------------------------------------------------------------------------
-
 
 class TestCreateBookmark:
     def test_create_without_session_returns_none(
@@ -90,11 +88,9 @@ class TestCreateBookmark:
         assert bm is not None
         assert bm.session_stem == "override_session"
 
-
 # ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
-
 
 class TestCallbacks:
     def test_on_bookmark_created_callback(
@@ -121,11 +117,9 @@ class TestCallbacks:
         result = bm.create_bookmark(5.0)
         assert result is not None
 
-
 # ---------------------------------------------------------------------------
 # Get / delete bookmarks
 # ---------------------------------------------------------------------------
-
 
 class TestGetDelete:
     def test_get_bookmarks(
@@ -156,3 +150,5 @@ class TestGetDelete:
     def test_delete_bookmark(self, store: MagicMock, bookmarker: Bookmarker) -> None:
         bookmarker.delete_bookmark("bm_123")
         store.delete_bookmark.assert_called_once_with("bm_123")
+
+

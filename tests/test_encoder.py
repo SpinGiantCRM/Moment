@@ -10,9 +10,11 @@ import pytest
 
 from moment.core.encoder import GPU_SEMAPHORE, Encoder, EncoderError
 from moment.core.models import Clip, EditProfile
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def clip() -> Clip:
     return Clip(
         id=str(uuid.uuid4()),
@@ -29,7 +31,6 @@ def clip() -> Clip:
         game="cs2",
     )
 
-
 @pytest.fixture
 def profile() -> EditProfile:
     return EditProfile(
@@ -39,7 +40,6 @@ def profile() -> EditProfile:
         game_audio_volume=1.0,
         mic_audio_volume=0.8,
     )
-
 
 # ---------------------------------------------------------------------------
 # Command building
@@ -130,7 +130,6 @@ class TestBuildCommand:
         encoder2 = Encoder(codec="h264", quality=-10)
         assert encoder2.quality == 0
 
-
 # ---------------------------------------------------------------------------
 # Codec properties
 # ---------------------------------------------------------------------------
@@ -152,7 +151,6 @@ class TestCodecSelection:
         encoder = Encoder(codec="unknown")
         assert encoder.quality == 23  # falls back to h264 default
 
-
 # ---------------------------------------------------------------------------
 # GPU semaphore
 # ---------------------------------------------------------------------------
@@ -161,6 +159,7 @@ class TestGPUSemaphore:
     def test_semaphore_exists(self) -> None:
         """The global GPU_SEMAPHORE should be a BoundedSemaphore."""
         import threading
+
         assert isinstance(GPU_SEMAPHORE, threading.BoundedSemaphore)
 
     def test_semaphore_acquires(self) -> None:
@@ -172,7 +171,6 @@ class TestGPUSemaphore:
         assert GPU_SEMAPHORE.acquire(blocking=False)
         assert not GPU_SEMAPHORE.acquire(blocking=False)
         GPU_SEMAPHORE.release()
-
 
 # ---------------------------------------------------------------------------
 # Encode execution (mocked)
@@ -252,7 +250,6 @@ class TestEncode:
             with pytest.raises(EncoderError, match="empty"):
                 encoder.encode(clip)
 
-
 # ---------------------------------------------------------------------------
 # nvenc availability
 # ---------------------------------------------------------------------------
@@ -262,3 +259,5 @@ class TestNvencAvailability:
         encoder = Encoder()
         result = encoder.is_nvenc_available
         assert isinstance(result, bool)
+
+

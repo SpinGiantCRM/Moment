@@ -3,18 +3,20 @@
 Covers: get_aggregate_stats, list_webhook_logs, clear_webhook_logs,
 restore_clip, empty_trash.
 """
-
 from __future__ import annotations
 
+import pytest
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from moment.core.models import (
+
     Clip,
     Webhook,
     WebhookLogEntry,
 )
+pytestmark = [pytest.mark.integration]
 
 
 def _make_clip(store, **overrides) -> Clip:
@@ -26,11 +28,9 @@ def _make_clip(store, **overrides) -> Clip:
     )
     return store.insert_clip(clip)
 
-
 # ---------------------------------------------------------------------------
 # Aggregate stats
 # ---------------------------------------------------------------------------
-
 
 class TestAggregateStats:
     def test_empty_db(self, store) -> None:
@@ -109,11 +109,9 @@ class TestAggregateStats:
         stats = store.get_aggregate_stats()
         assert not any(u["title"] == "Not uploaded" for u in stats["recent_uploads"])
 
-
 # ---------------------------------------------------------------------------
 # Webhook logs
 # ---------------------------------------------------------------------------
-
 
 class TestWebhookLogs:
     def _setup_webhooks(self, store) -> tuple[str, str]:
@@ -226,11 +224,9 @@ class TestWebhookLogs:
         entries = store.list_webhook_logs()
         assert entries == []
 
-
 # ---------------------------------------------------------------------------
 # Trash operations
 # ---------------------------------------------------------------------------
-
 
 class TestTrashOperations:
     def test_restore_clip(self, store) -> None:
@@ -312,3 +308,5 @@ class TestTrashOperations:
         # Active clips remain
         stats = store.get_aggregate_stats()
         assert stats["total_clips"] == 2
+
+

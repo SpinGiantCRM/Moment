@@ -4,10 +4,18 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 from PyQt6.QtCore import QSize
 
 from moment.ui.pages.grid_page import ClipFilterProxyModel, GridPage
+pytestmark = [pytest.mark.gui]
 
+
+def _cleanup_grid_page(page: GridPage) -> None:
+    """Close and schedule a GridPage for deferred deletion."""
+
+    page.close()
+    page.deleteLater()
 
 class TestClipFilterProxyModel:
     """Tests for the filter/sort proxy model."""
@@ -25,18 +33,19 @@ class TestClipFilterProxyModel:
         model.set_filter_text("test")
         assert model._filter_text == "test"
 
-
 class TestGridPageInit:
     """Tests for GridPage construction."""
 
     def test_create_without_store(self, qapp) -> None:
         page = GridPage()
         assert page._store is None
+        _cleanup_grid_page(page)
 
     def test_create_with_store(self, qapp) -> None:
         store = MagicMock()
         page = GridPage(store=store)
         assert page._store is store
+        _cleanup_grid_page(page)
 
     def test_widgets_exist(self, qapp) -> None:
         page = GridPage()
@@ -45,17 +54,19 @@ class TestGridPageInit:
         assert page._list_view is not None
         assert page._empty_widget is not None
         assert page._error_widget is not None
+        _cleanup_grid_page(page)
 
     def test_initial_state_empty_hidden_list_visible(self, qapp) -> None:
         """Empty widget shown, list hidden after __init__."""
         page = GridPage()
         assert not page._empty_widget.isHidden()
         assert page._list_view.isHidden()
+        _cleanup_grid_page(page)
 
     def test_batch_bar_hidden_by_default(self, qapp) -> None:
         page = GridPage()
         assert page._batch_bar.isHidden()
-
+        _cleanup_grid_page(page)
 
 class TestGridPageRefresh:
     """Tests for refresh() method."""
@@ -64,12 +75,14 @@ class TestGridPageRefresh:
         page = GridPage()
         page.refresh()
         assert not page._empty_widget.isHidden()
+        _cleanup_grid_page(page)
 
     def test_refresh_empty_clips(self, qapp) -> None:
         """Empty state shown when _on_data_ready receives an empty list."""
         page = GridPage()
         page._on_data_ready([])
         assert not page._empty_widget.isHidden()
+        _cleanup_grid_page(page)
 
     def test_refresh_with_clips(self, qapp) -> None:
         """Grid populated when _on_data_ready receives clips."""
@@ -86,9 +99,6 @@ class TestGridPageRefresh:
         store = MagicMock()
         store.list_clips.return_value = [clip]
 
-        # Mock paint + sizeHint to avoid QListView::doItemsLayout segfault on
-        # offscreen platform — the delegate calls painful clip paths that crash
-        # when there is no real paint device.
         with patch("moment.ui.widgets.clip_delegate.ClipDelegate.build_item_data",
                    return_value={"id": "grid-1", "title": "Test Clip"}), \
              patch("moment.ui.widgets.clip_delegate.ClipDelegate.paint",
@@ -99,17 +109,23 @@ class TestGridPageRefresh:
             page._on_data_ready([clip])
             assert page._empty_widget.isHidden()
             assert not page._list_view.isHidden()
+            _cleanup_grid_page(page)
 
     def test_refresh_store_error(self, qapp) -> None:
         """Error state shown when _on_load_error is called."""
         page = GridPage()
         page._on_load_error("fail")
         assert not page._error_widget.isHidden()
+        _cleanup_grid_page(page)
 
     def test_sort_combo_has_options(self, qapp) -> None:
         page = GridPage()
         assert page._sort_combo.count() > 0
+        _cleanup_grid_page(page)
 
     def test_search_input_placeholder(self, qapp) -> None:
         page = GridPage()
         assert "Filter" in page._search_input.placeholderText()
+        _cleanup_grid_page(page)
+
+

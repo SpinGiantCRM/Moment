@@ -34,6 +34,8 @@ from moment.core.models import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+pytestmark = [pytest.mark.integration]
+
 
 def _make_clip(store, **overrides) -> Clip:
     source_path = overrides.pop("source_path", Path("/tmp/test-clip.mkv"))
@@ -47,7 +49,6 @@ def _make_clip(store, **overrides) -> Clip:
         **overrides,
     )
     return store.insert_clip(clip)
-
 
 # ---------------------------------------------------------------------------
 # Clips
@@ -90,7 +91,6 @@ class TestClipCRUD:
         store.delete_clip(clip.id, soft=False)
         assert store.get_clip(clip.id) is None
 
-
 class TestClipListing:
     def test_list_all(self, store) -> None:
         _make_clip(store)
@@ -132,7 +132,6 @@ class TestClipListing:
         assert len(page2) == 3
         assert page[0].id != page2[0].id
 
-
 # ---------------------------------------------------------------------------
 # Tags
 # ---------------------------------------------------------------------------
@@ -168,7 +167,6 @@ class TestTags:
         fetched = store.get_clip(clip.id)
         assert fetched is not None
         assert fetched.tags == ["new"]
-
 
 # ---------------------------------------------------------------------------
 # EditProfile
@@ -213,7 +211,6 @@ class TestEditProfile:
         assert len(fetched.filters) == 1
         assert fetched.filters[0].filter_name == "brightness"
 
-
 # ---------------------------------------------------------------------------
 # Bookmarks
 # ---------------------------------------------------------------------------
@@ -232,7 +229,6 @@ class TestBookmarks:
         store.delete_bookmark("bm2")
         assert len(store.get_bookmarks_for_session("session2")) == 0
 
-
 # ---------------------------------------------------------------------------
 # Webhooks
 # ---------------------------------------------------------------------------
@@ -250,6 +246,7 @@ class TestWebhooks:
 
     def test_list_webhooks_redacted(self, store) -> None:
         """Spec 16: list_webhooks() returns redacted URLs."""
+
         wh = Webhook(
             id="wh-redact",
             url="https://discord.com/api/webhooks/123456/secret_token_abc",
@@ -293,11 +290,9 @@ class TestWebhooks:
         store.insert_webhook_log(entry)
         # Log is stored but not queried via public API yet
 
-
 # ---------------------------------------------------------------------------
 # Webhook Security — HTTPS enforcement and encryption
 # ---------------------------------------------------------------------------
-
 
 class TestWebhookSecurity:
     def test_rejects_non_https_url(self, store) -> None:
@@ -413,7 +408,6 @@ class TestWebhookSecurity:
         with pytest.raises(RuntimeError, match="Failed to decrypt"):
             store.get_webhook_url("wh-dec-fail")
 
-
 # ---------------------------------------------------------------------------
 # Folders
 # ---------------------------------------------------------------------------
@@ -430,7 +424,6 @@ class TestFolders:
         store.save_folder(f)
         store.delete_folder("f-del")
         assert not any(fld.name == "Temp" for fld in store.list_folders())
-
 
 # ---------------------------------------------------------------------------
 # Game profiles
@@ -465,7 +458,6 @@ class TestGameProfiles:
 
     def test_get_nonexistent(self, store) -> None:
         assert store.get_game_profile("nonexistent") is None
-
 
 # ---------------------------------------------------------------------------
 # Tasks
@@ -506,7 +498,6 @@ class TestURLHistory:
         urls = {h["url"] for h in history}
         assert "https://r2.example.com/clip1.mp4" in urls
         assert "https://r2.example.com/clip1-v2.mp4" in urls
-
 
 # ---------------------------------------------------------------------------
 # Migration
@@ -608,11 +599,9 @@ class TestMigration:
                 if d.exists():
                     _shutil.rmtree(d, ignore_errors=True)
 
-
 # ---------------------------------------------------------------------------
 # Edge cases — empty DB
 # ---------------------------------------------------------------------------
-
 
 class TestEmptyDB:
     def test_list_clips_empty(self, store) -> None:
@@ -650,11 +639,9 @@ class TestEmptyDB:
     def test_get_game_profile_none_empty_db(self, store) -> None:
         assert store.get_game_profile("anything") is None
 
-
 # ---------------------------------------------------------------------------
 # Edge cases — malformed data
 # ---------------------------------------------------------------------------
-
 
 class TestMalformedData:
     def test_insert_clip_no_explode(self, store) -> None:
@@ -717,7 +704,6 @@ class TestMalformedData:
         assert fetched.title == ""
         assert fetched.game is None
 
-
 # ---------------------------------------------------------------------------
 # Thread Safety
 # ---------------------------------------------------------------------------
@@ -757,11 +743,9 @@ class TestThreadSafety:
             c = store.get_clip(f"thread-clip-{i}")
             assert c is not None, f"Clip thread-clip-{i} was not found"
 
-
 # ---------------------------------------------------------------------------
 # Visibility enforcement (Spec 24)
 # ---------------------------------------------------------------------------
-
 
 class TestVisibilityFiltering:
     def test_guest_excludes_private(self, store) -> None:
@@ -827,7 +811,6 @@ class TestVisibilityFiltering:
         _make_clip(store, id="post-mig", discord_user_id="u1")
         assert store.get_clip("post-mig").discord_user_id == "u1"
 
-
 # ---------------------------------------------------------------------------
 # Spec 6 — Content-aware updated_at
 # ---------------------------------------------------------------------------
@@ -879,7 +862,6 @@ class TestContentAwareUpdatedAt:
         assert fetched is not None
         assert fetched.updated_at > old_updated
 
-
 # ---------------------------------------------------------------------------
 # Spec 6 — _execute_with_retry
 # ---------------------------------------------------------------------------
@@ -927,11 +909,9 @@ class TestExecuteWithRetry:
         with pytest.raises(sqlite3.OperationalError, match="no such table"):
             store._execute_with_retry("SELECT * FROM fake", cursor=bad)
 
-
 # ---------------------------------------------------------------------------
 # Cascading deletes
 # ---------------------------------------------------------------------------
-
 
 class TestCascadingDeletes:
     def test_delete_clip_cascades_to_tags(self, store: Store) -> None:
@@ -999,11 +979,9 @@ class TestCascadingDeletes:
         ).fetchone()
         assert row["cnt"] == 0
 
-
 # ---------------------------------------------------------------------------
 # Foreign key enforcement
 # ---------------------------------------------------------------------------
-
 
 class TestForeignKeyEnforcement:
     def test_rejects_orphan_clip_tags(self, store: Store) -> None:
@@ -1043,11 +1021,9 @@ class TestForeignKeyEnforcement:
             )
             store._conn.commit()
 
-
 # ---------------------------------------------------------------------------
 # Transaction rollback on error
 # ---------------------------------------------------------------------------
-
 
 class TestTransactionRollback:
     def test_insert_rolls_back_on_error(self, store: Store) -> None:
@@ -1083,11 +1059,9 @@ class TestTransactionRollback:
 
         assert store.get_clip("tx-fail") is None
 
-
 # ---------------------------------------------------------------------------
 # Duplicate key behavior
 # ---------------------------------------------------------------------------
-
 
 class TestDuplicateKey:
     def test_replaces_clip_on_same_id(self, store: Store) -> None:
@@ -1136,11 +1110,9 @@ class TestDuplicateKey:
         assert row is not None
         assert row["id"] == "tag-v1"  # original preserved
 
-
 # ---------------------------------------------------------------------------
 # Empty trash edge cases
 # ---------------------------------------------------------------------------
-
 
 class TestEmptyTrash:
     def test_empty_trash_no_deleted_clips(self, store: Store) -> None:
@@ -1172,11 +1144,9 @@ class TestEmptyTrash:
         count2 = store.empty_trash()
         assert count2 == 0
 
-
 # ---------------------------------------------------------------------------
 # Rate limiter edge cases
 # ---------------------------------------------------------------------------
-
 
 class TestRateLimiter:
     def test_same_key_back_to_back_is_rate_limited(self, store: Store) -> None:
@@ -1204,7 +1174,6 @@ class TestRateLimiter:
             result = store.check_persistent_rate("fast-key", interval_secs=0.0)
             assert result is None
 
-
 # ---------------------------------------------------------------------------
 # Spec 6 — Read-only connection
 # ---------------------------------------------------------------------------
@@ -1225,7 +1194,6 @@ class TestReadOnlyConnection:
         ).fetchone()
         assert row is not None
         assert row["title"] == "Readable"
-
 
 # ---------------------------------------------------------------------------
 # Spec 6 — Retention helpers
@@ -1274,3 +1242,5 @@ class TestRetentionHelpers:
         )
         store.insert_task(task)
         assert store.has_active_task_for_clip("done-clip") is False
+
+

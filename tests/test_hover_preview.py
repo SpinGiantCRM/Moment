@@ -1,16 +1,19 @@
 """Tests for hover_preview.py — thumbnail preview popup."""
 
 from __future__ import annotations
+import pytest
 
 from PyQt6.QtCore import QRect, Qt
 
 from moment.ui.widgets.hover_preview import _POPUP_H, _POPUP_W, HoverPreviewWidget
+pytestmark = [pytest.mark.gui]
 
 
 class TestHoverPreviewInit:
     """Tests for HoverPreviewWidget construction."""
 
     def test_create_basic(self, qtbot) -> None:
+
         """HoverPreviewWidget can be created without a thumbnail."""
         widget = HoverPreviewWidget(thumb_path=None)
         qtbot.addWidget(widget)
@@ -56,7 +59,6 @@ class TestHoverPreviewInit:
         assert widget._auto_close.isSingleShot()
         assert widget._auto_close.interval() == 5000
 
-
 class TestHoverPreviewSchedule:
     """Tests for schedule_show() and cancel()."""
 
@@ -95,7 +97,6 @@ class TestHoverPreviewSchedule:
         # Widget should be visible and auto-close started
         assert widget._auto_close.isActive()
 
-
 class TestHoverPreviewEvents:
     """Tests for enter/leave events."""
 
@@ -122,7 +123,6 @@ class TestHoverPreviewEvents:
         widget.show()
         widget._auto_close.timeout.emit()
         # WA_DeleteOnClose means close() was called
-
 
 class TestHoverPreviewPlaceholder:
     """Tests for placeholder fallback."""
@@ -151,3 +151,5 @@ class TestHoverPreviewPlaceholder:
         pixmap = widget._thumb_label.pixmap()
         assert pixmap is not None
         assert not pixmap.isNull()
+
+

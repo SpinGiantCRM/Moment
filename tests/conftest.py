@@ -46,7 +46,24 @@ def qapp() -> QApplication:
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    return app
+    yield app
+    # Process pending events before session teardown to flush deferred deletions
+    # and prevent segfaults during Qt's ~QGuiApplication destructor.
+    app.processEvents()
+
+
+def wait_until(predicate, timeout: float = 2.0, interval: float = 0.01) -> None:
+    """Poll *predicate* until it returns truthy or *timeout* elapses.
+
+    Raises ``AssertionError`` if the condition is not met before timeout.
+    """
+    import time as _time
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline:
+        if predicate():
+            return
+        _time.sleep(interval)
+    raise AssertionError(f"condition not met before timeout ({timeout}s)")
 
 
 @pytest.fixture(autouse=True)
@@ -89,9 +106,8 @@ def store(db_path: str) -> Store:
             s = Store(db_path=db_path)
             yield s
             s.close()
-            # Give WAL checkpoint time to flush before file cleanup
-            import time
-            time.sleep(0.05)
+            # s.close() performs a WAL checkpoint on the connection;
+            # no sleep needed — the checkpoint is synchronous on Linux.
 
 
 @pytest.fixture

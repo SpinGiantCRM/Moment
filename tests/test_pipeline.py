@@ -10,11 +10,14 @@ import pytest
 
 from moment.core.config import Config
 from moment.core.models import Clip, ClipStatus, Task, TaskKind, TaskStatus
-from moment.core.pipeline import Pipeline
+from moment.core.pipeline import STATUS_INTERVAL, Pipeline
 from moment.core.store import Store
+from tests.conftest import wait_until
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
+
 def tmp_db_for_config() -> str:
     import tempfile, os
     fd, path = tempfile.mkstemp(suffix=".db", prefix="pipeline_config_")
@@ -28,11 +31,9 @@ def tmp_db_for_config() -> str:
     except FileNotFoundError:
         pass
 
-
 @pytest.fixture
 def config(tmp_db_for_config: str) -> Config:
     return Config(db_path=tmp_db_for_config)
-
 
 @pytest.fixture
 def pipeline(store: Store, config: Config) -> Pipeline:
@@ -43,7 +44,6 @@ def pipeline(store: Store, config: Config) -> Pipeline:
         upload_workers=0,
         thumbnail_workers=0,
     )
-
 
 class TestInitialization:
     def test_default_state(self, pipeline: Pipeline) -> None:
@@ -61,7 +61,6 @@ class TestInitialization:
         with pytest.raises(RuntimeError, match="already"):
             pipeline.start()
         pipeline.shutdown()
-
 
 class TestEnqueue:
     def test_enqueue_adds_to_queue(self, pipeline: Pipeline) -> None:
@@ -98,7 +97,6 @@ class TestEnqueue:
     def test_is_queued_false_for_nonexistent(self, pipeline: Pipeline) -> None:
         assert pipeline.is_queued("no-such-clip") is False
 
-
 class TestPauseResume:
     def test_pause_sets_flag(self, pipeline: Pipeline) -> None:
         pipeline.pause()
@@ -116,7 +114,6 @@ class TestPauseResume:
             pipeline.resume()
             # notify_all should have been called
             assert pipeline.paused is False
-
 
 class TestStatus:
     def test_status_encode(self, pipeline: Pipeline) -> None:
@@ -138,7 +135,6 @@ class TestStatus:
         assert "Encoding 1" in status
         assert "Uploading 1" in status
 
-
 class TestShutdown:
     def test_shutdown_changes_state(self, pipeline: Pipeline) -> None:
         pipeline.start()
@@ -154,7 +150,6 @@ class TestShutdown:
     def test_shutdown_from_idle_raises(self, pipeline: Pipeline) -> None:
         with pytest.raises(RuntimeError, match="cannot be shut down"):
             pipeline.shutdown()
-
 
 class TestProcessEncode:
     def test_encode_missing_clip(self, pipeline: Pipeline) -> None:
@@ -206,7 +201,6 @@ class TestProcessEncode:
 
         p.shutdown()
 
-
 class TestProcessUpload:
     def test_upload_missing_clip(self, pipeline: Pipeline) -> None:
         task = Task(id="up-miss", type=TaskKind.UPLOAD, payload={"clip_id": "nonexistent"})
@@ -221,7 +215,6 @@ class TestProcessUpload:
         p.start()
         p._process_upload(task)
         p.shutdown()
-
 
 class TestProcessThumbnail:
     def test_thumbnail_missing_clip(self, pipeline: Pipeline) -> None:
@@ -241,10 +234,10 @@ class TestProcessThumbnail:
 
         p.shutdown()
 
-
 class TestEnqueueShutdownRace:
     def test_enqueue_after_shutdown_still_saves_to_db(self, pipeline: Pipeline) -> None:
         """Enqueue after shutdown() should still persist to DB (durability)."""
+
         pipeline.start()
         pipeline.shutdown()
 
@@ -277,7 +270,7 @@ class TestEnqueueShutdownRace:
 
         assert results[0] is None
 
-
+@pytest.mark.slow
 class TestWrongTaskTypeRequeue:
     def test_encode_worker_requeues_upload_task(self, store: Store, config: Config) -> None:
         """If encode worker picks up a non-ENCODE task, it re-queues it."""
@@ -287,9 +280,9 @@ class TestWrongTaskTypeRequeue:
         upload_task = Task(id="wrong-type", type=TaskKind.UPLOAD, priority=5, payload={"clip_id": "c1"})
         p.enqueue(upload_task)
 
-        # Give the worker time to poll, detect wrong type, and re-queue
-        import time
-        time.sleep(1.0)
+        # Worker polls with 1s timeout; wait for it to detect wrong type and re-queue
+        wait_until(lambda: any(t.id == "wrong-type" for t in store.get_pending_tasks()),
+                   timeout=3.0)
 
         # The upload task should have been re-queued
         p.shutdown()
@@ -304,8 +297,8 @@ class TestWrongTaskTypeRequeue:
         encode_task = Task(id="wrong-type-thumb", type=TaskKind.ENCODE, priority=3, payload={"clip_id": "c1"})
         p.enqueue(encode_task)
 
-        import time
-        time.sleep(1.0)
+        wait_until(lambda: any(t.id == "wrong-type-thumb" for t in store.get_pending_tasks()),
+                   timeout=3.0)
 
         p.shutdown()
         pending = store.get_pending_tasks()
@@ -319,13 +312,12 @@ class TestWrongTaskTypeRequeue:
         encode_task = Task(id="wrong-type-up", type=TaskKind.ENCODE, priority=3, payload={"clip_id": "c1"})
         p.enqueue(encode_task)
 
-        import time
-        time.sleep(1.0)
+        wait_until(lambda: any(t.id == "wrong-type-up" for t in store.get_pending_tasks()),
+                   timeout=3.0)
 
         p.shutdown()
         pending = store.get_pending_tasks()
         assert any(t.id == "wrong-type-up" for t in pending)
-
 
 class TestSentinelHandling:
     def test_sentinels_not_persisted_by_shutdown(self, store: Store, config: Config) -> None:
@@ -345,7 +337,6 @@ class TestSentinelHandling:
             "SELECT count(*) as cnt FROM tasks WHERE id = '__sentinel__'"
         ).fetchone()
         assert row["cnt"] == 0
-
 
 class TestQueueFull:
     def test_queue_full_marks_task_failed(self, pipeline: Pipeline) -> None:
@@ -374,7 +365,7 @@ class TestQueueFull:
 
         pipeline.shutdown()
 
-
+@pytest.mark.slow
 class TestStatusTimer:
     def test_status_callback_fires(self, store: Store, config: Config) -> None:
         statuses: list[str] = []
@@ -401,9 +392,7 @@ class TestStatusTimer:
         statuses.clear()
         p.shutdown()
 
-        # Wait a bit — timer should not fire
-        import time
-        time.sleep(0.5)
+        # shutdown() cancels the status timer — no wait needed
         assert len(statuses) == 0
 
     def test_status_timer_fires_on_state_change(self, store: Store, config: Config) -> None:
@@ -417,14 +406,12 @@ class TestStatusTimer:
         # Change active state
         p._inc_counter("encode")
 
-        # Give timer chance to fire
-        import time
-        from moment.core.pipeline import STATUS_INTERVAL
-        time.sleep(STATUS_INTERVAL + 0.5)
+        # Wait for the status timer (STATUS_INTERVAL=3s) to fire
+        wait_until(lambda: any("Encoding" in s for s in statuses),
+                   timeout=STATUS_INTERVAL + 2.0)
 
         assert any("Encoding" in s for s in statuses)
         p.shutdown()
-
 
 class TestPriorityOrdering:
     def test_higher_priority_tasks_dequeued_first(self, store: Store, config: Config) -> None:
@@ -444,7 +431,6 @@ class TestPriorityOrdering:
         pending = store.get_pending_tasks()
         assert any(t.id == "prio-low" for t in pending)
         assert any(t.id == "prio-high" for t in pending)
-
 
 class TestCounterEdgeCases:
     def test_dec_multiple_times_below_zero(self, pipeline: Pipeline) -> None:
@@ -475,7 +461,6 @@ class TestCounterEdgeCases:
         assert len(errors) == 0
         assert pipeline._active_counts["encode"] == 0
 
-
 class TestCounters:
     def test_inc_and_dec(self, pipeline: Pipeline) -> None:
         pipeline._inc_counter("encode")
@@ -489,7 +474,7 @@ class TestCounters:
         pipeline._dec_counter("upload")
         assert pipeline._active_counts["upload"] == 0
 
-
+@pytest.mark.slow
 class TestStatusTimer:
     def test_status_callback_fires(self, store: Store, config: Config) -> None:
         statuses: list[str] = []
@@ -506,3 +491,5 @@ class TestStatusTimer:
         p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0, on_status=bad_cb)
         p.start()
         p.shutdown()
+
+

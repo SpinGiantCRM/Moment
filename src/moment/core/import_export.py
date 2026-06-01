@@ -413,8 +413,11 @@ class ImportExport:
                 logger.debug("file(1) MIME check failed: %s", exc)
 
         if mime_type is None:
-            logger.debug("No MIME checker available — skipping MIME validation")
-            return
+            logger.warning("No MIME checker available — cannot validate import safety")
+            raise ImportError(
+                "Cannot verify file type: install python-magic (pip install python-magic) "
+                "or ensure the 'file' command is available on PATH"
+            )
 
         # Accept video/ and audio/ MIME types
         if mime_type.startswith("video/") or mime_type.startswith("audio/"):

@@ -1,14 +1,17 @@
 """Tests for dialogs/about_dialog.py — keyboard shortcuts, license, credits."""
 
 from __future__ import annotations
+import pytest
 
 from moment.ui.dialogs.about_dialog import _CREDITS, _SHORTCUTS, AboutDialog
+pytestmark = [pytest.mark.gui]
 
 
 class TestShortcutsData:
     """Tests for the shortcuts dataset."""
 
     def test_shortcuts_not_empty(self) -> None:
+
         assert len(_SHORTCUTS) > 0
 
     def test_shortcuts_have_valid_structure(self) -> None:
@@ -18,7 +21,6 @@ class TestShortcutsData:
             assert isinstance(cat, str) and cat
             assert isinstance(shortcut, str) and shortcut
             assert isinstance(action, str) and action
-
 
 class TestCreditsData:
     """Tests for the credits dataset."""
@@ -34,7 +36,6 @@ class TestCreditsData:
             assert isinstance(lib, str) and lib
             assert isinstance(purpose, str) and purpose
             assert isinstance(lic, str) and lic
-
 
 class TestAboutDialogInit:
     """Tests for AboutDialog construction."""
@@ -77,3 +78,5 @@ class TestAboutDialogInit:
         dlg = AboutDialog()
         dlg.accept()
         assert dlg.result() == 1
+
+

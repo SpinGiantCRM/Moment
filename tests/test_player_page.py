@@ -7,12 +7,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from moment.ui.pages.player_page import PlayerPage, SeekBar, _fmt_ms, _fmt_size
+pytestmark = [pytest.mark.gui]
 
 
 class TestHelpers:
     """Tests for formatting helpers."""
 
     def test_fmt_ms_seconds(self) -> None:
+
         assert _fmt_ms(5000) == "0:05"
 
     def test_fmt_ms_minutes(self) -> None:
@@ -35,7 +37,6 @@ class TestHelpers:
 
     def test_fmt_size_gb(self) -> None:
         assert "GB" in _fmt_size(2_000_000_000)
-
 
 class TestSeekBar:
     """Tests for the custom seek bar widget."""
@@ -60,7 +61,6 @@ class TestSeekBar:
         bar.set_duration(300000)
         bar.set_position(150000)
         assert bar._elapsed_label.text() == "2:30"
-
 
 class TestPlayerPageInit:
     """Tests for PlayerPage construction."""
@@ -93,7 +93,6 @@ class TestPlayerPageInit:
     def test_player_stopped_initially(self, page: PlayerPage) -> None:
         from PyQt6.QtMultimedia import QMediaPlayer
         assert page._player.playbackState() == QMediaPlayer.PlaybackState.StoppedState
-
 
 class TestPlayerPageLoad:
     """Tests for load_clip() method."""
@@ -141,3 +140,5 @@ class TestPlayerPageLoad:
         page = PlayerPage()
         page._on_load_error("fail")
         assert not page._empty_label.isHidden()
+
+

@@ -1,16 +1,19 @@
 """Tests for dialogs/game_profile_dialog.py — per-game recording config."""
 
 from __future__ import annotations
+import pytest
 
 from unittest.mock import MagicMock
 
 from moment.ui.dialogs.game_profile_dialog import GameProfileDialog
+pytestmark = [pytest.mark.gui]
 
 
 class TestGameProfileDialogInit:
     """Tests for GameProfileDialog construction."""
 
     def test_create(self, qapp) -> None:
+
         dlg = GameProfileDialog()
         assert dlg.windowTitle() == "Game Profiles"
         assert dlg.isModal()
@@ -41,7 +44,6 @@ class TestGameProfileDialogInit:
         dlg = GameProfileDialog()
         assert dlg.minimumWidth() >= 500
         assert dlg.minimumHeight() >= 400
-
 
 class TestProfileListOperations:
     """Tests for add/remove profile from the list."""
@@ -80,7 +82,6 @@ class TestProfileListOperations:
         dlg._profile_list.setCurrentRow(-1)
         dlg._remove_profile()
         assert len(dlg._profiles) == 1  # unchanged
-
 
 class TestProfileEditing:
     """Tests for editing and saving profiles."""
@@ -142,7 +143,6 @@ class TestProfileEditing:
         store.save_game_profile.assert_not_called()
         assert dlg.result() == 0
 
-
 class TestGameProfileWidgets:
     """Tests that all form widgets exist."""
 
@@ -170,3 +170,5 @@ class TestGameProfileWidgets:
         dlg = GameProfileDialog()
         assert dlg._fps_sb.minimum() >= 15
         assert dlg._fps_sb.maximum() <= 240
+
+

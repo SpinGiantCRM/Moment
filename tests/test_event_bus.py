@@ -1,8 +1,10 @@
 """Tests for core/event_bus.py — signal bus."""
 
 from __future__ import annotations
+import pytest
 
 from moment.core.event_bus import EventBus
+pytestmark = [pytest.mark.integration]
 
 
 class TestEventBus:
@@ -93,3 +95,5 @@ class TestEventBus:
         bus.toast_requested.connect(on_toast)
         bus.toast_requested.emit("Hello", "info")
         assert toasts == [("Hello", "info")]
+
+

@@ -1,21 +1,23 @@
 """Tests for dialogs/settings_dialog.py — tabbed settings with persistence."""
 
 from __future__ import annotations
+import pytest
 
 from unittest.mock import MagicMock, patch
 
 from moment.ui.dialogs.settings_dialog import _VIDEO_ENCODER_OPTIONS, SettingsDialog
+pytestmark = [pytest.mark.gui]
 
 
 class TestVideoEncoderOptions:
     """Tests for the encoder options dataset."""
 
     def test_options_not_empty(self) -> None:
+
         assert len(_VIDEO_ENCODER_OPTIONS) > 0
 
     def test_auto_option_first(self) -> None:
         assert "Auto" in _VIDEO_ENCODER_OPTIONS[0][0]
-
 
 def _make_config(**overrides: object) -> MagicMock:
     """Create a MagicMock Config that returns proper defaults from get()."""
@@ -28,7 +30,6 @@ def _make_config(**overrides: object) -> MagicMock:
     config.get_gsr_setting.return_value = overrides.get("gsr_setting", None)
     config.get_hotkey.return_value = overrides.get("hotkey", "Alt+Z")
     return config
-
 
 class TestSettingsDialogInit:
     """Tests for SettingsDialog construction."""
@@ -62,7 +63,6 @@ class TestSettingsDialogInit:
         assert dlg.minimumWidth() >= 400
         assert dlg.minimumHeight() >= 400
 
-
 class TestSettingsLoad:
     """Tests for loading settings from config."""
 
@@ -95,7 +95,6 @@ class TestSettingsLoad:
         assert dlg._preset_cb.currentText() == "p6"
         assert dlg._cq_slider.value() == 23
 
-
 class TestSettingsSave:
     """Tests for persisting settings to config."""
 
@@ -123,7 +122,6 @@ class TestSettingsSave:
         dlg._on_close()
         assert dlg.result() == 1
 
-
 class TestSettingsDefaultPaths:
     """Tests for _get_path_default helper."""
 
@@ -134,7 +132,6 @@ class TestSettingsDefaultPaths:
     def test_unknown_key_returns_empty(self) -> None:
         val = SettingsDialog._get_path_default("nonexistent")
         assert val == ""
-
 
 class TestResetDefaults:
     """Tests for resetting settings to defaults."""
@@ -154,7 +151,6 @@ class TestResetDefaults:
         dlg._autostart_cb.setChecked(True)
         dlg._on_reset_defaults()
         assert dlg._autostart_cb.isChecked() is True  # unchanged
-
 
 class TestSettingsWidgets:
     """Tests that key widgets exist across all tabs."""
@@ -204,7 +200,6 @@ class TestSettingsWidgets:
         assert dlg._base_url_edit is not None
         assert len(dlg._storage_fields) > 0
 
-
 class TestVideoCodecSettings:
     """Tests for video encoder selection and persistence."""
 
@@ -214,3 +209,5 @@ class TestVideoCodecSettings:
         dlg._video_encoder_cb.setCurrentIndex(1)  # NVENC H.264
         dlg._save_settings()
         config.set_preferred_codec.assert_called()
+
+

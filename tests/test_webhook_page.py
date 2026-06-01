@@ -1,16 +1,19 @@
 """Tests for pages/webhook_page.py — Discord webhook configuration."""
 
 from __future__ import annotations
+import pytest
 
 from unittest.mock import MagicMock
 
 from moment.ui.pages.webhook_page import WebhookPage
+pytestmark = [pytest.mark.gui]
 
 
 class TestWebhookPageInit:
     """Tests for WebhookPage construction."""
 
     def test_create_without_store(self, qapp) -> None:
+
         page = WebhookPage()
         assert page._store is None
 
@@ -27,7 +30,6 @@ class TestWebhookPageInit:
         assert page._name_input is not None
         assert page._save_btn is not None
         assert page._form_card is not None
-
 
 class TestWebhookPageRefresh:
     """Tests for refresh() method."""
@@ -76,7 +78,6 @@ class TestWebhookPageRefresh:
         page = WebhookPage(store=store)
         page.refresh()  # should not raise
 
-
 class TestWebhookPageForm:
     """Tests for webhook add/edit form."""
 
@@ -120,3 +121,5 @@ class TestWebhookPageForm:
         page._url_input.setStyleSheet("border: 1px solid var(--accent-red);")
         page._on_url_text_changed()
         assert page._url_input.styleSheet() == ""
+
+

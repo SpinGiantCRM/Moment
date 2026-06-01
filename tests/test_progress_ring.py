@@ -1,14 +1,17 @@
 """Tests for progress_ring.py — circular progress indicator."""
 
 from __future__ import annotations
+import pytest
 
 from moment.ui.widgets.progress_ring import _SIZE, ProgressRing
+pytestmark = [pytest.mark.gui]
 
 
 class TestProgressRingInit:
     """Tests for ProgressRing construction and defaults."""
 
     def test_create(self, qtbot) -> None:
+
         """ProgressRing can be created."""
         ring = ProgressRing()
         qtbot.addWidget(ring)
@@ -28,7 +31,6 @@ class TestProgressRingInit:
         qtbot.addWidget(ring)
         ring.show()
         assert not ring.isHidden()
-
 
 class TestProgressRingSetState:
     """Tests for set_state() transitions."""
@@ -87,7 +89,6 @@ class TestProgressRingSetState:
         ring.set_state("QUEUED")
         assert ring._state == "QUEUED"
 
-
 class TestProgressRingFade:
     """Tests for DONE fade-out behavior."""
 
@@ -123,7 +124,6 @@ class TestProgressRingFade:
         ring._opacity_prop = 0.0
         assert ring._opacity == 0.0
 
-
 class TestProgressRingPaint:
     """Tests for paintEvent rendering."""
 
@@ -149,3 +149,5 @@ class TestProgressRingPaint:
         ring.set_state("DONE")
         ring.show()
         ring.repaint()
+
+

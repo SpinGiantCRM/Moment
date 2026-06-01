@@ -441,7 +441,7 @@ def _check_webhook_rate_limit(url_hash: str) -> str | None:
     return store.check_persistent_rate(f"webhook_test:{url_hash}", _WEBHOOK_MIN_INTERVAL)
 
 
-def test_webhook(webhook_id: str, *, _url_hash: str | None = None) -> dict[str, str]:
+def test_webhook(webhook_id: str) -> dict[str, str]:
     """Test-fire a configured webhook.
 
     Rate-limited to once per 60 seconds per webhook URL (persisted across restarts).
@@ -458,8 +458,8 @@ def test_webhook(webhook_id: str, *, _url_hash: str | None = None) -> dict[str, 
     if wh is None:
         return {"error": f"Webhook {webhook_id} not found"}
 
-    # Rate limit check — hash the webhook URL for the rate-limit key
-    url_hash = _url_hash or hashlib.sha256(wh.url.encode()).hexdigest()[:12]
+    # Rate limit check — compute hash internally (not caller-controlled)
+    url_hash = hashlib.sha256(wh.url.encode()).hexdigest()[:12]
     rate_error = _check_webhook_rate_limit(url_hash)
     if rate_error is not None:
         return {"error": rate_error}
@@ -588,7 +588,8 @@ def import_clip(
 def export_clip(clip_id: str, output_path: str | None = None) -> dict[str, str]:
     """Export a clip — copy to a destination or return its file path.
 
-    Read-only (no mutation token required).
+    Requires mutation-scoped token when writing to *output_path*.
+    Read-only scope is allowed only when *output_path* is omitted.
 
     Args:
         clip_id: UUID of the clip to export.
@@ -613,7 +614,15 @@ def export_clip(clip_id: str, output_path: str | None = None) -> dict[str, str]:
     result: dict[str, str] = {"status": "ok", "file_path": str(src)}
 
     if output_path is not None:
-        dest = Path(output_path)
+        # Writing to disk requires mutation scope
+        scope_error = _check_mutation_allowed()
+        if scope_error is not None:
+            return {"error": scope_error}
+
+        dest = Path(output_path).resolve()
+        # Validate destination is within allowed directories
+        _validate_export_dest(dest)
+
         try:
             if dest.is_dir():
                 dest = dest / src.name
@@ -625,6 +634,39 @@ def export_clip(clip_id: str, output_path: str | None = None) -> dict[str, str]:
         logger.info("Exported clip %s to %s via MCP", clip_id, dest)
 
     return result
+
+
+def _validate_export_dest(dest: Path) -> None:
+    """Raise ValueError if *dest* is outside allowed directories."""
+    from os.path import commonpath
+
+    allowed: list[str] = [
+        os.path.expanduser("~"),
+        "/tmp",
+        str(Path.home() / "Videos"),
+        os.path.expanduser("~/.local/share/moment"),
+    ]
+    try:
+        from moment.core.store import _get_config
+        cfg = _get_config()
+        if cfg is not None:
+            for key in ("encode_dir", "recordings_dir"):
+                custom = cfg.get_path(key)
+                if custom:
+                    allowed.append(str(Path(custom).resolve()))
+    except Exception:
+        pass
+
+    dest_str = str(dest)
+    for root in allowed:
+        try:
+            if commonpath([dest_str, root]) == root:
+                return
+        except ValueError:
+            continue
+    raise ValueError(
+        f"Export destination {dest} is outside allowed directories"
+    )
 
 
 # ---------------------------------------------------------------------------

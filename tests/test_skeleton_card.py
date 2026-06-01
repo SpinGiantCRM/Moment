@@ -1,16 +1,19 @@
 """Tests for skeleton_card.py — pulse-animated placeholder card."""
 
 from __future__ import annotations
+import pytest
 
 from PyQt6.QtGui import QColor
 
 from moment.ui.widgets.skeleton_card import _CARD_H, _CARD_W, SkeletonCard
+pytestmark = [pytest.mark.gui]
 
 
 class TestSkeletonCardInit:
     """Tests for SkeletonCard construction and defaults."""
 
     def test_create(self, qtbot) -> None:
+
         """SkeletonCard can be created."""
         card = SkeletonCard()
         qtbot.addWidget(card)
@@ -50,7 +53,6 @@ class TestSkeletonCardInit:
         qtbot.addWidget(card)
         assert card._anim.loopCount() == -1
 
-
 class TestSkeletonCardPaint:
     """Tests for paintEvent rendering."""
 
@@ -77,7 +79,6 @@ class TestSkeletonCardPaint:
         card.show()
         card.repaint()
 
-
 class TestSkeletonCardSetColor:
     """Tests for set_color()."""
 
@@ -96,3 +97,5 @@ class TestSkeletonCardSetColor:
         card.set_color(QColor(100, 100, 100))
         card.show()
         card.repaint()
+
+
