@@ -38,11 +38,13 @@ release:
 	git add pyproject.toml src/moment/__init__.py
 	git commit -m "Release v$(VERSION) [skip ci]" || true
 	git tag "v$(VERSION)"
-	@echo "==> Pushing …"
-	git push origin "$$(git rev-parse --abbrev-ref HEAD)" --tags
+	@echo "==> Pushing commit …"
+	git push origin "$$(git rev-parse --abbrev-ref HEAD)"
+	@echo "==> Pushing tag (triggers release workflow) …"
+	git push origin "v$(VERSION)"
 	@echo "==> Building …"
 	$(MAKE) dist
-	@echo "==> Release v$(VERSION) ready.  Create a GitHub Release and attach dist/ artifacts."
+	@echo "==> Release v$(VERSION) ready.  GitHub Actions will now run the release pipeline."
 
 # ---- PKGBUILD --------------------------------------------------------------
 
