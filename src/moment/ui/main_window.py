@@ -34,14 +34,16 @@ from typing import TYPE_CHECKING, Callable
 
 from PyQt6.QtCore import (
     QEasingCurve,
+    QPoint,
     QPropertyAnimation,
+    QRect,
     QSize,
     Qt,
     QTimer,
     QUrl,
     pyqtSignal,
 )
-from PyQt6.QtGui import QDesktopServices, QKeySequence, QShortcut
+from PyQt6.QtGui import QDesktopServices, QKeySequence, QMouseEvent, QShortcut
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import (
     QApplication,
@@ -146,8 +148,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("moment")
         self.setAccessibleName("Moment — Game Clip Manager")
         self.setAccessibleDescription("GPU-accelerated game clip recording and management")
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         self.resize(960, 650)
         self.setMinimumSize(720, 420)
+        self._drag_pos: QPoint | None = None
+        self._resize_margin = 4
+        self._resize_dir = 0  # 0=none, 1=N, 2=E, 3=S, 4=W, 5=NE, 6=SE, 7=SW, 8=NW
+        self._resize_start_geo: QRect | None = None
+        self._resize_start_pos: QPoint | None = None
 
         screen = QApplication.primaryScreen()
         if screen is not None:
@@ -163,6 +171,10 @@ class MainWindow(QMainWindow):
         central_layout = QVBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
+
+        # ── Custom title bar (frameless window) ──────────────────────────
+        self._title_bar = self._build_title_bar()
+        central_layout.addWidget(self._title_bar)
 
         # ── Service unavailable banner ─────────────────────────────────────
         self._unavailable_banner = self._build_unavailable_banner(self._store_init_error or "")
@@ -400,6 +412,170 @@ class MainWindow(QMainWindow):
         self._on_settings()
         # Uncheck settings after dialog closes (it's not a nav state)
         self._settings_btn.setChecked(False)
+
+    # ==================================================================
+    # Custom title bar (frameless window)
+    # ==================================================================
+
+    def _build_title_bar(self) -> QFrame:
+        bar = QFrame()
+        bar.setObjectName("titleBar")
+        bar.setFixedHeight(32)
+        bar.setStyleSheet("""
+            QFrame#titleBar {
+                background-color: #181818;
+                border: none;
+            }
+        """)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(10, 0, 10, 0)
+        layout.setSpacing(6)
+
+        icon_lbl = QLabel()
+        from moment.ui.resources import load_icon
+
+        pix = load_icon("moment", color="#a0a0a0", size=16).pixmap(16, 16)
+        icon_lbl.setPixmap(pix)
+        icon_lbl.setStyleSheet("background: transparent; border: none;")
+        layout.addWidget(icon_lbl)
+
+        title_lbl = QLabel("moment")
+        title_lbl.setStyleSheet(
+            "color: #a0a0a0; font-size: 12px; font-weight: 600;"
+            " background: transparent; border: none;"
+        )
+        layout.addWidget(title_lbl)
+
+        layout.addStretch()
+
+        btn_style = (
+            "QPushButton {"
+            "  background: transparent; border: none; color: #a0a0a0;"
+            "  font-size: 16px; padding: 0 10px; min-height: 24px;"
+            "}"
+            "QPushButton:hover { background: #323232; color: #e8e8e8; }"
+        )
+
+        self._min_btn = QPushButton("─")
+        self._min_btn.setFixedSize(32, 24)
+        self._min_btn.setStyleSheet(btn_style)
+        self._min_btn.clicked.connect(self.showMinimized)
+        layout.addWidget(self._min_btn)
+
+        self._close_btn = QPushButton("✕")
+        self._close_btn.setFixedSize(32, 24)
+        self._close_btn.setStyleSheet(
+            btn_style + "QPushButton:hover { background: #f87171; color: white; }"
+        )
+        self._close_btn.clicked.connect(self.close)
+        layout.addWidget(self._close_btn)
+
+        # Make title bar draggable
+        bar.mousePressEvent = self._title_bar_mouse_press
+        bar.mouseMoveEvent = self._title_bar_mouse_move
+        bar.mouseReleaseEvent = self._title_bar_mouse_release
+
+        return bar
+
+    def _title_bar_mouse_press(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = event.globalPosition().toPoint()
+            event.accept()
+
+    def _title_bar_mouse_move(self, event: QMouseEvent) -> None:
+        if self._drag_pos is not None and event.buttons() == Qt.MouseButton.LeftButton:
+            delta = event.globalPosition().toPoint() - self._drag_pos
+            self.move(self.pos() + delta)
+            self._drag_pos = event.globalPosition().toPoint()
+            event.accept()
+
+    def _title_bar_mouse_release(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_pos = None
+            event.accept()
+
+    # ── Frameless window resize from edges ─────────────────────────────
+
+    def _hit_test(self, pos: QPoint) -> int:
+        """Return resize direction based on cursor position, 0=none."""
+        r = self._resize_margin
+        g = self.geometry()
+        wx, wy, ww, wh = g.x(), g.y(), g.width(), g.height()
+        lx, ly = pos.x(), pos.y()
+        dirs = 0
+        if lx < wx + r:
+            dirs |= 8  # W
+        elif lx > wx + ww - r:
+            dirs |= 4  # E
+        if ly < wy + r:
+            dirs |= 1  # N
+        elif ly > wy + wh - r:
+            dirs |= 2  # S
+        return dirs
+
+    _EDGE_CURSORS = {
+        0: Qt.CursorShape.ArrowCursor,
+        1: Qt.CursorShape.SizeVerCursor,
+        2: Qt.CursorShape.SizeVerCursor,
+        4: Qt.CursorShape.SizeHorCursor,
+        8: Qt.CursorShape.SizeHorCursor,
+        5: Qt.CursorShape.SizeBDiagCursor,
+        6: Qt.CursorShape.SizeFDiagCursor,
+        7: Qt.CursorShape.SizeFDiagCursor,
+        9: Qt.CursorShape.SizeBDiagCursor,
+    }
+
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
+        if event is None:
+            return
+        if event.button() == Qt.MouseButton.LeftButton:
+            d = self._hit_test(event.globalPosition().toPoint())
+            if d:
+                self._resize_dir = d
+                self._resize_start_geo = self.geometry()
+                self._resize_start_pos = event.globalPosition().toPoint()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
+        if event is None:
+            return
+        if self._resize_dir:
+            gp = event.globalPosition().toPoint()
+            dx = gp.x() - self._resize_start_pos.x()
+            dy = gp.y() - self._resize_start_pos.y()
+            g = self._resize_start_geo
+            x, y, w, h = g.x(), g.y(), g.width(), g.height()
+            if self._resize_dir & 4:  # E
+                w = max(self.minimumWidth(), g.width() + dx)
+            if self._resize_dir & 8:  # W
+                w = max(self.minimumWidth(), g.width() - dx)
+                x = g.x() + (g.width() - w)
+            if self._resize_dir & 2:  # S
+                h = max(self.minimumHeight(), g.height() + dy)
+            if self._resize_dir & 1:  # N
+                h = max(self.minimumHeight(), g.height() - dy)
+                y = g.y() + (g.height() - h)
+            self.setGeometry(x, y, w, h)
+            event.accept()
+            return
+        # Update cursor on edges (only when not on title bar)
+        d = self._hit_test(event.globalPosition().toPoint())
+        cursor = self._EDGE_CURSORS.get(d, Qt.CursorShape.ArrowCursor)
+        self.setCursor(cursor)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
+        if event is None:
+            return
+        if event.button() == Qt.MouseButton.LeftButton and self._resize_dir:
+            self._resize_dir = 0
+            self._resize_start_geo = None
+            self._resize_start_pos = None
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     # ==================================================================
     # Context Toolbar (36px)

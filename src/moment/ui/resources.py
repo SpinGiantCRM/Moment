@@ -941,9 +941,14 @@ QWidget#sidebarWidget {{
 def stylesheet() -> str:
     """Return the complete application QSS stylesheet.
 
-    The stylesheet is built once and cached for the lifetime of the process.
+    ``var(--token)`` references in the widget rules are resolved before the
+    stylesheet is cached, because Qt QSS does **not** support native CSS
+    variables.
     """
     global _STYLESHEET
     if _STYLESHEET is None:
-        _STYLESHEET = qss_colors() + "\n" + _QSS_WIDGET_RULES
+        raw = _QSS_WIDGET_RULES
+        for token, value in _COLOUR_TOKENS.items():
+            raw = raw.replace(f"var({token})", value)
+        _STYLESHEET = raw
     return _STYLESHEET
