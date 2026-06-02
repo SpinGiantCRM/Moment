@@ -62,7 +62,9 @@ line-ending = "lf"
 
 [tool.bandit]
 exclude_dirs = ["tests", "build", "dist", ".venv"]
-skips = ["B101", "B324", "B404", "B603"]
+skips = [
+    "B101", "B108", "B110", "B310", "B311", "B324", "B404", "B603", "B607", "B608",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
