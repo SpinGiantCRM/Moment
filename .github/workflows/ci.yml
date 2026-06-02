@@ -44,10 +44,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies (SQLite encryption)
+      - name: Install system dependencies (PyQt6 + SQLite encryption)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libsqlcipher-dev
+          sudo apt-get install -y -qq libsqlcipher-dev libegl1 libxkbcommon0 libfontconfig1
 
       - uses: actions/setup-python@v5
         with:
@@ -60,7 +60,8 @@ jobs:
 
       - name: Run fast tests
         run: |
-          python -m pytest -m "not gui and not integration and not slow and not external" \
+          QT_QPA_PLATFORM=offscreen \
+            python -m pytest -m "not gui and not integration and not slow and not external" \
             --tb=short -q \
             ${{ matrix.python-version == '3.13' && '--cov=moment --cov-report=term --cov-report=xml' || '' }}
 
@@ -127,10 +128,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies (SQLite encryption)
+      - name: Install system dependencies (PyQt6 + SQLite encryption)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libsqlcipher-dev
+          sudo apt-get install -y -qq libsqlcipher-dev libegl1 libxkbcommon0 libfontconfig1
 
       - uses: actions/setup-python@v5
         with:
@@ -143,7 +144,8 @@ jobs:
 
       - name: Run integration tests
         run: |
-          python -m pytest -m "integration and not external" --tb=short -q
+          QT_QPA_PLATFORM=offscreen \
+            python -m pytest -m "integration and not external" --tb=short -q
 
   # ---------------------------------------------------------------------------
   # Smoketest — verifies the installed package works end-to-end
