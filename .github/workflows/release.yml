@@ -14,19 +14,20 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Preflight — tests + build + twine check before publishing
+  # Preflight (fast) — unit + integration tests, build, twine check.
+  # Must pass before publish.  Runs without xvfb (no-GUI).
   # ---------------------------------------------------------------------------
   preflight:
-    name: "Preflight (test + build + twine)"
+    name: "Preflight (fast + integration)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies (SQLite encryption + PyQt6 + xvfb)
+      - name: Install system dependencies (SQLite encryption + PyQt6)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libsqlcipher-dev libegl1 libpulse0 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 xvfb
+          sudo apt-get install -y -qq libsqlcipher-dev libegl1 libpulse0 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
 
       - uses: actions/setup-python@v5
         with:
@@ -37,11 +38,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install .[all] pytest build twine
 
-      - name: Run all tests (exclude external/network-dependent)
+      - name: Run fast + integration tests
         run: |
           mkdir -p ~/Videos
-          QT_QPA_PLATFORM=offscreen xvfb-run \
-            python -m pytest -m "not slow and not external" --tb=short -q
+          QT_QPA_PLATFORM=offscreen \
+            python -m pytest -m "not gui and not slow and not external" --tb=short -q
 
       - name: Build wheel + sdist
         run: python -m build --wheel --sdist
@@ -63,6 +64,36 @@ jobs:
           name: dist
           path: dist/
           retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Preflight (GUI) — Qt widget tests under xvfb.  Informational only;
+  # does NOT gate publish (GUI tests are slow and flaky in CI).
+  # ---------------------------------------------------------------------------
+  preflight-gui:
+    name: "Preflight (GUI under xvfb)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies (PyQt6 + xvfb)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsqlcipher-dev libegl1 libpulse0 libgl1 libxkbcommon0 libfontconfig1 xvfb
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[all] pytest
+
+      - name: Run GUI tests
+        run: |
+          QT_QPA_PLATFORM=offscreen xvfb-run \
+            python -m pytest -m gui --tb=short -q
 
   # ---------------------------------------------------------------------------
   # Publish to PyPI — via API token
