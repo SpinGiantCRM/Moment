@@ -36,7 +36,7 @@ release:
 	sed -i 's/__version__ = ".*"/__version__ = "$(VERSION)"/' src/moment/__init__.py
 	@echo "==> Committing …"
 	git add pyproject.toml src/moment/__init__.py
-	git commit -m "Release v$(VERSION)" || true
+	git commit -m "Release v$(VERSION) [skip ci]" || true
 	git tag "v$(VERSION)"
 	@echo "==> Pushing …"
 	git push origin "$$(git rev-parse --abbrev-ref HEAD)" --tags

@@ -8,7 +8,7 @@
 # Source: https://github.com/SpinGiantCRM/moment
 
 pkgname=moment
-pkgver=0.3.4
+pkgver=0.3.5
 pkgrel=1
 epoch=
 pkgdesc="GPU-accelerated game clip manager for Linux. Capture, edit, and share your gaming moments."

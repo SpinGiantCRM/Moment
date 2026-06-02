@@ -172,13 +172,13 @@ jobs:
           pipx install ".[mcp]"
 
       - name: Smoke test — --version
-        run: pipx run --spec "." moment --version
+        run: moment --version
 
       - name: Smoke test — --help
-        run: pipx run --spec "." moment --help | head -10
+        run: moment --help | head -10
 
       - name: Smoke test — MCP subcommand
-        run: pipx run --spec "." moment mcp --help | head -10
+        run: moment mcp --help | head -10
 
   # ---------------------------------------------------------------------------
   # Security — bandit scan + dependency audit
@@ -201,4 +201,4 @@ jobs:
         run: bandit -r src/ -c pyproject.toml
 
       - name: Run pip-audit
-        run: pip-audit
+        run: pip-audit --path .

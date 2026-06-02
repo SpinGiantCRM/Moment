@@ -1,6 +1,6 @@
 [project]
 name = "moment-clips"
-version = "0.3.4"
+version = "0.3.5"
 description = "GPU-accelerated game clip manager for Linux. Capture, edit, and share your gaming moments."
 requires-python = ">=3.11"
 authors = [{ name = "chasem" }]
@@ -59,6 +59,10 @@ select = ["E", "F", "W", "I"]
 
 [tool.ruff.format]
 line-ending = "lf"
+
+[tool.bandit]
+exclude_dirs = ["tests", "build", "dist", ".venv"]
+skips = ["B101", "B324", "B404", "B603"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

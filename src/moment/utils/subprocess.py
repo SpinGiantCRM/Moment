@@ -54,6 +54,8 @@ def _cleanup_child_processes() -> None:
     with _child_lock:
         pids = list(_child_pids)
     for pid in pids:
+        if not isinstance(pid, int):
+            continue
         try:
             os.kill(pid, signal.SIGKILL)
             logger.debug("Sent SIGKILL to tracked child pid=%d", pid)

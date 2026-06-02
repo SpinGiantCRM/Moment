@@ -24,14 +24,18 @@ class SettingsRepository(BaseRepository):
         expire_before = now - (interval_secs * 2)
 
         with self._lock:
+            cur = self._conn.cursor()
             self.execute_with_retry(
                 "DELETE FROM rate_limits WHERE expires_at < ?",
                 (expire_before,),
+                cursor=cur,
             )
             self._conn.commit()
 
             row = self.execute_with_retry(
-                "SELECT last_called FROM rate_limits WHERE key = ?", (key,)
+                "SELECT last_called FROM rate_limits WHERE key = ?",
+                (key,),
+                cursor=cur,
             ).fetchone()
 
             if row is not None:
@@ -42,12 +46,14 @@ class SettingsRepository(BaseRepository):
                 self.execute_with_retry(
                     "UPDATE rate_limits SET last_called = ?, expires_at = ? WHERE key = ?",
                     (now, now + interval_secs, key),
+                    cursor=cur,
                 )
             else:
                 self.execute_with_retry(
                     """INSERT OR REPLACE INTO rate_limits
                         (key, last_called, expires_at) VALUES (?, ?, ?)""",
                     (key, now, now + interval_secs),
+                    cursor=cur,
                 )
             self._conn.commit()
             return None
