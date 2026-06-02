@@ -1,0 +1,7 @@
+include LICENSE
+include README.md
+include PKGBUILD
+include Makefile
+include CONTRIBUTING.md
+recursive-include install *.sh *.desktop *.service
+recursive-include src/moment/ui/assets *.svg

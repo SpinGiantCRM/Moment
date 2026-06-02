@@ -169,10 +169,14 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install via pipx (recommended user method)
+      - name: Build wheel + install via pipx
         run: |
-          pip install pipx
-          pipx install ".[mcp]"
+          pip install pipx build
+          python -m build --wheel
+          WHEEL=$(ls dist/*.whl)
+          pipx install "${WHEEL}[mcp]" --force
+          pipx ensurepath
+          echo "$HOME/.local/bin" >> "${GITHUB_PATH}"
 
       - name: Smoke test — --version
         run: moment --version

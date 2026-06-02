@@ -8,6 +8,8 @@ import tempfile
 
 import pytest
 
+pytestmark = [pytest.mark.integration]
+
 from moment.core.repositories.base import (
     _MIGRATIONS,
     _create_schema_version_table,

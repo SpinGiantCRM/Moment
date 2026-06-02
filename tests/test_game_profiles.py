@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = [pytest.mark.integration]
+
 from moment.core.game_profiles import (
     GameProfileError,
     GameProfileManager,

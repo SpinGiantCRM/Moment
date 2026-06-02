@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = [pytest.mark.integration]
+
 from moment.utils.logging import (
     CrashDump,
     JsonFormatter,
