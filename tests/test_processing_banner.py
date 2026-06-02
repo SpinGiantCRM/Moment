@@ -1,7 +1,9 @@
 """Tests for processing_banner.py — pipeline status indicator."""
 
 from __future__ import annotations
+
 import pytest
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -9,7 +11,6 @@ class TestProcessingBannerInit:
     """Tests for ProcessingBanner construction and defaults."""
 
     def test_create(self, qtbot) -> None:
-
         """ProcessingBanner can be created."""
         from moment.ui.widgets.processing_banner import _BANNER_HEIGHT, ProcessingBanner
 
@@ -33,6 +34,7 @@ class TestProcessingBannerInit:
         banner = ProcessingBanner()
         qtbot.addWidget(banner)
         assert not banner._progress.isVisible()
+
 
 class TestProcessingBannerUpdateStatus:
     """Tests for update_status()."""
@@ -109,6 +111,7 @@ class TestProcessingBannerUpdateStatus:
         assert not banner._dismissed
         assert banner.isVisible()
 
+
 class TestProcessingBannerDismiss:
     """Tests for dismiss behavior."""
 
@@ -122,5 +125,3 @@ class TestProcessingBannerDismiss:
         banner._on_dismiss()
         assert banner._dismissed
         assert not banner.isVisible()
-
-

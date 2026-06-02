@@ -30,6 +30,7 @@ from moment.core.models import (
     Webhook,
     WebhookLogEntry,
 )
+from moment.core.store import Store
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,9 +51,11 @@ def _make_clip(store, **overrides) -> Clip:
     )
     return store.insert_clip(clip)
 
+
 # ---------------------------------------------------------------------------
 # Clips
 # ---------------------------------------------------------------------------
+
 
 class TestClipCRUD:
     def test_insert_and_get(self, store) -> None:
@@ -90,6 +93,7 @@ class TestClipCRUD:
         clip = _make_clip(store)
         store.delete_clip(clip.id, soft=False)
         assert store.get_clip(clip.id) is None
+
 
 class TestClipListing:
     def test_list_all(self, store) -> None:
@@ -132,9 +136,11 @@ class TestClipListing:
         assert len(page2) == 3
         assert page[0].id != page2[0].id
 
+
 # ---------------------------------------------------------------------------
 # Tags
 # ---------------------------------------------------------------------------
+
 
 class TestTags:
     def test_set_and_sync_tags(self, store) -> None:
@@ -168,9 +174,11 @@ class TestTags:
         assert fetched is not None
         assert fetched.tags == ["new"]
 
+
 # ---------------------------------------------------------------------------
 # EditProfile
 # ---------------------------------------------------------------------------
+
 
 class TestEditProfile:
     def test_get_nonexistent(self, store) -> None:
@@ -211,9 +219,11 @@ class TestEditProfile:
         assert len(fetched.filters) == 1
         assert fetched.filters[0].filter_name == "brightness"
 
+
 # ---------------------------------------------------------------------------
 # Bookmarks
 # ---------------------------------------------------------------------------
+
 
 class TestBookmarks:
     def test_insert_and_query(self, store) -> None:
@@ -229,9 +239,11 @@ class TestBookmarks:
         store.delete_bookmark("bm2")
         assert len(store.get_bookmarks_for_session("session2")) == 0
 
+
 # ---------------------------------------------------------------------------
 # Webhooks
 # ---------------------------------------------------------------------------
+
 
 class TestWebhooks:
     def test_save_and_list(self, store) -> None:
@@ -284,15 +296,21 @@ class TestWebhooks:
         store.save_webhook(wh)
         _make_clip(store, id="c1")
         entry = WebhookLogEntry(
-            id="wl1", webhook_id="wh1", clip_id="c1",
-            success=False, status_code=404, error_message="Not found",
+            id="wl1",
+            webhook_id="wh1",
+            clip_id="c1",
+            success=False,
+            status_code=404,
+            error_message="Not found",
         )
         store.insert_webhook_log(entry)
         # Log is stored but not queried via public API yet
 
+
 # ---------------------------------------------------------------------------
 # Webhook Security — HTTPS enforcement and encryption
 # ---------------------------------------------------------------------------
+
 
 class TestWebhookSecurity:
     def test_rejects_non_https_url(self, store) -> None:
@@ -373,7 +391,9 @@ class TestWebhookSecurity:
 
     def test_long_non_discord_url_truncated(self, store) -> None:
         """Non-Discord webhook URLs over 60 chars are truncated."""
-        long_url = "https://hooks.example.com/webhook/abc123def456ghi789jkl012mno345pqr678stu901vwx234yz"
+        long_url = (
+            "https://hooks.example.com/webhook/abc123def456ghi789jkl012mno345pqr678stu901vwx234yz"
+        )
         assert len(long_url) > 60
         wh = Webhook(id="wh-long", url=long_url, name="Long")
         store.save_webhook(wh)
@@ -395,7 +415,11 @@ class TestWebhookSecurity:
     def test_decryption_failure_raises_runtime_error(self, store) -> None:
         """If Fernet decryption fails, get_webhook_url should raise RuntimeError."""
         # Insert an encrypted webhook
-        wh = Webhook(id="wh-dec-fail", url="https://discord.com/api/webhooks/1/token", name="DecFail")
+        wh = Webhook(
+            id="wh-dec-fail",
+            url="https://discord.com/api/webhooks/1/token",
+            name="DecFail",
+        )
         store.save_webhook(wh)
 
         # Corrupt the encrypted value in the database
@@ -408,9 +432,11 @@ class TestWebhookSecurity:
         with pytest.raises(RuntimeError, match="Failed to decrypt"):
             store.get_webhook_url("wh-dec-fail")
 
+
 # ---------------------------------------------------------------------------
 # Folders
 # ---------------------------------------------------------------------------
+
 
 class TestFolders:
     def test_save_and_list(self, store) -> None:
@@ -425,9 +451,11 @@ class TestFolders:
         store.delete_folder("f-del")
         assert not any(fld.name == "Temp" for fld in store.list_folders())
 
+
 # ---------------------------------------------------------------------------
 # Game profiles
 # ---------------------------------------------------------------------------
+
 
 class TestGameProfiles:
     def test_save_and_get(self, store) -> None:
@@ -459,9 +487,11 @@ class TestGameProfiles:
     def test_get_nonexistent(self, store) -> None:
         assert store.get_game_profile("nonexistent") is None
 
+
 # ---------------------------------------------------------------------------
 # Tasks
 # ---------------------------------------------------------------------------
+
 
 class TestTasks:
     def test_insert_and_query_pending(self, store) -> None:
@@ -484,9 +514,11 @@ class TestTasks:
         pending = store.get_pending_tasks()
         assert not any(t.id == "t3" for t in pending)
 
+
 # ---------------------------------------------------------------------------
 # URL History
 # ---------------------------------------------------------------------------
+
 
 class TestURLHistory:
     def test_insert_and_get(self, store) -> None:
@@ -499,9 +531,11 @@ class TestURLHistory:
         assert "https://r2.example.com/clip1.mp4" in urls
         assert "https://r2.example.com/clip1-v2.mp4" in urls
 
+
 # ---------------------------------------------------------------------------
 # Migration
 # ---------------------------------------------------------------------------
+
 
 class TestMigration:
     def test_migrate_nonexistent_file(self, store) -> None:
@@ -549,12 +583,14 @@ class TestMigration:
         os.close(fd)
         with open(tmp_path, "w") as f:
             json.dump(
-                [{
-                    "id": "dup",
-                    "stem": "test",
-                    "source_path": "/tmp/dup.mkv",
-                    "title": "Duplicate",
-                }],
+                [
+                    {
+                        "id": "dup",
+                        "stem": "test",
+                        "source_path": "/tmp/dup.mkv",
+                        "title": "Duplicate",
+                    }
+                ],
                 f,
             )
         try:
@@ -599,9 +635,11 @@ class TestMigration:
                 if d.exists():
                     _shutil.rmtree(d, ignore_errors=True)
 
+
 # ---------------------------------------------------------------------------
 # Edge cases — empty DB
 # ---------------------------------------------------------------------------
+
 
 class TestEmptyDB:
     def test_list_clips_empty(self, store) -> None:
@@ -639,9 +677,11 @@ class TestEmptyDB:
     def test_get_game_profile_none_empty_db(self, store) -> None:
         assert store.get_game_profile("anything") is None
 
+
 # ---------------------------------------------------------------------------
 # Edge cases — malformed data
 # ---------------------------------------------------------------------------
+
 
 class TestMalformedData:
     def test_insert_clip_no_explode(self, store) -> None:
@@ -704,20 +744,24 @@ class TestMalformedData:
         assert fetched.title == ""
         assert fetched.game is None
 
+
 # ---------------------------------------------------------------------------
 # Thread Safety
 # ---------------------------------------------------------------------------
+
 
 class TestThreadSafety:
     def test_lock_exists(self, store) -> None:
         """Store should have a threading lock for write operations."""
         import threading
+
         assert hasattr(store, "_lock")
         assert isinstance(store._lock, type(threading.Lock()))
 
     def test_concurrent_inserts(self, store) -> None:
         """Multiple threads should be able to insert clips without corruption."""
         import threading
+
         errors = []
 
         def insert_clip(i: int) -> None:
@@ -743,14 +787,17 @@ class TestThreadSafety:
             c = store.get_clip(f"thread-clip-{i}")
             assert c is not None, f"Clip thread-clip-{i} was not found"
 
+
 # ---------------------------------------------------------------------------
 # Visibility enforcement (Spec 24)
 # ---------------------------------------------------------------------------
+
 
 class TestVisibilityFiltering:
     def test_guest_excludes_private(self, store) -> None:
         """Guest (no owner_id) should exclude PRIVATE clips."""
         from moment.core.models import ClipVisibility
+
         _make_clip(store, id="pub-clip", visibility=ClipVisibility.PUBLIC, title="Public")
         _make_clip(store, id="priv-clip", visibility=ClipVisibility.PRIVATE, title="Private")
         _make_clip(store, id="unl-clip", visibility=ClipVisibility.UNLISTED, title="Unlisted")
@@ -764,11 +811,22 @@ class TestVisibilityFiltering:
     def test_owner_sees_own_private(self, store) -> None:
         """Owner sees PUBLIC + UNLISTED + their own PRIVATE clips."""
         from moment.core.models import ClipVisibility
+
         _make_clip(store, id="pub2", visibility=ClipVisibility.PUBLIC, title="Pub")
-        _make_clip(store, id="priv-mine", visibility=ClipVisibility.PRIVATE,
-                    discord_user_id="user123", title="Mine")
-        _make_clip(store, id="priv-other", visibility=ClipVisibility.PRIVATE,
-                    discord_user_id="other_user", title="Other")
+        _make_clip(
+            store,
+            id="priv-mine",
+            visibility=ClipVisibility.PRIVATE,
+            discord_user_id="user123",
+            title="Mine",
+        )
+        _make_clip(
+            store,
+            id="priv-other",
+            visibility=ClipVisibility.PRIVATE,
+            discord_user_id="other_user",
+            title="Other",
+        )
 
         clips = store.list_clips(owner_id="user123")
         ids = {c.id for c in clips}
@@ -779,6 +837,7 @@ class TestVisibilityFiltering:
     def test_explicit_visibility_filter(self, store) -> None:
         """Explicit visibility=X returns only that visibility."""
         from moment.core.models import ClipVisibility
+
         _make_clip(store, id="pub-only", visibility=ClipVisibility.PUBLIC, title="P")
         _make_clip(store, id="priv-only", visibility=ClipVisibility.PRIVATE, title="X")
 
@@ -797,6 +856,7 @@ class TestVisibilityFiltering:
     def test_count_clips_respects_visibility(self, store) -> None:
         """count_clips with no owner excludes PRIVATE."""
         from moment.core.models import ClipVisibility
+
         _make_clip(store, id="cnt-pub", visibility=ClipVisibility.PUBLIC)
         _make_clip(store, id="cnt-priv", visibility=ClipVisibility.PRIVATE)
 
@@ -811,9 +871,11 @@ class TestVisibilityFiltering:
         _make_clip(store, id="post-mig", discord_user_id="u1")
         assert store.get_clip("post-mig").discord_user_id == "u1"
 
+
 # ---------------------------------------------------------------------------
 # Spec 6 — Content-aware updated_at
 # ---------------------------------------------------------------------------
+
 
 class TestContentAwareUpdatedAt:
     def test_content_field_change_bumps_updated_at(self, store) -> None:
@@ -862,9 +924,11 @@ class TestContentAwareUpdatedAt:
         assert fetched is not None
         assert fetched.updated_at > old_updated
 
+
 # ---------------------------------------------------------------------------
 # Spec 6 — _execute_with_retry
 # ---------------------------------------------------------------------------
+
 
 class TestExecuteWithRetry:
     def test_retry_on_database_locked(self, store) -> None:
@@ -909,9 +973,11 @@ class TestExecuteWithRetry:
         with pytest.raises(sqlite3.OperationalError, match="no such table"):
             store._execute_with_retry("SELECT * FROM fake", cursor=bad)
 
+
 # ---------------------------------------------------------------------------
 # Cascading deletes
 # ---------------------------------------------------------------------------
+
 
 class TestCascadingDeletes:
     def test_delete_clip_cascades_to_tags(self, store: Store) -> None:
@@ -950,7 +1016,8 @@ class TestCascadingDeletes:
         """Hard-deleting a clip cascades to pip_cache."""
         _make_clip(store, id="cascade-pip")
         store._conn.execute(
-            "INSERT INTO pip_cache (id, clip_id, start_offset, end_offset) VALUES (?, ?, 0.0, 30.0)",
+            "INSERT INTO pip_cache (id, clip_id, start_offset, "
+            "end_offset) VALUES (?, ?, 0.0, 30.0)",
             ("pip-test", "cascade-pip"),
         )
         store._conn.commit()
@@ -968,7 +1035,8 @@ class TestCascadingDeletes:
         wh = Webhook(id="wh-id", url="https://discord.com/api/webhooks/1/token", name="CascadeTest")
         store.save_webhook(wh)
         store._conn.execute(
-            "INSERT INTO webhook_log (id, webhook_id, clip_id, success, status_code) VALUES (?, ?, ?, 1, 200)",
+            "INSERT INTO webhook_log (id, webhook_id, clip_id, "
+            "success, status_code) VALUES (?, ?, ?, 1, 200)",
             ("wl-test", "wh-id", "cascade-wl"),
         )
         store._conn.commit()
@@ -979,9 +1047,11 @@ class TestCascadingDeletes:
         ).fetchone()
         assert row["cnt"] == 0
 
+
 # ---------------------------------------------------------------------------
 # Foreign key enforcement
 # ---------------------------------------------------------------------------
+
 
 class TestForeignKeyEnforcement:
     def test_rejects_orphan_clip_tags(self, store: Store) -> None:
@@ -1007,7 +1077,8 @@ class TestForeignKeyEnforcement:
         _make_clip(store, id="orphan-wl-clip")
         with pytest.raises(sqlite3.IntegrityError):
             store._conn.execute(
-                "INSERT INTO webhook_log (id, webhook_id, clip_id, success, status_code) VALUES (?, ?, ?, 1, 200)",
+                "INSERT INTO webhook_log (id, webhook_id, clip_id, "
+                "success, status_code) VALUES (?, ?, ?, 1, 200)",
                 ("orphan-wl", "nonexistent-webhook", "orphan-wl-clip"),
             )
             store._conn.commit()
@@ -1021,9 +1092,11 @@ class TestForeignKeyEnforcement:
             )
             store._conn.commit()
 
+
 # ---------------------------------------------------------------------------
 # Transaction rollback on error
 # ---------------------------------------------------------------------------
+
 
 class TestTransactionRollback:
     def test_insert_rolls_back_on_error(self, store: Store) -> None:
@@ -1059,15 +1132,17 @@ class TestTransactionRollback:
 
         assert store.get_clip("tx-fail") is None
 
+
 # ---------------------------------------------------------------------------
 # Duplicate key behavior
 # ---------------------------------------------------------------------------
 
+
 class TestDuplicateKey:
     def test_replaces_clip_on_same_id(self, store: Store) -> None:
         """INSERT OR REPLACE with same ID replaces the existing clip."""
-        clip1 = _make_clip(store, id="dup-clip", title="Original", stem="original")
-        clip2 = _make_clip(store, id="dup-clip", title="Replacement", stem="replacement")
+        _make_clip(store, id="dup-clip", title="Original", stem="original")
+        _make_clip(store, id="dup-clip", title="Replacement", stem="replacement")
 
         fetched = store.get_clip("dup-clip")
         assert fetched is not None
@@ -1104,15 +1179,15 @@ class TestDuplicateKey:
         )
         store._conn.commit()
 
-        row = store._read_conn.execute(
-            "SELECT id FROM tags WHERE name = ?", ("clutch",)
-        ).fetchone()
+        row = store._read_conn.execute("SELECT id FROM tags WHERE name = ?", ("clutch",)).fetchone()
         assert row is not None
         assert row["id"] == "tag-v1"  # original preserved
+
 
 # ---------------------------------------------------------------------------
 # Empty trash edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestEmptyTrash:
     def test_empty_trash_no_deleted_clips(self, store: Store) -> None:
@@ -1144,9 +1219,11 @@ class TestEmptyTrash:
         count2 = store.empty_trash()
         assert count2 == 0
 
+
 # ---------------------------------------------------------------------------
 # Rate limiter edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestRateLimiter:
     def test_same_key_back_to_back_is_rate_limited(self, store: Store) -> None:
@@ -1174,9 +1251,11 @@ class TestRateLimiter:
             result = store.check_persistent_rate("fast-key", interval_secs=0.0)
             assert result is None
 
+
 # ---------------------------------------------------------------------------
 # Spec 6 — Read-only connection
 # ---------------------------------------------------------------------------
+
 
 class TestReadOnlyConnection:
     def test_query_only_rejects_writes(self, store) -> None:
@@ -1195,13 +1274,16 @@ class TestReadOnlyConnection:
         assert row is not None
         assert row["title"] == "Readable"
 
+
 # ---------------------------------------------------------------------------
 # Spec 6 — Retention helpers
 # ---------------------------------------------------------------------------
 
+
 class TestRetentionHelpers:
     def test_list_old_source_clips(self, store) -> None:
         from datetime import datetime, timezone
+
         old = datetime.now(timezone.utc) - timedelta(days=100)
         _make_clip(store, id="old-src", source_path="/tmp/old.mkv", recorded_at=old)
         _make_clip(store, id="new-src", source_path="/tmp/new.mkv")
@@ -1228,8 +1310,10 @@ class TestRetentionHelpers:
 
     def test_has_active_task_for_clip(self, store) -> None:
         task = Task(
-            id="t-active", type=TaskKind.ENCODE,
-            payload={"clip_id": "task-clip"}, status=TaskStatus.PENDING,
+            id="t-active",
+            type=TaskKind.ENCODE,
+            payload={"clip_id": "task-clip"},
+            status=TaskStatus.PENDING,
         )
         store.insert_task(task)
         assert store.has_active_task_for_clip("task-clip") is True
@@ -1237,10 +1321,10 @@ class TestRetentionHelpers:
 
     def test_has_active_task_excludes_completed(self, store) -> None:
         task = Task(
-            id="t-done", type=TaskKind.ENCODE,
-            payload={"clip_id": "done-clip"}, status=TaskStatus.COMPLETED,
+            id="t-done",
+            type=TaskKind.ENCODE,
+            payload={"clip_id": "done-clip"},
+            status=TaskStatus.COMPLETED,
         )
         store.insert_task(task)
         assert store.has_active_task_for_clip("done-clip") is False
-
-

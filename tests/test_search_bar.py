@@ -1,7 +1,9 @@
 """Tests for search_bar.py — debounced search input."""
 
 from __future__ import annotations
+
 import pytest
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -9,7 +11,6 @@ class TestSearchBarInit:
     """Tests for SearchBar construction and defaults."""
 
     def test_create(self, qtbot) -> None:
-
         """SearchBar can be created."""
         from moment.ui.widgets.search_bar import _SEARCH_WIDTH, SearchBar
 
@@ -42,6 +43,7 @@ class TestSearchBarInit:
         bar = SearchBar()
         qtbot.addWidget(bar)
         assert bar.text() == ""
+
 
 class TestSearchBarSignal:
     """Tests for search_changed signal."""
@@ -96,6 +98,7 @@ class TestSearchBarSignal:
 
         assert blocker.args == [""]
 
+
 class TestSearchBarClear:
     """Tests for clear_search()."""
 
@@ -109,5 +112,3 @@ class TestSearchBarClear:
         assert bar.text() == "find me"
         bar.clear_search()
         assert bar.text() == ""
-
-

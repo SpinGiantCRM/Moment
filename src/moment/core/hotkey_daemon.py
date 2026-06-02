@@ -60,6 +60,7 @@ _DEFAULT_BINDINGS: dict[str, HotkeyAction] = {
 # Backend
 # ---------------------------------------------------------------------------
 
+
 class _Backend:
     """Abstract hotkey backend."""
 
@@ -111,6 +112,7 @@ class _KdeBackend(_Backend):
         try:
             import dbus  # type: ignore[import-untyped]
             from dbus.mainloop.glib import DBusGMainLoop  # type: ignore[import-untyped]
+
             DBusGMainLoop(set_as_default=True)
 
             bus = dbus.SessionBus()
@@ -220,8 +222,11 @@ class _X11Backend(_Backend):
                 if kc:
                     keycodes[kc] = action
                     root.grab_key(
-                        kc, _modifiers_for_x11(key_str),
-                        True, X.GrabModeAsync, X.GrabModeAsync,
+                        kc,
+                        _modifiers_for_x11(key_str),
+                        True,
+                        X.GrabModeAsync,
+                        X.GrabModeAsync,
                     )
             except Exception as exc:
                 logger.warning("Cannot grab X11 key %s: %s", key_str, exc)
@@ -277,9 +282,9 @@ class HotkeyDaemon:
         on_triggered: Callable[[HotkeyAction], None] | None = None,
     ) -> None:
         """Args:
-            bindings: Override default key → action mappings.
-            on_triggered: Called as ``callback(action)`` when a hotkey
-                is pressed.  Debounced to a 2-second cooldown per action.
+        bindings: Override default key → action mappings.
+        on_triggered: Called as ``callback(action)`` when a hotkey
+            is pressed.  Debounced to a 2-second cooldown per action.
         """
         self._bindings = bindings or _DEFAULT_BINDINGS.copy()
         self._on_triggered = on_triggered

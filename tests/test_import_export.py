@@ -15,19 +15,21 @@ from moment.core.import_export import (
 )
 from moment.core.models import Clip, ClipStatus, ClipType
 from moment.utils.ffmpeg import parse_fps
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def ie(store):
     """Return an ImportExport backed by the test store."""
 
     return ImportExport(store)
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 class TestParseFps:
     def test_simple(self):
@@ -40,9 +42,11 @@ class TestParseFps:
         assert parse_fps("abc") == 0.0
         assert parse_fps("0/0") == 0.0
 
+
 # ---------------------------------------------------------------------------
 # Import
 # ---------------------------------------------------------------------------
+
 
 class TestImport:
     def test_import_file_missing(self, ie):
@@ -68,16 +72,17 @@ class TestImport:
     @patch("moment.core.import_export.shutil.copy2")
     @patch("moment.core.import_export.ensure_dir")
     @patch.object(ImportExport, "_check_mime_type", return_value=None)
-    def test_import_basic(
-        self, mock_mime, mock_ensure, mock_copy, mock_thumb_cls, mock_probe, ie
-    ):
+    def test_import_basic(self, mock_mime, mock_ensure, mock_copy, mock_thumb_cls, mock_probe, ie):
         """Happy path: probe returns valid data, thumbnail succeeds, clip inserted."""
         mock_probe.return_value = {
             "format": {"duration": "25.5"},
             "streams": [
                 {
-                    "codec_type": "video", "codec_name": "h264",
-                    "width": 1920, "height": 1080, "r_frame_rate": "60/1",
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 1920,
+                    "height": 1080,
+                    "r_frame_rate": "60/1",
                 },
                 {"codec_type": "audio", "codec_name": "aac"},
             ],
@@ -90,6 +95,7 @@ class TestImport:
         def _fake_copy(src, dst):
             Path(dst).write_bytes(b"x" * 100)
             return dst
+
         mock_copy.side_effect = _fake_copy
 
         fd, tmp = tempfile.mkstemp(suffix=".mp4", prefix="import_test_")
@@ -119,16 +125,17 @@ class TestImport:
     @patch("moment.core.import_export.Thumbnailer")
     @patch("moment.core.import_export.ensure_dir")
     @patch.object(ImportExport, "_check_mime_type", return_value=None)
-    def test_import_no_copy(
-        self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie
-    ):
+    def test_import_no_copy(self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie):
         """With copy=False, the source_path stays as the original file."""
         mock_probe.return_value = {
             "format": {"duration": "10.0"},
             "streams": [
                 {
-                    "codec_type": "video", "codec_name": "h264",
-                    "width": 1280, "height": 720, "r_frame_rate": "30/1",
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 1280,
+                    "height": 720,
+                    "r_frame_rate": "30/1",
                 },
             ],
         }
@@ -151,9 +158,7 @@ class TestImport:
     @patch("moment.core.import_export.ffprobe")
     @patch("moment.core.import_export.ensure_dir")
     @patch.object(ImportExport, "_check_mime_type", return_value=None)
-    def test_import_no_video_stream(
-        self, mock_mime, mock_ensure, mock_probe, ie
-    ):
+    def test_import_no_video_stream(self, mock_mime, mock_ensure, mock_probe, ie):
         """If no video stream is found, it should raise ClipImportError."""
         mock_probe.return_value = {
             "format": {"duration": "5.0"},
@@ -177,16 +182,17 @@ class TestImport:
     @patch("moment.core.import_export.Thumbnailer")
     @patch("moment.core.import_export.ensure_dir")
     @patch.object(ImportExport, "_check_mime_type", return_value=None)
-    def test_import_reencode(
-        self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie, store
-    ):
+    def test_import_reencode(self, mock_mime, mock_ensure, mock_thumb_cls, mock_probe, ie, store):
         """When re_encode=True, the Encoder is invoked."""
         mock_probe.return_value = {
             "format": {"duration": "10.0"},
             "streams": [
                 {
-                    "codec_type": "video", "codec_name": "h264",
-                    "width": 1280, "height": 720, "r_frame_rate": "30/1",
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 1280,
+                    "height": 720,
+                    "r_frame_rate": "30/1",
                 },
             ],
         }
@@ -221,8 +227,11 @@ class TestImport:
             "format": {"duration": "60.0"},
             "streams": [
                 {
-                    "codec_type": "video", "codec_name": "hevc",
-                    "width": 3840, "height": 2160, "r_frame_rate": "24/1",
+                    "codec_type": "video",
+                    "codec_name": "hevc",
+                    "width": 3840,
+                    "height": 2160,
+                    "r_frame_rate": "24/1",
                 },
             ],
         }
@@ -255,8 +264,11 @@ class TestImport:
             "format": {"duration": "5.0"},
             "streams": [
                 {
-                    "codec_type": "video", "codec_name": "h264",
-                    "width": 640, "height": 480, "r_frame_rate": "30/1",
+                    "codec_type": "video",
+                    "codec_name": "h264",
+                    "width": 640,
+                    "height": 480,
+                    "r_frame_rate": "30/1",
                 },
             ],
         }
@@ -278,9 +290,11 @@ class TestImport:
             except FileNotFoundError:
                 pass
 
+
 # ---------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------
+
 
 class TestExport:
     def test_export_empty_list(self, ie):
@@ -294,8 +308,11 @@ class TestExport:
     def test_export_clip_without_encoded_file(self, store, ie):
         """Clip exists but has no encoded_path."""
         clip = Clip(
-            id="no-enc", stem="test", source_path=Path("/tmp/test.mkv"),
-            encoded_path=None, status=ClipStatus.DONE,
+            id="no-enc",
+            stem="test",
+            source_path=Path("/tmp/test.mkv"),
+            encoded_path=None,
+            status=ClipStatus.DONE,
         )
         store.insert_clip(clip)
         count = ie.export_clips(["no-enc"], Path("/tmp/export_test"))
@@ -306,8 +323,11 @@ class TestExport:
         encoded = Path("/tmp/fake-encoded.mp4")
         encoded.touch()
         clip = Clip(
-            id="has-enc", stem="test", source_path=Path("/tmp/test.mkv"),
-            encoded_path=encoded, status=ClipStatus.DONE,
+            id="has-enc",
+            stem="test",
+            source_path=Path("/tmp/test.mkv"),
+            encoded_path=encoded,
+            status=ClipStatus.DONE,
         )
         store.insert_clip(clip)
         try:
@@ -331,7 +351,8 @@ class TestExport:
         symlink.symlink_to("/etc/shadow")
 
         clip = Clip(
-            id="symlink-clip", stem="symlink",
+            id="symlink-clip",
+            stem="symlink",
             source_path=real_file,
             encoded_path=symlink,
             status=ClipStatus.DONE,
@@ -350,7 +371,8 @@ class TestExport:
         symlink.symlink_to(real_file)
 
         clip = Clip(
-            id="symlink-safe", stem="symlink_safe",
+            id="symlink-safe",
+            stem="symlink_safe",
             source_path=real_file,
             encoded_path=symlink,
             status=ClipStatus.DONE,
@@ -362,9 +384,11 @@ class TestExport:
         assert count == 1
         assert (dest / "link.mp4").exists()
 
+
 # ---------------------------------------------------------------------------
 # MIME type checks
 # ---------------------------------------------------------------------------
+
 
 class TestMimeType:
     def test_mime_type_video_accepted(self, ie) -> None:
@@ -411,14 +435,19 @@ class TestMimeType:
         """If neither magic nor file(1) is available, raise ClipImportError (fail closed)."""
         with (
             patch("moment.core.import_export._HAS_MAGIC", False),
-            patch("moment.core.import_export.ExternalCommandRunner.run", side_effect=FileNotFoundError),
+            patch(
+                "moment.core.import_export.ExternalCommandRunner.run",
+                side_effect=FileNotFoundError,
+            ),
         ):
             with pytest.raises(ClipImportError, match="Cannot verify file type"):
                 ie._check_mime_type(Path("/tmp/test.mp4"))
 
+
 # ---------------------------------------------------------------------------
 # Presets
 # ---------------------------------------------------------------------------
+
 
 class TestPresets:
     def test_list_presets_returns_all(self, ie):
@@ -429,5 +458,3 @@ class TestPresets:
         assert presets["game"]["codec"] == "h264"
         assert presets["game"]["quality"] == 23
         assert presets["archive"]["codec"] == "h265"
-
-

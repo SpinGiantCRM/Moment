@@ -1,11 +1,13 @@
 """Tests for dialogs/game_profile_dialog.py — per-game recording config."""
 
 from __future__ import annotations
-import pytest
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from moment.ui.dialogs.game_profile_dialog import GameProfileDialog
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -29,9 +31,11 @@ class TestGameProfileDialogInit:
         from moment.core.models import GameProfile
 
         profile = GameProfile(
-            id="gp-1", game_name="cs2",
+            id="gp-1",
+            game_name="cs2",
             display_name="Counter-Strike 2",
-            replay_duration=45, capture_fps=144,
+            replay_duration=45,
+            capture_fps=144,
         )
         store = MagicMock()
         store.list_game_profiles.return_value = [profile]
@@ -44,6 +48,7 @@ class TestGameProfileDialogInit:
         dlg = GameProfileDialog()
         assert dlg.minimumWidth() >= 500
         assert dlg.minimumHeight() >= 400
+
 
 class TestProfileListOperations:
     """Tests for add/remove profile from the list."""
@@ -83,6 +88,7 @@ class TestProfileListOperations:
         dlg._remove_profile()
         assert len(dlg._profiles) == 1  # unchanged
 
+
 class TestProfileEditing:
     """Tests for editing and saving profiles."""
 
@@ -90,9 +96,11 @@ class TestProfileEditing:
         from moment.core.models import GameProfile
 
         profile = GameProfile(
-            id="gp-1", game_name="cs2",
+            id="gp-1",
+            game_name="cs2",
             display_name="Counter-Strike 2",
-            replay_duration=30, capture_fps=60,
+            replay_duration=30,
+            capture_fps=60,
             review_card=None,
         )
         dlg = GameProfileDialog()
@@ -143,6 +151,7 @@ class TestProfileEditing:
         store.save_game_profile.assert_not_called()
         assert dlg.result() == 0
 
+
 class TestGameProfileWidgets:
     """Tests that all form widgets exist."""
 
@@ -170,5 +179,3 @@ class TestGameProfileWidgets:
         dlg = GameProfileDialog()
         assert dlg._fps_sb.minimum() >= 15
         assert dlg._fps_sb.maximum() <= 240
-
-

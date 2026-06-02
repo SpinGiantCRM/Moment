@@ -1,8 +1,8 @@
 """Tests for transition_picker.py — merge transition selection dialog."""
 
 from __future__ import annotations
-import pytest
 
+import pytest
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.ui.widgets.transition_picker import _TRANSITIONS, TransitionPicker
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -17,7 +18,6 @@ class TestTransitionPickerInit:
     """Tests for TransitionPicker construction and defaults."""
 
     def test_create_dialog(self, qtbot) -> None:
-
         """TransitionPicker can be created as a modal dialog."""
         dialog = TransitionPicker()
         dialog.show()
@@ -65,6 +65,7 @@ class TestTransitionPickerInit:
         # Select Crossfade (index 1)
         dialog._list.setCurrentRow(1)
         assert not dialog._duration_widget.isHidden()
+
 
 class TestTransitionPickerSelection:
     """Tests for transition selection behavior."""
@@ -172,6 +173,7 @@ class TestTransitionPickerSelection:
         dialog._list.setCurrentRow(0)  # Cut → duration hidden
         assert dialog._duration_widget.isHidden()
 
+
 class TestTransitionPickerOptions:
     """Tests for checkboxes and options."""
 
@@ -233,6 +235,7 @@ class TestTransitionPickerOptions:
 
         assert desc_cut != desc_crossfade
 
+
 class TestTransitionPickerButtons:
     """Tests for dialog buttons."""
 
@@ -274,5 +277,3 @@ class TestTransitionPickerButtons:
 
         assert result1["params"] == result2["params"]
         assert result1["params"] is not result2["params"]
-
-

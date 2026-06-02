@@ -66,7 +66,7 @@ class TagDialog(QDialog):
         self._tag_list.setSpacing(2)
         self._tag_list.setAlternatingRowColors(False)
 
-        for tag in (current_tags or []):
+        for tag in current_tags or []:
             self._add_tag_row(tag)
 
         # --- Add tag input ---
@@ -125,9 +125,7 @@ class TagDialog(QDialog):
         remove_btn = QPushButton("×")
         remove_btn.setFixedSize(20, 20)
         remove_btn.setObjectName("danger")
-        remove_btn.clicked.connect(
-            lambda checked, n=name: self._remove_tag(n)
-        )
+        remove_btn.clicked.connect(lambda checked, n=name: self._remove_tag(n))
         layout.addWidget(remove_btn)
         layout.addStretch()
 

@@ -126,20 +126,20 @@ class EditorWindow(QMainWindow):
         self._tabs.setStyleSheet(
             f"""
             QTabWidget::pane {{
-                background-color: {color('--bg-window')};
-                border: 1px solid {color('--border-menu')};
+                background-color: {color("--bg-window")};
+                border: 1px solid {color("--border-menu")};
                 border-radius: 6px;
             }}
             QTabBar::tab {{
                 padding: 8px 20px;
                 background: transparent;
-                color: {color('--text-secondary')};
+                color: {color("--text-secondary")};
                 border: none;
                 font-size: 13px;
             }}
             QTabBar::tab:selected {{
-                color: {color('--text-primary')};
-                border-bottom: 2px solid {color('--accent-blue')};
+                color: {color("--text-primary")};
+                border-bottom: 2px solid {color("--accent-blue")};
             }}
             """
         )

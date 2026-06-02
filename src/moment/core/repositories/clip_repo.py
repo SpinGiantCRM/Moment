@@ -29,10 +29,18 @@ from moment.utils.system import sanitize_stem
 logger = logging.getLogger(__name__)
 
 # Content fields that bump updated_at on change
-_CONTENT_FIELDS: frozenset[str] = frozenset({
-    "source_path", "file_size", "status", "encoded_path",
-    "thumb_path", "r2_url", "duration", "resolution",
-})
+_CONTENT_FIELDS: frozenset[str] = frozenset(
+    {
+        "source_path",
+        "file_size",
+        "status",
+        "encoded_path",
+        "thumb_path",
+        "r2_url",
+        "duration",
+        "resolution",
+    }
+)
 
 
 def _clip_to_row(clip: Clip) -> dict[str, Any]:
@@ -91,6 +99,7 @@ _STATS_COLUMNS: str = "id, file_size, status, recorded_at, game"
 def _row_to_clip(row: Any, tags: list[str] | None = None) -> Clip:
     """Convert a DB row (sqlite3.Row or dict) to a Clip, tolerant of missing
     columns (returns defaults for any column not present in the SELECT)."""
+
     def _get(key: str, default: Any = None) -> Any:
         try:
             return row[key]
@@ -160,9 +169,7 @@ class ClipRepository(BaseRepository):
         return clip
 
     def get(self, clip_id: str, tags: list[str] | None = None) -> Clip | None:
-        row = self._read_conn.execute(
-            "SELECT * FROM clips WHERE id = ?", (clip_id,)
-        ).fetchone()
+        row = self._read_conn.execute("SELECT * FROM clips WHERE id = ?", (clip_id,)).fetchone()
         if row is None:
             return None
         if tags is None:
@@ -172,10 +179,7 @@ class ClipRepository(BaseRepository):
     def update(self, clip: Clip) -> Clip:
         old = self.get(clip.id)
         if old is not None:
-            changed = any(
-                getattr(old, f) != getattr(clip, f)
-                for f in _CONTENT_FIELDS
-            )
+            changed = any(getattr(old, f) != getattr(clip, f) for f in _CONTENT_FIELDS)
             if changed:
                 clip.updated_at = datetime.now(timezone.utc)
             else:
@@ -249,9 +253,7 @@ class ClipRepository(BaseRepository):
                     "INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)",
                     (str(uuid.uuid4()), name),
                 )
-                tag_row = cur.execute(
-                    "SELECT id FROM tags WHERE name = ?", (name,)
-                ).fetchone()
+                tag_row = cur.execute("SELECT id FROM tags WHERE name = ?", (name,)).fetchone()
                 if tag_row:
                     cur.execute(
                         "INSERT OR IGNORE INTO clip_tags (clip_id, tag_id) VALUES (?, ?)",
@@ -315,15 +317,15 @@ class ClipRepository(BaseRepository):
         elif owner_id == "*":
             pass
         elif owner_id is not None:
-            where.append(
-                "(visibility IN (?, ?) OR (visibility = ? AND discord_user_id = ?))"
+            where.append("(visibility IN (?, ?) OR (visibility = ? AND discord_user_id = ?))")
+            params.extend(
+                [
+                    ClipVisibility.PUBLIC.value,
+                    ClipVisibility.UNLISTED.value,
+                    ClipVisibility.PRIVATE.value,
+                    owner_id,
+                ]
             )
-            params.extend([
-                ClipVisibility.PUBLIC.value,
-                ClipVisibility.UNLISTED.value,
-                ClipVisibility.PRIVATE.value,
-                owner_id,
-            ])
         else:
             where.append("visibility != ?")
             params.append(ClipVisibility.PRIVATE.value)
@@ -357,10 +359,16 @@ class ClipRepository(BaseRepository):
                 ``"list"`` is sufficient for grid views and card delegates.
         """
         where_clause, params = self._build_where(
-            status=status, game=game, folder=folder,
-            favorite_only=favorite_only, include_deleted=include_deleted,
-            clip_type=clip_type, search=search, tag=tag,
-            visibility=visibility, owner_id=owner_id,
+            status=status,
+            game=game,
+            folder=folder,
+            favorite_only=favorite_only,
+            include_deleted=include_deleted,
+            clip_type=clip_type,
+            search=search,
+            tag=tag,
+            visibility=visibility,
+            owner_id=owner_id,
         )
         if sort_by.startswith("-"):
             sort_col = sort_by[1:]
@@ -369,8 +377,13 @@ class ClipRepository(BaseRepository):
             sort_col = sort_by
             sort_dir = "ASC"
         _allowed_sorts = {
-            "created_at", "updated_at", "recorded_at", "duration",
-            "file_size", "title", "watch_count",
+            "created_at",
+            "updated_at",
+            "recorded_at",
+            "duration",
+            "file_size",
+            "title",
+            "watch_count",
         }
         if sort_col not in _allowed_sorts:
             sort_col = "recorded_at"
@@ -412,10 +425,16 @@ class ClipRepository(BaseRepository):
         owner_id: str | None = None,
     ) -> int:
         where_clause, params = self._build_where(
-            status=status, game=game, folder=folder,
-            favorite_only=favorite_only, include_deleted=include_deleted,
-            clip_type=clip_type, search=search, tag=tag,
-            visibility=visibility, owner_id=owner_id,
+            status=status,
+            game=game,
+            folder=folder,
+            favorite_only=favorite_only,
+            include_deleted=include_deleted,
+            clip_type=clip_type,
+            search=search,
+            tag=tag,
+            visibility=visibility,
+            owner_id=owner_id,
         )
         query = f"SELECT COUNT(*) as cnt FROM clips {where_clause}"  # nosec
         row = self._read_conn.execute(query, params).fetchone()
@@ -469,12 +488,9 @@ class ClipRepository(BaseRepository):
             "uploads_today": totals["uploads_today"] if totals else 0,
             "uploads_this_week": totals["uploads_this_week"] if totals else 0,
             "clips_per_game": [
-                {"game": r["game"], "count": r["cnt"], "storage": r["storage"]}
-                for r in game_rows
+                {"game": r["game"], "count": r["cnt"], "storage": r["storage"]} for r in game_rows
             ],
-            "uploads_per_day": [
-                {"date": r["dt"], "count": r["cnt"]} for r in day_rows
-            ],
+            "uploads_per_day": [{"date": r["dt"], "count": r["cnt"]} for r in day_rows],
             "recent_uploads": [
                 {
                     "id": r["id"],
@@ -523,9 +539,7 @@ class ClipRepository(BaseRepository):
             (cutoff_iso, limit, offset),
         ).fetchall()
 
-    def list_uploaded_clips_oldest_first(
-        self, limit: int = 100, offset: int = 0
-    ) -> list[Any]:
+    def list_uploaded_clips_oldest_first(self, limit: int = 100, offset: int = 0) -> list[Any]:
         return self._read_conn.execute(
             """SELECT id, stem, file_size, protect_from_retention,
                       created_at

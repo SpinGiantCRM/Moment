@@ -1,9 +1,11 @@
 """Tests for dialogs/trim_dialog.py — dual-handle timeline trim dialog."""
 
 from __future__ import annotations
+
 import pytest
 
 from moment.ui.dialogs.trim_dialog import TrimDialog, _format_time
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -12,6 +14,7 @@ def _cleanup_trim_dlg(dlg: TrimDialog) -> None:
 
     dlg.close()
     dlg.deleteLater()
+
 
 class TestFormatTime:
     """Tests for the _format_time helper."""
@@ -33,6 +36,7 @@ class TestFormatTime:
 
     def test_negative_clamped(self) -> None:
         assert _format_time(-10) == "0:00"
+
 
 class TestTrimDialogInit:
     """Tests for TrimDialog construction."""
@@ -88,6 +92,7 @@ class TestTrimDialogInit:
         assert dlg.minimumHeight() >= 150
         _cleanup_trim_dlg(dlg)
 
+
 class TestTrimDialogProperties:
     """Tests for trim_start and trim_end properties."""
 
@@ -100,6 +105,7 @@ class TestTrimDialogProperties:
         dlg = TrimDialog(duration=60.0, start=15.0, end=45.0)
         assert dlg.trim_end == 45.0
         _cleanup_trim_dlg(dlg)
+
 
 class TestTrimDialogApply:
     """Tests for the Apply button behavior."""
@@ -121,6 +127,7 @@ class TestTrimDialogApply:
         assert emitted == []
         assert dlg.result() == 1
         _cleanup_trim_dlg(dlg)
+
 
 class TestTrimDialogLabels:
     """Tests for time label updates."""
@@ -147,6 +154,7 @@ class TestTrimDialogLabels:
         assert dlg.result() == 0
         _cleanup_trim_dlg(dlg)
 
+
 class TestTrimDialogKeyboard:
     """Tests for keyboard shortcuts."""
 
@@ -155,8 +163,7 @@ class TestTrimDialogKeyboard:
         from PyQt6.QtGui import QKeyEvent
 
         dlg = TrimDialog(duration=120.0, start=10.0, end=90.0)
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_I,
-                          Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_I, Qt.KeyboardModifier.NoModifier)
         dlg.keyPressEvent(event)  # Should not raise
         _cleanup_trim_dlg(dlg)
 
@@ -165,8 +172,7 @@ class TestTrimDialogKeyboard:
         from PyQt6.QtGui import QKeyEvent
 
         dlg = TrimDialog(duration=120.0)
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_O,
-                          Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_O, Qt.KeyboardModifier.NoModifier)
         dlg.keyPressEvent(event)  # Should not raise
         _cleanup_trim_dlg(dlg)
 
@@ -175,8 +181,9 @@ class TestTrimDialogKeyboard:
         from PyQt6.QtGui import QKeyEvent
 
         dlg = TrimDialog(duration=60.0, start=10.0, end=50.0)
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Return,
-                          Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier
+        )
         dlg.keyPressEvent(event)
         assert dlg.result() == 1
         _cleanup_trim_dlg(dlg)
@@ -186,10 +193,9 @@ class TestTrimDialogKeyboard:
         from PyQt6.QtGui import QKeyEvent
 
         dlg = TrimDialog(duration=60.0)
-        event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape,
-                          Qt.KeyboardModifier.NoModifier)
+        event = QKeyEvent(
+            QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier
+        )
         dlg.keyPressEvent(event)
         assert dlg.result() == 0
         _cleanup_trim_dlg(dlg)
-
-

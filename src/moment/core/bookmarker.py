@@ -30,9 +30,9 @@ class Bookmarker:
         on_bookmark_created: Callable[[Bookmark], None] | None = None,
     ) -> None:
         """Args:
-            store: The application Store for persistence.
-            on_bookmark_created: Optional callback invoked as
-                ``callback(bookmark)`` when a bookmark is created.
+        store: The application Store for persistence.
+        on_bookmark_created: Optional callback invoked as
+            ``callback(bookmark)`` when a bookmark is created.
         """
         self._store = store
         self._on_bookmark_created = on_bookmark_created

@@ -10,11 +10,11 @@ import pytest
 
 from moment.core.encoder import GPU_SEMAPHORE, Encoder, EncoderError
 from moment.core.models import Clip, EditProfile
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def clip() -> Clip:
     return Clip(
         id=str(uuid.uuid4()),
@@ -31,6 +31,7 @@ def clip() -> Clip:
         game="cs2",
     )
 
+
 @pytest.fixture
 def profile() -> EditProfile:
     return EditProfile(
@@ -41,9 +42,11 @@ def profile() -> EditProfile:
         mic_audio_volume=0.8,
     )
 
+
 # ---------------------------------------------------------------------------
 # Command building
 # ---------------------------------------------------------------------------
+
 
 class TestBuildCommand:
     def test_basic_command(self, clip: Clip) -> None:
@@ -66,19 +69,30 @@ class TestBuildCommand:
         cmd = encoder.build_command(clip)
 
         # Should select any valid H.264 encoder (hardware or software)
-        assert any(enc in cmd for enc in [
-            "h264_nvenc", "h264_vaapi", "h264_qsv", "libx264",
-        ])
+        assert any(
+            enc in cmd
+            for enc in [
+                "h264_nvenc",
+                "h264_vaapi",
+                "h264_qsv",
+                "libx264",
+            ]
+        )
 
     def test_h265_codec(self, clip: Clip) -> None:
         encoder = Encoder(codec="h265")
         cmd = encoder.build_command(clip)
 
-        assert any(enc in cmd for enc in [
-            "h265_nvenc", "hevc_nvenc",
-            "hevc_vaapi", "hevc_qsv",
-            "libx265",
-        ])
+        assert any(
+            enc in cmd
+            for enc in [
+                "h265_nvenc",
+                "hevc_nvenc",
+                "hevc_vaapi",
+                "hevc_qsv",
+                "libx265",
+            ]
+        )
 
     def test_trim_params(self, clip: Clip, profile: EditProfile) -> None:
         encoder = Encoder(codec="h264")
@@ -130,9 +144,11 @@ class TestBuildCommand:
         encoder2 = Encoder(codec="h264", quality=-10)
         assert encoder2.quality == 0
 
+
 # ---------------------------------------------------------------------------
 # Codec properties
 # ---------------------------------------------------------------------------
+
 
 class TestCodecSelection:
     def test_h264_default_quality(self) -> None:
@@ -151,9 +167,11 @@ class TestCodecSelection:
         encoder = Encoder(codec="unknown")
         assert encoder.quality == 23  # falls back to h264 default
 
+
 # ---------------------------------------------------------------------------
 # GPU semaphore
 # ---------------------------------------------------------------------------
+
 
 class TestGPUSemaphore:
     def test_semaphore_exists(self) -> None:
@@ -172,9 +190,11 @@ class TestGPUSemaphore:
         assert not GPU_SEMAPHORE.acquire(blocking=False)
         GPU_SEMAPHORE.release()
 
+
 # ---------------------------------------------------------------------------
 # Encode execution (mocked)
 # ---------------------------------------------------------------------------
+
 
 class TestEncode:
     def test_successful_encode(self, clip: Clip) -> None:
@@ -189,8 +209,10 @@ class TestEncode:
             mock_proc.returncode = 0
             mock_proc.communicate.return_value = ("", "")
 
-            with patch("pathlib.Path.is_file", return_value=True), \
-                 patch("pathlib.Path.stat") as mock_stat:
+            with (
+                patch("pathlib.Path.is_file", return_value=True),
+                patch("pathlib.Path.stat") as mock_stat,
+            ):
                 mock_stat.return_value.st_size = 1000
                 result = encoder.encode(clip)
 
@@ -250,14 +272,14 @@ class TestEncode:
             with pytest.raises(EncoderError, match="empty"):
                 encoder.encode(clip)
 
+
 # ---------------------------------------------------------------------------
 # nvenc availability
 # ---------------------------------------------------------------------------
+
 
 class TestNvencAvailability:
     def test_is_nvenc_available(self) -> None:
         encoder = Encoder()
         result = encoder.is_nvenc_available
         assert isinstance(result, bool)
-
-

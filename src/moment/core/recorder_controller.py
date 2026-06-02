@@ -48,9 +48,9 @@ _TERM_GRACE = 5.0
 
 # Signal mapping: seconds → SIGRTMIN offset
 _SIGNAL_MAP: dict[int, int] = {
-    30: 0,     # SIGRTMIN
-    60: 1,     # SIGRTMIN + 1
-    300: 2,    # SIGRTMIN + 2
+    30: 0,  # SIGRTMIN
+    60: 1,  # SIGRTMIN + 1
+    300: 2,  # SIGRTMIN + 2
 }
 
 
@@ -81,16 +81,16 @@ class RecorderController:
         gsr_controller: "GSRController | None" = None,
     ) -> None:
         """Args:
-            output_dir: Directory where gpu-screen-recorder writes MKV
-                files.  Defaults to ``~/Videos``.
-            default_fps: Capture frame rate when no GameProfile overrides.
-            default_duration: Default replay duration (seconds) for F8.
-            on_crash: Called as ``callback(message)`` when the process
-                crashes and cannot be restarted.
-            on_file_ready: Called as ``callback(path)`` when a replay
-                file has been saved and is ready for the pipeline.
-            gsr_controller: Optional GSR instant-replay controller.
-                When provided, ``save_replay()`` delegates to it.
+        output_dir: Directory where gpu-screen-recorder writes MKV
+            files.  Defaults to ``~/Videos``.
+        default_fps: Capture frame rate when no GameProfile overrides.
+        default_duration: Default replay duration (seconds) for F8.
+        on_crash: Called as ``callback(message)`` when the process
+            crashes and cannot be restarted.
+        on_file_ready: Called as ``callback(path)`` when a replay
+            file has been saved and is ready for the pipeline.
+        gsr_controller: Optional GSR instant-replay controller.
+            When provided, ``save_replay()`` delegates to it.
         """
         self._output_dir = Path(output_dir or DEFAULT_OUTPUT_DIR).expanduser().resolve()
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -373,10 +373,14 @@ class RecorderController:
         """
         cmd: list[str] = [
             "gpu-screen-recorder",
-            "-w", "screen",           # capture entire screen
-            "-f", str(fps),
-            "-r", str(replay_duration),
-            "-o", str(output),
+            "-w",
+            "screen",  # capture entire screen
+            "-f",
+            str(fps),
+            "-r",
+            str(replay_duration),
+            "-o",
+            str(output),
         ]
 
         # Audio configuration
@@ -388,10 +392,14 @@ class RecorderController:
             if mic_device:
                 cmd.extend(["-q", validate_arg(mic_device, context="device")])
                 # Bitrate and codec for mic
-                cmd.extend([
-                    "-k", audio_config.get("mic_codec", "opus"),
-                    "-b", str(audio_config.get("mic_bitrate", "128k")),
-                ])
+                cmd.extend(
+                    [
+                        "-k",
+                        audio_config.get("mic_codec", "opus"),
+                        "-b",
+                        str(audio_config.get("mic_bitrate", "128k")),
+                    ]
+                )
         else:
             # Default: capture default audio output
             cmd.extend(["-a", "default_output"])
@@ -402,6 +410,7 @@ class RecorderController:
 # ---------------------------------------------------------------------------
 # Module-level helper
 # ---------------------------------------------------------------------------
+
 
 def replay_signal_for_duration(seconds: int) -> int | None:
     """Return the SIGRTMIN offset for *seconds*, or ``None``."""

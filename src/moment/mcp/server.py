@@ -34,9 +34,7 @@ logger = logging.getLogger(__name__)
 # Auth context — propagated via contextvars for downstream tool access
 # ---------------------------------------------------------------------------
 
-_auth_scope: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "mcp_auth_scope", default="none"
-)
+_auth_scope: contextvars.ContextVar[str] = contextvars.ContextVar("mcp_auth_scope", default="none")
 # Possible values: "none", "read-only", "mutation"
 
 _MUTATION_TOOL_NAMES: set[str] = {
@@ -52,6 +50,7 @@ _MUTATION_TOOL_NAMES: set[str] = {
 def get_auth_scope() -> str:
     """Return the current request's auth scope (``none``, ``read-only``, ``mutation``)."""
     return _auth_scope.get()
+
 
 # ---------------------------------------------------------------------------
 # Optional dependency guard
@@ -70,7 +69,6 @@ except ImportError:
 def check_available() -> bool:
     """Return ``True`` if fastmcp is installed, ``False`` otherwise."""
     return _FASTMCP_AVAILABLE
-
 
 
 def _resolve_or_generate_token(api_token: str | None) -> tuple[str, str] | None:
@@ -93,6 +91,7 @@ def _resolve_or_generate_token(api_token: str | None) -> tuple[str, str] | None:
     if not mutation_token:
         try:
             import keyring
+
             mutation_token = keyring.get_password("moment", "mcp_api_token")
             if mutation_token:
                 logger.info("MCP API token loaded from system keyring")
@@ -104,13 +103,12 @@ def _resolve_or_generate_token(api_token: str | None) -> tuple[str, str] | None:
         keyring_ok = False
         try:
             import keyring
+
             keyring.set_password("moment", "mcp_api_token", mutation_token)
             keyring_ok = True
             logger.info("MCP API token stored in system keyring")
         except Exception as exc:
-            logger.warning(
-                "Could not store MCP token in keyring — token will be session-only"
-            )
+            logger.warning("Could not store MCP token in keyring — token will be session-only")
             logger.debug("keyring store error: %s", exc)
         if not keyring_ok:
             logger.warning(
@@ -122,6 +120,7 @@ def _resolve_or_generate_token(api_token: str | None) -> tuple[str, str] | None:
     ro_token = None
     try:
         import keyring
+
         ro_token = keyring.get_password("moment", "mcp_token_ro")
         if ro_token:
             logger.info("MCP read-only token loaded from system keyring")
@@ -153,9 +152,7 @@ def create_server(
     """
     if not _FASTMCP_AVAILABLE:
         print(
-            "fastmcp not installed.  Run:\n"
-            "    pip install moment[mcp]\n"
-            "or  pip install fastmcp",
+            "fastmcp not installed.  Run:\n    pip install moment[mcp]\nor  pip install fastmcp",
             file=sys.stderr,
         )
         raise ImportError("fastmcp is required for MCP server")

@@ -106,6 +106,7 @@ def _cmd_diagnose(argv: list[str]) -> int:
 
     if args.json:
         import json as json_mod
+
         print(json_mod.dumps(report, indent=2, default=str))
         return 0
 
@@ -145,11 +146,7 @@ def _cmd_diagnose(argv: list[str]) -> int:
             if clip:
                 print(f"  Clip {args.clip_id}:")
                 print(f"    Stem:      {clip.stem}")
-                status_display = (
-                    clip.status.name
-                    if hasattr(clip.status, "name")
-                    else clip.status
-                )
+                status_display = clip.status.name if hasattr(clip.status, "name") else clip.status
                 print(f"    Status:    {status_display}")
                 print(f"    Duration:  {clip.duration:.1f}s")
                 print(f"    Size:      {clip.file_size} bytes")

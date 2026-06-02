@@ -55,38 +55,34 @@ class Uploader:
         config: Config | None = None,
     ) -> None:
         """Args:
-            remote: rclone remote name (e.g. ``"b2"``, ``"r2"``, ``"s3"``).
-                Defaults to Config override, then env var, then ``"r2"``.
-            bucket: Bucket/container name on the remote.
-                Defaults to Config override, then env var, then ``"moment"``.
-            base_url: Public base URL for constructing shareable links.
-                Defaults to Config override, then env var.
-            config: Optional Config instance for path overrides.
+        remote: rclone remote name (e.g. ``"b2"``, ``"r2"``, ``"s3"``).
+            Defaults to Config override, then env var, then ``"r2"``.
+        bucket: Bucket/container name on the remote.
+            Defaults to Config override, then env var, then ``"moment"``.
+        base_url: Public base URL for constructing shareable links.
+            Defaults to Config override, then env var.
+        config: Optional Config instance for path overrides.
         """
+
         # Config override > explicit arg > env var > hardcoded default
         def _cfg_path(key: str) -> str | None:
             return config.get_path(key) if config is not None else None
 
-        self._remote = (
-            remote or _cfg_path("rclone_remote")
-            or _env("MOMENT_RCLONE_REMOTE", "r2")
-        )
+        self._remote = remote or _cfg_path("rclone_remote") or _env("MOMENT_RCLONE_REMOTE", "r2")
         self._bucket = (
-            bucket or _cfg_path("rclone_bucket")
-            or _env("MOMENT_RCLONE_BUCKET", "moment")
+            bucket or _cfg_path("rclone_bucket") or _env("MOMENT_RCLONE_BUCKET", "moment")
         )
-        self._base_url = (
-            base_url or _cfg_path("base_url")
-            or _env("MOMENT_BASE_URL", "")
-        ).rstrip("/")
+        self._base_url = (base_url or _cfg_path("base_url") or _env("MOMENT_BASE_URL", "")).rstrip(
+            "/"
+        )
 
         # Validate remote and bucket names to prevent rclone flag injection
-        if not re.match(r'^[a-zA-Z0-9_-]+$', self._remote):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", self._remote):
             raise UploaderError(
                 f"Invalid rclone remote name: {self._remote!r} — "
                 f"must contain only alphanumeric characters, hyphens, and underscores"
             )
-        if not re.match(r'^[a-zA-Z0-9_.-]+$', self._bucket):
+        if not re.match(r"^[a-zA-Z0-9_.-]+$", self._bucket):
             raise UploaderError(
                 f"Invalid rclone bucket name: {self._bucket!r} — "
                 f"must contain only alphanumeric characters, dots, hyphens, and underscores"
@@ -163,7 +159,9 @@ class Uploader:
                 last_error = exc
                 logger.warning(
                     "Upload attempt %d/%d failed: %s",
-                    attempt + 1, _MAX_RETRIES + 1, type(exc).__name__,
+                    attempt + 1,
+                    _MAX_RETRIES + 1,
+                    type(exc).__name__,
                 )
 
             if attempt < _MAX_RETRIES:
@@ -175,12 +173,9 @@ class Uploader:
         with Uploader._failure_lock:
             Uploader._consecutive_failures += 1
             if Uploader._consecutive_failures >= _CIRCUIT_BREAKER_FAILURES:
-                Uploader._circuit_open_until = (
-                    time.monotonic() + _CIRCUIT_BREAKER_BACKOFF
-                )
+                Uploader._circuit_open_until = time.monotonic() + _CIRCUIT_BREAKER_BACKOFF
                 logger.warning(
-                    "Circuit breaker tripped after %d consecutive failures "
-                    "— backing off for %ds",
+                    "Circuit breaker tripped after %d consecutive failures — backing off for %ds",
                     Uploader._consecutive_failures,
                     _CIRCUIT_BREAKER_BACKOFF,
                 )
@@ -276,6 +271,7 @@ class Uploader:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _env(key: str, default: str) -> str:
     return os.environ.get(key, default)

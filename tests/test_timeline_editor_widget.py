@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from moment.ui.widgets.timeline_editor import TimelineEditor, _fmt
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -13,6 +14,7 @@ def _cleanup_editor(editor: TimelineEditor) -> None:
 
     editor.close()
     editor.deleteLater()
+
 
 class TestTimelineEditorInit:
     def test_create_defaults(self, qapp):
@@ -50,6 +52,7 @@ class TestTimelineEditorInit:
         assert hint.height() > 0
         _cleanup_editor(editor)
 
+
 class TestTimelineEditorSetRange:
     def test_set_range(self, qapp):
         editor = TimelineEditor(total_duration=30.0)
@@ -64,6 +67,7 @@ class TestTimelineEditorSetRange:
         assert editor.trim_start == 0.0
         assert editor.trim_end == 30.0
         _cleanup_editor(editor)
+
 
 class TestTimelineEditorCoordConversion:
     def test_pos_to_frac_bounds(self, qapp):
@@ -97,6 +101,7 @@ class TestTimelineEditorCoordConversion:
         assert x > 0
         _cleanup_editor(editor)
 
+
 class TestTimelineEditorHitTest:
     def test_hit_in_handle(self, qapp):
         editor = TimelineEditor(total_duration=30.0)
@@ -120,6 +125,7 @@ class TestTimelineEditorHitTest:
         result = editor._hit_test(mid)
         assert result is None or result is not None
         _cleanup_editor(editor)
+
 
 class TestTimelineEditorMousePress:
     def test_press_on_handle_starts_drag(self, qapp):
@@ -160,6 +166,7 @@ class TestTimelineEditorMousePress:
         editor.mousePressEvent(event)
         assert editor._dragging is not None
         _cleanup_editor(editor)
+
 
 class TestTimelineEditorMouseMove:
     def test_move_updates_hover(self, qapp):
@@ -214,6 +221,7 @@ class TestTimelineEditorMouseMove:
         assert len(fired) >= 1
         _cleanup_editor(editor)
 
+
 class TestTimelineEditorMouseRelease:
     def test_release_clears_dragging(self, qapp):
         editor = TimelineEditor(total_duration=30.0)
@@ -221,6 +229,7 @@ class TestTimelineEditorMouseRelease:
         editor._dragging = "in"
         from PyQt6.QtCore import QPointF, Qt
         from PyQt6.QtGui import QMouseEvent
+
         event = QMouseEvent(
             QMouseEvent.Type.MouseButtonRelease,
             QPointF(10, 10),
@@ -233,14 +242,17 @@ class TestTimelineEditorMouseRelease:
         assert editor._dragging is None
         _cleanup_editor(editor)
 
+
 class TestTimelineEditorLeave:
     def test_leave_clears_hover(self, qapp):
         editor = TimelineEditor(total_duration=30.0)
         editor._hover = "in"
         from PyQt6.QtCore import QEvent
+
         editor.leaveEvent(QEvent(QEvent.Type.Leave))
         assert editor._hover is None
         _cleanup_editor(editor)
+
 
 class TestTimelineEditorPaint:
     def test_paint_normal(self, qapp):
@@ -255,6 +267,7 @@ class TestTimelineEditorPaint:
         editor.repaint()
         _cleanup_editor(editor)
 
+
 class TestFmtEditor:
     def test_fmt(self):
         assert _fmt(0) == "0:00"
@@ -264,5 +277,3 @@ class TestFmtEditor:
 
     def test_fmt_negative(self):
         assert _fmt(-5) == "0:00"
-
-

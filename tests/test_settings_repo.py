@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from moment.core.repositories.settings_repo import SettingsRepository
 from moment.core.store import Store
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def settings_repo(store: Store) -> SettingsRepository:
     # The store creates the base repo internally; we can access it via _base
     return SettingsRepository(store._base)
+
 
 class TestCheckRate:
     def test_first_call_returns_none(self, settings_repo: SettingsRepository) -> None:
@@ -57,5 +58,3 @@ class TestCheckRate:
             settings_repo.check_rate("old_key", interval_secs=60.0)
             # Should work without error
             assert True
-
-

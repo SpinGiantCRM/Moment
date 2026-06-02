@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 try:
     import dbus  # type: ignore[import-untyped]
     from dbus.mainloop.glib import DBusGMainLoop  # type: ignore[import-untyped]
+
     _DBUS_AVAILABLE = True
 except ImportError:
     _DBUS_AVAILABLE = False
@@ -60,9 +61,9 @@ class GlobalHotkeyManager(QObject):
         parent: QObject | None = None,
     ) -> None:
         """Args:
-            key: The hotkey string (e.g. ``"Alt+Z"``).
-            on_triggered: Called (no args) when the hotkey fires.
-            parent: Qt parent object.
+        key: The hotkey string (e.g. ``"Alt+Z"``).
+        on_triggered: Called (no args) when the hotkey fires.
+        parent: Qt parent object.
         """
         super().__init__(parent)
         self._key = key

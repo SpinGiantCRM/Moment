@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 # load so the overlay stays in sync with the application theme.
 # ---------------------------------------------------------------------------
 
+
 def _resolve_color(token: str, fallback: str) -> str:
     """Resolve a palette token at import time, falling back to the hex value."""
     try:
@@ -225,9 +226,9 @@ class Overlay(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         """Args:
-            recent_clips: List of (stem, relative_time) for the recent list.
-            auto_hide_seconds: Seconds of inactivity before auto-hiding.
-            parent: Optional parent widget.
+        recent_clips: List of (stem, relative_time) for the recent list.
+        auto_hide_seconds: Seconds of inactivity before auto-hiding.
+        parent: Optional parent widget.
         """
         super().__init__(parent)
 
@@ -467,10 +468,12 @@ class Overlay(QWidget):
 
         close_link = _ActionLink("Close  ✕")
         close_link.clicked.connect(self.close_overlay.emit)
-        close_link.setStyleSheet(close_link.styleSheet().replace(
-            f"color: {_COLOR_ACCENT}",
-            f"color: {_COLOR_TEXT_MUTED}",
-        ))
+        close_link.setStyleSheet(
+            close_link.styleSheet().replace(
+                f"color: {_COLOR_ACCENT}",
+                f"color: {_COLOR_TEXT_MUTED}",
+            )
+        )
         footer.addWidget(close_link)
 
         main_layout.addLayout(footer)

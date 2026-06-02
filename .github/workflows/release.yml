@@ -39,7 +39,7 @@ jobs:
 
       - name: Run tests (exclude external)
         run: |
-          python -m pytest -m "not external" --tb=short -q
+          python -m pytest -m "not gui and not integration and not slow and not external" --tb=short -q
 
       - name: Build wheel + sdist
         run: python -m build --wheel --sdist

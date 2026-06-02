@@ -128,10 +128,7 @@ class SanitizingFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg = _sanitize(str(record.msg))
         if record.args:
-            record.args = tuple(
-                _sanitize(str(a)) if isinstance(a, str) else a
-                for a in record.args
-            )
+            record.args = tuple(_sanitize(str(a)) if isinstance(a, str) else a for a in record.args)
         return True
 
 
@@ -168,9 +165,7 @@ class JsonFormatter(logging.Formatter):
         }
         # Include exception info if present
         if record.exc_info and record.exc_info[0] is not None:
-            entry["exception"] = "".join(
-                traceback.format_exception(*record.exc_info)
-            ).rstrip()
+            entry["exception"] = "".join(traceback.format_exception(*record.exc_info)).rstrip()
         # Include optional correlation fields
         for attr in ("clip_id", "task_id", "request_id"):
             val = getattr(record, attr, None)
@@ -309,9 +304,7 @@ def startup_banner(
         "cwd": os.getcwd(),
         "config_dir": os.path.expanduser("~/.config/moment"),
         "data_dir": (
-            config.get_path("data_dir")
-            if config
-            else os.path.expanduser("~/.local/share/moment")
+            config.get_path("data_dir") if config else os.path.expanduser("~/.local/share/moment")
         ),
         "log_path": resolved_log,
         "crash_dir": _CRASH_DIR,
@@ -326,7 +319,9 @@ def startup_banner(
     logger.info("━━━ Moment %s startup ━━━", __version__)
     logger.info(
         "Python: %s | Platform: %s | Arch: %s",
-        info["python"], info["os"], info["architecture"],
+        info["python"],
+        info["os"],
+        info["architecture"],
     )
     logger.info("PID: %d | CWD: %s", os.getpid(), info["cwd"])
     logger.info("Config: %s  |  Data: %s", info["config_dir"], info["data_dir"])
@@ -412,9 +407,7 @@ class CrashDump:
         # Safely format the traceback — handle both traceback objects
         # and other formats (e.g. StackSummary).
         try:
-            tb_text = "".join(
-                traceback.format_exception(exc_type, exc_value, exc_tb)
-            )
+            tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         except (AttributeError, TypeError):
             tb_text = f"{exc_type.__name__}: {exc_value}\n  (traceback unavailable)"
 
@@ -454,9 +447,7 @@ class CrashDump:
             dump_path.write_text("\n".join(lines), encoding="utf-8")
             # Restrict permissions
             dump_path.chmod(0o600)
-            logging.getLogger("moment.crash").warning(
-                "Crash dump saved to %s", dump_path
-            )
+            logging.getLogger("moment.crash").warning("Crash dump saved to %s", dump_path)
         except OSError as exc:
             logging.getLogger("moment.crash").error(
                 "Failed to write crash dump to %s: %s", dump_path, exc
@@ -503,6 +494,7 @@ def diagnose(
     if cfg is None:
         try:
             from moment.core.config import Config
+
             cfg = Config()
         except Exception:
             cfg = None
@@ -549,6 +541,7 @@ def diagnose(
     # Available storage providers
     try:
         from moment.core.uploader import list_storage_providers
+
         info["storage_providers"] = list_storage_providers()
     except Exception:
         info["storage_providers"] = []

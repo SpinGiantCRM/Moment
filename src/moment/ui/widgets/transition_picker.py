@@ -226,8 +226,8 @@ class TransitionPicker(QDialog):
         self._list.setStyleSheet(
             f"""
             QListWidget {{
-                background-color: {color('--bg-inset')};
-                border: 1px solid {color('--border-menu')};
+                background-color: {color("--bg-inset")};
+                border: 1px solid {color("--border-menu")};
                 border-radius: 4px;
                 padding: 2px;
             }}
@@ -236,7 +236,7 @@ class TransitionPicker(QDialog):
                 border-radius: 3px;
             }}
             QListWidget::item:selected {{
-                background-color: {color('--accent-blue')};
+                background-color: {color("--accent-blue")};
                 color: #ffffff;
             }}
             """
@@ -438,16 +438,16 @@ class TransitionPicker(QDialog):
             draw_a = progress < 0.5
             self._draw_clip_block(painter, "Clip A", 0, 20, mid, 80, accent)
             if not draw_a:
-                self._draw_clip_block(painter, "Clip B", mid, 20, mid, 80,
-                                      QColor(color("--accent-green")))
+                self._draw_clip_block(
+                    painter, "Clip B", mid, 20, mid, 80, QColor(color("--accent-green"))
+                )
 
         elif key in ("crossfade", "fade_black", "fade_white"):
             # Crossfade / fade — alpha blend between clips
-            self._draw_clip_block(painter, "Clip A", 0, 20, mid, 80, accent,
-                                  alpha=1.0 - progress)
-            self._draw_clip_block(painter, "Clip B", mid, 20, mid, 80,
-                                  QColor(color("--accent-green")),
-                                  alpha=progress)
+            self._draw_clip_block(painter, "Clip A", 0, 20, mid, 80, accent, alpha=1.0 - progress)
+            self._draw_clip_block(
+                painter, "Clip B", mid, 20, mid, 80, QColor(color("--accent-green")), alpha=progress
+            )
             # Fade overlay
             if key in ("fade_black", "fade_white"):
                 fade_color = QColor(0, 0, 0) if "black" in key else QColor(255, 255, 255)
@@ -458,11 +458,17 @@ class TransitionPicker(QDialog):
             # Whip — slide clips laterally
             direction = -1 if "left" in key else 1
             offset = int(size * progress * direction)
-            self._draw_clip_block(painter, "Clip A", offset, 20, mid, 80, accent,
-                                  alpha=0.7)
-            self._draw_clip_block(painter, "Clip B",
-                                  mid + offset, 20, mid, 80,
-                                  QColor(color("--accent-green")), alpha=0.7)
+            self._draw_clip_block(painter, "Clip A", offset, 20, mid, 80, accent, alpha=0.7)
+            self._draw_clip_block(
+                painter,
+                "Clip B",
+                mid + offset,
+                20,
+                mid,
+                80,
+                QColor(color("--accent-green")),
+                alpha=0.7,
+            )
             # Motion blur lines
             blur_alpha = int(60 * (1.0 - progress))
             blur_color = QColor(accent)
@@ -492,7 +498,10 @@ class TransitionPicker(QDialog):
     def _draw_clip_block(
         painter: QPainter,
         label: str,
-        x: int, y: int, w: int, h: int,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
         border_color: QColor,
         *,
         alpha: float = 1.0,

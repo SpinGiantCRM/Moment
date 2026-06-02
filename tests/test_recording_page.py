@@ -55,6 +55,7 @@ class TestRecordingPageStates:
 
     def test_set_store(self, qapp) -> None:
         from unittest.mock import MagicMock
+
         store = MagicMock()
         page = RecordingPage()
         page.set_store(store)

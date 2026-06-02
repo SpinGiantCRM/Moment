@@ -151,7 +151,9 @@ class TestGameExitFlow:
         profile = mgr.create_default("cs2", min_duration=30, post_capture_action="card")
         # Override threshold to 10s — 15s clip should be kept
         result = GameProfileManager.decide_game_exit_action(
-            profile, clip_duration=15.0, min_duration_override=10,
+            profile,
+            clip_duration=15.0,
+            min_duration_override=10,
         )
         assert result == "card"
 

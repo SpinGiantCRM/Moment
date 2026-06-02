@@ -12,13 +12,14 @@ from moment.core.noise_suppression import (
     NoiseSuppressor,
     NoiseSuppressorError,
 )
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def suppressor() -> NoiseSuppressor:
     return NoiseSuppressor(enabled=True)
+
 
 @pytest.fixture
 def fake_mp4(tmp_path: Path) -> Path:
@@ -28,9 +29,11 @@ def fake_mp4(tmp_path: Path) -> Path:
     p.write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 200)
     return p
 
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
+
 
 class TestInitialization:
     def test_enabled_by_default(self) -> None:
@@ -41,9 +44,11 @@ class TestInitialization:
         s = NoiseSuppressor(enabled=False)
         assert s.enabled is False
 
+
 # ---------------------------------------------------------------------------
 # Process — skip conditions
 # ---------------------------------------------------------------------------
+
 
 class TestSkipConditions:
     def test_skip_when_disabled(self, fake_mp4: Path) -> None:
@@ -71,14 +76,14 @@ class TestSkipConditions:
             result = suppressor.process(fake_mp4, has_mic_audio=True)
             assert result == fake_mp4
 
+
 # ---------------------------------------------------------------------------
 # Successful processing
 # ---------------------------------------------------------------------------
 
+
 class TestSuccessfulProcessing:
-    def test_process_applies_rnnoise(
-        self, suppressor: NoiseSuppressor, fake_mp4: Path
-    ) -> None:
+    def test_process_applies_rnnoise(self, suppressor: NoiseSuppressor, fake_mp4: Path) -> None:
         """When mic + game audio tracks exist, RNNoise should be applied."""
         probe_result = MagicMock()
         probe_result.returncode = 0
@@ -111,9 +116,7 @@ class TestSuccessfulProcessing:
             # Should have called ffmpeg twice (probe + rnnoise)
             assert subprocess.run.called
 
-    def test_output_has_correct_suffix(
-        self, suppressor: NoiseSuppressor, fake_mp4: Path
-    ) -> None:
+    def test_output_has_correct_suffix(self, suppressor: NoiseSuppressor, fake_mp4: Path) -> None:
         probe_result = MagicMock()
         probe_result.returncode = 0
         probe_result.stdout = (
@@ -137,14 +140,14 @@ class TestSuccessfulProcessing:
             result = suppressor.process(fake_mp4, has_mic_audio=True)
             assert result.suffix == ".mp4"
 
+
 # ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
 
+
 class TestErrorHandling:
-    def test_rnnoise_failure_raises(
-        self, suppressor: NoiseSuppressor, fake_mp4: Path
-    ) -> None:
+    def test_rnnoise_failure_raises(self, suppressor: NoiseSuppressor, fake_mp4: Path) -> None:
         probe_result = MagicMock()
         probe_result.returncode = 0
         probe_result.stdout = (
@@ -174,17 +177,17 @@ class TestErrorHandling:
                 "subprocess.run",
                 side_effect=[
                     probe_result,
-                    subprocess.CalledProcessError(
-                        1, "ffmpeg", "RNNoise error"
-                    ),
+                    subprocess.CalledProcessError(1, "ffmpeg", "RNNoise error"),
                 ],
             ):
                 with pytest.raises(NoiseSuppressorError, match="RNNoise processing failed"):
                     suppressor.process(fake_mp4, has_mic_audio=True)
 
+
 # ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
+
 
 class TestCallbacks:
     def test_on_complete_callback(self, fake_mp4: Path) -> None:
@@ -246,9 +249,11 @@ class TestCallbacks:
             result = s.process(fake_mp4, has_mic_audio=True)
             assert result is not None
 
+
 # ---------------------------------------------------------------------------
 # Model path validation
 # ---------------------------------------------------------------------------
+
 
 class TestModelPathValidation:
     def test_valid_rnn_path_used(self, tmp_path: Path) -> None:
@@ -343,5 +348,3 @@ class TestModelPathValidation:
         ):
             result = suppressor.process(fake_mp4, has_mic_audio=True)
             assert result is not None
-
-

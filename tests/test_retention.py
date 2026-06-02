@@ -8,33 +8,32 @@ trash entirely.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from unittest.mock import patch
-
 import os
 import shutil
 import tempfile
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from moment.core.config import Config
 from moment.core.models import Clip, ClipStatus
 from moment.core.retention import (
-
     CLOUD_SIZE_LIMIT_BYTES,
     RetentionManager,
     _age_str,
 )
 from moment.core.store import Store
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def trash_dir(tmp_path: Path) -> str:
     """Use a temporary directory as the trash dir."""
     return str(tmp_path / "trash")
+
 
 @pytest.fixture
 def manager(store: Store, trash_dir: str) -> RetentionManager:
@@ -48,8 +47,13 @@ def manager(store: Store, trash_dir: str) -> RetentionManager:
     yield m
     m.stop()
 
+
 def _make_clip(
-    store: Store, *, id: str, stem: str = "", source_path: str = "",
+    store: Store,
+    *,
+    id: str,
+    stem: str = "",
+    source_path: str = "",
     **kwargs: object,
 ) -> Clip:
     """Helper to insert a clip with minimal required fields."""
@@ -62,9 +66,11 @@ def _make_clip(
     store.insert_clip(clip)
     return clip
 
+
 # ---------------------------------------------------------------------------
 # Age string helper
 # ---------------------------------------------------------------------------
+
 
 class TestAgeString:
     def test_years(self) -> None:
@@ -83,13 +89,18 @@ class TestAgeString:
         dt = datetime.now(timezone.utc) - timedelta(minutes=30)
         assert _age_str(dt) == "30m"
 
+
 # ---------------------------------------------------------------------------
 # Source age enforcement
 # ---------------------------------------------------------------------------
 
+
 class TestSourceAge:
     def test_old_source_trashed(
-        self, manager: RetentionManager, store: Store, trash_dir: str,
+        self,
+        manager: RetentionManager,
+        store: Store,
+        trash_dir: str,
     ) -> None:
         _make_clip(
             store,
@@ -137,13 +148,18 @@ class TestSourceAge:
             purged, _ = manager._enforce_source_age()
             assert purged == 0
 
+
 # ---------------------------------------------------------------------------
 # Encoded age enforcement
 # ---------------------------------------------------------------------------
 
+
 class TestEncodedAge:
     def test_old_encoded_trashed(
-        self, manager: RetentionManager, store: Store, trash_dir: str,
+        self,
+        manager: RetentionManager,
+        store: Store,
+        trash_dir: str,
     ) -> None:
         _make_clip(
             store,
@@ -182,9 +198,11 @@ class TestEncodedAge:
         purged, _ = manager._enforce_encoded_age()
         assert purged == 0
 
+
 # ---------------------------------------------------------------------------
 # Error / Corrupt clips are skipped by default
 # ---------------------------------------------------------------------------
+
 
 class TestErrorCorruptSkipping:
     def test_error_clip_not_trashed(self, manager: RetentionManager, store: Store) -> None:
@@ -222,7 +240,9 @@ class TestErrorCorruptSkipping:
             mock_move.assert_not_called()
 
     def test_error_clip_trashed_when_remove_corrupt(
-        self, store: Store, trash_dir: str,
+        self,
+        store: Store,
+        trash_dir: str,
     ) -> None:
         """When retention_remove_corrupt=true, ERROR clips ARE purged."""
         config = Config(store._db_path)
@@ -254,13 +274,17 @@ class TestErrorCorruptSkipping:
 
         m.stop()
 
+
 # ---------------------------------------------------------------------------
 # Trash days = 0 (permanent delete)
 # ---------------------------------------------------------------------------
 
+
 class TestTrashDaysZero:
     def test_trash_days_zero_permanently_deletes(
-        self, store: Store, trash_dir: str,
+        self,
+        store: Store,
+        trash_dir: str,
     ) -> None:
         """When retention_trash_days=0, files are unlinked instead of moved."""
         config = Config(store._db_path)
@@ -294,9 +318,11 @@ class TestTrashDaysZero:
 
         m.stop()
 
+
 # ---------------------------------------------------------------------------
 # Cloud FIFO enforcement (unchanged — soft-deletes, no file ops)
 # ---------------------------------------------------------------------------
+
 
 class TestCloudFIFO:
     def test_under_limit_no_purge(self, manager: RetentionManager, store: Store) -> None:
@@ -355,9 +381,11 @@ class TestCloudFIFO:
         purged, _ = manager._enforce_cloud_limit()
         assert purged == 0
 
+
 # ---------------------------------------------------------------------------
 # Full enforce
 # ---------------------------------------------------------------------------
+
 
 class TestEnforce:
     def test_enforce_returns_tuple(self, manager: RetentionManager) -> None:
@@ -372,9 +400,11 @@ class TestEnforce:
         assert purged == 0
         assert freed == 0
 
+
 # ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
+
 
 class TestCallbacks:
     def test_on_purged_callback(self, store: Store, trash_dir: str) -> None:
@@ -418,9 +448,11 @@ class TestCallbacks:
         assert len(purged_data) == 0
         m.stop()
 
+
 # ---------------------------------------------------------------------------
 # Start / Stop
 # ---------------------------------------------------------------------------
+
 
 class TestStartStop:
     def test_start_stop_lifecycle(self, store: Store, trash_dir: str) -> None:
@@ -476,6 +508,7 @@ class TestStartStop:
 
     def test_age_str_all_branches(self) -> None:
         from datetime import datetime, timedelta, timezone
+
         now = datetime.now(timezone.utc)
         assert _age_str(now - timedelta(days=400)) == "1y"
         assert _age_str(now - timedelta(days=45)) == "45d"
@@ -485,6 +518,7 @@ class TestStartStop:
     def test_source_oserror_logged(self, manager: RetentionManager, store: Store) -> None:
         """OSError during source file trash is logged, not fatal."""
         from datetime import datetime, timedelta, timezone
+
         _make_clip(
             store,
             id="oserror-source",
@@ -502,6 +536,7 @@ class TestStartStop:
             purged, freed = manager._enforce_source_age()
             # Should be 0 because move failed but the exception was caught
             assert purged >= 0
+
 
 class TestOSErrorHandlers:
     def test_encoded_oserror_logged(self, manager: RetentionManager, store: Store) -> None:
@@ -524,12 +559,18 @@ class TestOSErrorHandlers:
             purged, freed = manager._enforce_encoded_age()
             assert purged >= 0
 
+
 # ---------------------------------------------------------------------------
 # Concurrent insert + enforce
 # ---------------------------------------------------------------------------
 
+
 class TestConcurrentInsertEnforce:
-    def test_insert_during_enforce_does_not_crash(self, manager: RetentionManager, store: Store) -> None:
+    def test_insert_during_enforce_does_not_crash(
+        self,
+        manager: RetentionManager,
+        store: Store,
+    ) -> None:
         """Inserting clips while retention is running should not crash."""
         import threading
         from datetime import datetime, timedelta, timezone
@@ -569,9 +610,11 @@ class TestConcurrentInsertEnforce:
         for i in range(50):
             assert store.get_clip(f"concurrent-{i}") is not None
 
+
 # ---------------------------------------------------------------------------
 # Retention startup edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestRetentionStartup:
     def test_startup_enforce_does_not_raise_on_empty_db(self, store: Store, trash_dir: str) -> None:
@@ -597,6 +640,7 @@ class TestRetentionStartup:
     def test_startup_with_valid_clips(self, store: Store, trash_dir: str) -> None:
         """RetentionManager.start() with existing clips runs enforce without error."""
         from datetime import datetime, timedelta, timezone
+
         _make_clip(
             store,
             id="startup-clip",
@@ -614,14 +658,22 @@ class TestRetentionStartup:
             assert m.is_running
             m.stop()
 
+
 # ---------------------------------------------------------------------------
 # Trash file path injection
 # ---------------------------------------------------------------------------
 
+
 class TestTrashPathInjection:
-    def test_trash_path_with_special_chars(self, manager: RetentionManager, store: Store, tmp_path: Path) -> None:
+    def test_trash_path_with_special_chars(
+        self,
+        manager: RetentionManager,
+        store: Store,
+        tmp_path: Path,
+    ) -> None:
         """Trash file paths with special characters are handled safely."""
         from datetime import datetime, timedelta, timezone
+
         _make_clip(
             store,
             id="special-path",
@@ -647,6 +699,7 @@ class TestTrashPathInjection:
     def test_trash_path_with_unicode(self, manager: RetentionManager, store: Store) -> None:
         """Trash file paths with unicode characters are handled safely."""
         from datetime import datetime, timedelta, timezone
+
         _make_clip(
             store,
             id="unicode-path",
@@ -666,5 +719,3 @@ class TestTrashPathInjection:
             assert purged >= 1
             dest = mock_move.call_args[0][1]
             assert str(dest).startswith(manager._trash_dir)
-
-

@@ -9,10 +9,9 @@ import logging
 import os
 import re
 import sys
-import tempfile
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -22,13 +21,11 @@ from moment.utils.logging import (
     LogDuration,
     SanitizingFilter,
     _get_current_log_path,
-    _sanitize,
     _tail_file,
     diagnose,
     setup_logging,
     startup_banner,
 )
-
 
 # ===================================================================
 # JsonFormatter
@@ -40,8 +37,13 @@ class TestJsonFormatter:
         """JSON output includes timestamp, level, logger, message, module, function, line, pid."""
         fmt = JsonFormatter()
         record = logging.LogRecord(
-            name="test.logger", level=logging.INFO, pathname="/tmp/test.py",
-            lineno=42, msg="hello world", args=(), exc_info=None,
+            name="test.logger",
+            level=logging.INFO,
+            pathname="/tmp/test.py",
+            lineno=42,
+            msg="hello world",
+            args=(),
+            exc_info=None,
         )
         out = fmt.format(record)
         parsed = json.loads(out)
@@ -54,14 +56,19 @@ class TestJsonFormatter:
         assert "exception" not in parsed
 
     def test_format_with_exception(self) -> None:
-        """JSON output includes the exception traceback when exc_info is set."""
+        """JSON output includes exception traceback when exc_info is set."""
         fmt = JsonFormatter()
         try:
             raise ValueError("test error")
         except ValueError:
             record = logging.LogRecord(
-                name="test", level=logging.ERROR, pathname="", lineno=0,
-                msg="Failed", args=(), exc_info=sys.exc_info(),
+                name="test",
+                level=logging.ERROR,
+                pathname="",
+                lineno=0,
+                msg="Failed",
+                args=(),
+                exc_info=sys.exc_info(),
             )
         out = fmt.format(record)
         parsed = json.loads(out)
@@ -73,8 +80,13 @@ class TestJsonFormatter:
         """clip_id attribute is included in JSON output when present."""
         fmt = JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="encoding clip", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="encoding clip",
+            args=(),
+            exc_info=None,
         )
         record.clip_id = "abc-123"
         out = fmt.format(record)
@@ -85,8 +97,13 @@ class TestJsonFormatter:
         """task_id attribute is included when present."""
         fmt = JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.DEBUG, pathname="", lineno=0,
-            msg="task done", args=(), exc_info=None,
+            name="test",
+            level=logging.DEBUG,
+            pathname="",
+            lineno=0,
+            msg="task done",
+            args=(),
+            exc_info=None,
         )
         record.task_id = "task-42"
         out = fmt.format(record)
@@ -97,8 +114,13 @@ class TestJsonFormatter:
         """request_id attribute is included when present."""
         fmt = JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="request", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="request",
+            args=(),
+            exc_info=None,
         )
         record.request_id = "req-1"
         out = fmt.format(record)
@@ -112,8 +134,13 @@ class TestJsonFormatter:
 
         home = os.path.expanduser("~")
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg=f"Path: {home}/secret.mkv", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg=f"Path: {home}/secret.mkv",
+            args=(),
+            exc_info=None,
         )
         sanitize.filter(record)
         out = fmt.format(record)
@@ -135,7 +162,9 @@ class TestLogDuration:
             pass
         assert any("test op completed in" in rec.message for rec in caplog.records)
 
-    def test_context_manager_reports_elapsed_seconds(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_context_manager_reports_elapsed_seconds(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Duration is logged in seconds with 3 decimal places."""
         caplog.set_level(logging.DEBUG, logger="moment.performance")
         # Intentional small sleep: LogDuration measures wall-clock time; a
@@ -172,8 +201,7 @@ class TestLogDuration:
         with LogDuration("slow op", warn_threshold=0.001):
             time.sleep(0.01)
         assert any(
-            rec.levelname == "WARNING" and "slow op took" in rec.message
-            for rec in caplog.records
+            rec.levelname == "WARNING" and "slow op took" in rec.message for rec in caplog.records
         )
 
     def test_warn_threshold_not_reached_stays_debug(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -314,6 +342,7 @@ class TestCrashDump:
             crash._save_dump(RuntimeError, RuntimeError("x"), None)
             content = list(crash_dir.iterdir())[0].read_text()
             from moment import __version__
+
             assert __version__ in content
 
     def test_save_dump_includes_traceback(self, tmp_path: Path) -> None:
@@ -344,8 +373,10 @@ class TestCrashDump:
         """excepthook calls sys.__excepthook__ for KeyboardInterrupt."""
         crash = CrashDump()
         calls = []
+
         def _fake_hook(et, ev, tb):
             calls.append(et)
+
         with patch("sys.__excepthook__", _fake_hook):
             crash.excepthook(KeyboardInterrupt, KeyboardInterrupt(), None)
         assert calls == [KeyboardInterrupt]
@@ -501,6 +532,7 @@ class TestSetupLoggingJson:
         """enable_json=True uses JsonFormatter on handlers."""
         logger = setup_logging(verbose=True, enable_json=True)
         from logging.handlers import RotatingFileHandler
+
         fh = next(
             (h for h in logger.handlers if isinstance(h, RotatingFileHandler)),
             None,
@@ -527,7 +559,7 @@ class TestSetupLoggingJson:
 class TestSetupLoggingIntegration:
     def test_setup_then_banner_does_not_crash(self) -> None:
         """Calling setup_logging followed by startup_banner is safe."""
-        logger = setup_logging(verbose=True)
+        setup_logging(verbose=True)
         info = startup_banner()
         assert "version" in info
 

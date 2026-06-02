@@ -46,11 +46,11 @@ class CorruptionDetector:
         config: "Config | None" = None,
     ) -> None:
         """Args:
-            store: The application store.
-            on_warning: Called with a warning message string.
-            on_critical: Called with a critical error message string.
-            check_interval: Seconds between health checks.
-            config: Optional Config for path overrides.
+        store: The application store.
+        on_warning: Called with a warning message string.
+        on_critical: Called with a critical error message string.
+        check_interval: Seconds between health checks.
+        config: Optional Config for path overrides.
         """
         self._store = store
         self._on_warning = on_warning
@@ -165,7 +165,8 @@ class CorruptionDetector:
                 logger.warning(
                     "CorruptionDetector timer appears stuck — no tick for %.1fs "
                     "(expected interval %.1fs)",
-                    elapsed, self._interval,
+                    elapsed,
+                    self._interval,
                 )
 
     def _on_tick(self) -> None:
@@ -182,7 +183,7 @@ class CorruptionDetector:
         issues: list[str] = []
         try:
             _, _, free = disk_usage(Path.home())
-            free_gb = free / (1024 ** 3)
+            free_gb = free / (1024**3)
             if free_gb < DISK_CRITICAL_GB:
                 issues.append(
                     f"CRITICAL: Disk space critically low — {human_size(free)} free "
@@ -200,9 +201,7 @@ class CorruptionDetector:
     def _check_temp_files(self) -> list[str]:
         """Clean up stale temporary files."""
         issues: list[str] = []
-        temp_dir = Path(
-            self._config.get_path("temp_dir") if self._config else _DEFAULT_TEMP_DIR
-        )
+        temp_dir = Path(self._config.get_path("temp_dir") if self._config else _DEFAULT_TEMP_DIR)
         if not temp_dir.is_dir():
             return issues
         try:

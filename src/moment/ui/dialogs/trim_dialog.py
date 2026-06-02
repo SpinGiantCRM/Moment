@@ -47,12 +47,12 @@ class TrimDialog(QDialog):
         player: "QMediaPlayer | None" = None,
     ) -> None:
         """Args:
-            duration: Total clip duration in seconds.
-            start: Initial trim start in seconds.
-            end: Initial trim end in seconds (defaults to *duration*).
-            parent: Parent widget.
-            player: Optional QMediaPlayer for Mark In/Out buttons to
-                read the current playback position from.
+        duration: Total clip duration in seconds.
+        start: Initial trim start in seconds.
+        end: Initial trim end in seconds (defaults to *duration*).
+        parent: Parent widget.
+        player: Optional QMediaPlayer for Mark In/Out buttons to
+            read the current playback position from.
         """
         super().__init__(parent)
         self._player: Any | None = player
@@ -76,9 +76,7 @@ class TrimDialog(QDialog):
         self._in_label.setObjectName("cardMeta")
         self._out_label = QLabel(f"Out: {_format_time(self._end)}")
         self._out_label.setObjectName("cardMeta")
-        self._duration_label = QLabel(
-            f"Duration: {_format_time(self._end - self._start)}"
-        )
+        self._duration_label = QLabel(f"Duration: {_format_time(self._end - self._start)}")
         self._duration_label.setObjectName("cardMeta")
         time_layout.addWidget(self._in_label)
         time_layout.addStretch()
@@ -133,9 +131,7 @@ class TrimDialog(QDialog):
         valid = start < end
         self._in_label.setText(f"In: {_format_time(start)}")
         self._out_label.setText(f"Out: {_format_time(end)}")
-        self._duration_label.setText(
-            f"Duration: {_format_time(end - start) if valid else '—'}"
-        )
+        self._duration_label.setText(f"Duration: {_format_time(end - start) if valid else '—'}")
         self._apply_btn.setEnabled(valid)
 
     def _mark_in(self) -> None:

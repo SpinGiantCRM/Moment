@@ -30,8 +30,14 @@ class TestEnums:
     def test_clip_status_has_all_states(self) -> None:
         names = {s.name for s in ClipStatus}
         assert names >= {
-            "PENDING", "ENCODING", "DONE", "UPLOADING",
-            "UPLOADED", "ERROR", "CORRUPT", "QUEUED",
+            "PENDING",
+            "ENCODING",
+            "DONE",
+            "UPLOADING",
+            "UPLOADED",
+            "ERROR",
+            "CORRUPT",
+            "QUEUED",
         }
 
     def test_clip_visibility_values(self) -> None:
@@ -158,8 +164,11 @@ class TestSupportingModels:
 
     def test_webhook_log_entry(self) -> None:
         entry = WebhookLogEntry(
-            id="wl1", webhook_id="w1", clip_id="c1",
-            success=False, status_code=500,
+            id="wl1",
+            webhook_id="w1",
+            clip_id="c1",
+            success=False,
+            status_code=500,
         )
         assert entry.success is False
         assert entry.status_code == 500

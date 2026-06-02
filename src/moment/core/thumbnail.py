@@ -51,13 +51,13 @@ class Thumbnailer:
         on_progress: Callable[[int, int, str], None] | None = None,
     ) -> None:
         """Args:
-            thumb_dir: Directory for thumbnails (overrides Config).
-            max_cache: Maximum LRU cache entries. Falls back to
-                ``thumbnail_cache_size`` config key, then ``DEFAULT_CACHE_SIZE``.
-            config: Optional Config for path overrides and cache size.
-            max_workers: ThreadPoolExecutor worker count.
-            on_progress: Called as ``on_progress(current, total, clip_id)``
-                during batch generation.
+        thumb_dir: Directory for thumbnails (overrides Config).
+        max_cache: Maximum LRU cache entries. Falls back to
+            ``thumbnail_cache_size`` config key, then ``DEFAULT_CACHE_SIZE``.
+        config: Optional Config for path overrides and cache size.
+        max_workers: ThreadPoolExecutor worker count.
+        on_progress: Called as ``on_progress(current, total, clip_id)``
+            during batch generation.
         """
         self._config = config
         if thumb_dir is None and config is not None:
@@ -243,11 +243,16 @@ class Thumbnailer:
         cmd = [
             "ffmpeg",
             "-y",
-            "-ss", str(time),
-            "-i", str(source),
-            "-vframes", "1",
-            "-q:v", "2",
-            "-vf", "scale=320:-1",
+            "-ss",
+            str(time),
+            "-i",
+            str(source),
+            "-vframes",
+            "1",
+            "-q:v",
+            "2",
+            "-vf",
+            "scale=320:-1",
             str(output),
         ]
         logger.debug("Thumbnail: %s", cmd)
@@ -255,8 +260,7 @@ class Thumbnailer:
         result = runner.run(cmd, timeout=THUMBNAIL_TIMEOUT_S)
         if result.returncode != 0:
             raise FFmpegError(
-                f"thumbnail failed (code={result.returncode}): "
-                f"{result.stderr.strip()[-200:]}"
+                f"thumbnail failed (code={result.returncode}): {result.stderr.strip()[-200:]}"
             )
         if not output.is_file() or output.stat().st_size == 0:
             raise FFmpegError(f"thumbnail output missing or empty: {output}")

@@ -26,6 +26,7 @@ class TestFind:
         with patch("moment.utils.ffmpeg.shutil.which", return_value=None):
             # Reset cache — new 60s TTL uses _ffmpeg_path + _ffmpeg_available
             import moment.utils.ffmpeg as ffmpeg_mod
+
             ffmpeg_mod._ffmpeg_available = None
             ffmpeg_mod._ffmpeg_path = None
             ffmpeg_mod._ffmpeg_path_timestamp = 0.0
@@ -39,6 +40,7 @@ class TestFind:
     def test_find_ffprobe_not_found(self) -> None:
         with patch("moment.utils.ffmpeg.shutil.which", return_value=None):
             import moment.utils.ffmpeg as ffmpeg_mod
+
             ffmpeg_mod._ffprobe_available = None
             with pytest.raises(FFmpegError, match="ffprobe not found"):
                 find_ffprobe()

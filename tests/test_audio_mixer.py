@@ -1,9 +1,11 @@
 """Tests for audio_mixer.py — game + mic volume controls."""
 
 from __future__ import annotations
+
 import pytest
 
 from moment.ui.widgets.audio_mixer import AudioMixer
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -11,7 +13,6 @@ class TestAudioMixerInit:
     """Tests for AudioMixer construction and defaults."""
 
     def test_default_volumes(self, qtbot) -> None:
-
         """Volumes default to 100% for both game and mic."""
         mixer = AudioMixer()
         qtbot.addWidget(mixer)
@@ -44,6 +45,7 @@ class TestAudioMixerInit:
 
         assert mixer._game_value_label.text() == "100%"
         assert mixer._mic_value_label.text() == "100%"
+
 
 class TestAudioMixerSetVolumes:
     """Tests for set_volumes()."""
@@ -98,6 +100,7 @@ class TestAudioMixerSetVolumes:
         mixer.set_volumes(game=50, mic=50)
         assert len(emitted) == 0
 
+
 class TestAudioMixerSliderInteraction:
     """Tests for slider value changes."""
 
@@ -138,6 +141,7 @@ class TestAudioMixerSliderInteraction:
         mixer._mic_slider.setValue(190)
         assert mixer.game_volume() == 10
         assert mixer.mic_volume() == 190
+
 
 class TestAudioMixerMute:
     """Tests for mute toggle buttons."""
@@ -224,5 +228,3 @@ class TestAudioMixerMute:
             mixer._game_slider.setValue(130)
 
         assert blocker.args == [130, 100]
-
-

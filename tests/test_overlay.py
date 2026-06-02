@@ -20,11 +20,11 @@ from moment.ui.widgets.overlay import (
     Overlay,
     _SaveButton,
 )
+
 pytestmark = [pytest.mark.gui]
 
 
 @pytest.fixture
-
 def overlay(qapp) -> Overlay:
     """Return a fresh Overlay instance, properly cleaned up after each test."""
     widget = Overlay(auto_hide_seconds=0)  # disable auto-hide for tests
@@ -33,9 +33,11 @@ def overlay(qapp) -> Overlay:
     widget.close()
     widget.deleteLater()
 
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
+
 
 class TestInit:
     def test_default_state_is_hidden(self, overlay: Overlay) -> None:
@@ -59,9 +61,11 @@ class TestInit:
         ov = Overlay()
         assert ov._auto_hide_seconds == _AUTO_HIDE_DEFAULT
 
+
 # ---------------------------------------------------------------------------
 # Show / hide
 # ---------------------------------------------------------------------------
+
 
 class TestShowHide:
     def test_show_overlay(self, overlay: Overlay) -> None:
@@ -85,9 +89,11 @@ class TestShowHide:
         overlay.show_overlay()  # should not crash or create double state
         assert overlay._showing
 
+
 # ---------------------------------------------------------------------------
 # Save buttons
 # ---------------------------------------------------------------------------
+
 
 class TestSaveButtons:
     def test_save_button_emits_signal(self, overlay: Overlay, qtbot) -> None:
@@ -108,9 +114,11 @@ class TestSaveButtons:
         btn = overlay._save_buttons[0]
         assert btn._state == "saving"
 
+
 # ---------------------------------------------------------------------------
 # SaveButton widget
 # ---------------------------------------------------------------------------
+
 
 class TestSaveButtonWidget:
     def test_idle_state(self, qapp) -> None:
@@ -136,9 +144,11 @@ class TestSaveButtonWidget:
         btn.reset()
         assert btn._state == "idle"
 
+
 # ---------------------------------------------------------------------------
 # Recording duration
 # ---------------------------------------------------------------------------
+
 
 class TestRecordingDuration:
     def test_set_duration(self, overlay: Overlay) -> None:
@@ -153,9 +163,11 @@ class TestRecordingDuration:
         assert overlay._duration_seconds == 60
         assert "01:00" in overlay._duration_label.text()
 
+
 # ---------------------------------------------------------------------------
 # Recent clips
 # ---------------------------------------------------------------------------
+
 
 class TestRecentClips:
     def test_set_recent_clips(self, overlay: Overlay) -> None:
@@ -171,9 +183,11 @@ class TestRecentClips:
         overlay.set_recent_clips(clips)
         # Should not crash with >5 clips
 
+
 # ---------------------------------------------------------------------------
 # Action links
 # ---------------------------------------------------------------------------
+
 
 class TestActionLinks:
     def test_open_moment_signal(self, overlay: Overlay) -> None:
@@ -194,9 +208,11 @@ class TestActionLinks:
         overlay.close_overlay.emit()
         assert fired == [1]
 
+
 # ---------------------------------------------------------------------------
 # Auto-hide
 # ---------------------------------------------------------------------------
+
 
 class TestAutoHide:
     def test_auto_hide_disabled(self, qapp) -> None:
@@ -218,5 +234,3 @@ class TestAutoHide:
     def test_set_above_maximum(self, overlay: Overlay) -> None:
         overlay.set_auto_hide_seconds(100)
         assert overlay._auto_hide_seconds == 15  # clamped to maximum
-
-

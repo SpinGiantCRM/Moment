@@ -36,6 +36,7 @@ def _resolve_api_token(cli_token: str | None) -> str | None:
     # Try keyring
     try:
         import keyring
+
         token = keyring.get_password("moment", "mcp_api_token")
         if token:
             return token
@@ -56,9 +57,7 @@ def run_mcp(argv: list[str] | None = None) -> int:
 
     if not check_available():
         print(
-            "fastmcp not installed.  Run:\n"
-            "    pip install moment[mcp]\n"
-            "or  pip install fastmcp",
+            "fastmcp not installed.  Run:\n    pip install moment[mcp]\nor  pip install fastmcp",
             file=sys.stderr,
         )
         return 1
@@ -111,9 +110,6 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         metavar="TOKEN",
-        help=(
-            "API token for mutation tools. "
-            "Also read from MOMENT_MCP_TOKEN env var or keyring."
-        ),
+        help=("API token for mutation tools. Also read from MOMENT_MCP_TOKEN env var or keyring."),
     )
     return parser

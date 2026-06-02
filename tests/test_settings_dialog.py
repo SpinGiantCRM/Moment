@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from moment.ui.dialogs.settings_dialog import (
-    ToggleSwitch,
-    SettingsDialog,
     _VIDEO_ENCODER_OPTIONS,
+    SettingsDialog,
+    ToggleSwitch,
 )
 
 pytestmark = [pytest.mark.gui]
@@ -47,9 +47,9 @@ class TestToggleSwitch:
 
     def test_click_toggles(self, qapp) -> None:
         ts = ToggleSwitch()
-        from PyQt6.QtCore import QPointF
+        from PyQt6.QtCore import QPointF, Qt
         from PyQt6.QtGui import QMouseEvent
-        from PyQt6.QtCore import Qt
+
         event = QMouseEvent(
             QMouseEvent.Type.MouseButtonPress,
             QPointF(22, 11),
@@ -143,9 +143,7 @@ class TestSettingsLoad:
 
     def test_load_recording_fps(self, qapp) -> None:
         config = _make_config()
-        config.get_gsr_setting.side_effect = lambda key: (
-            120 if key == "replay_fps" else None
-        )
+        config.get_gsr_setting.side_effect = lambda key: 120 if key == "replay_fps" else None
         dlg = SettingsDialog(config=config)
         assert dlg._fps_cb.currentText() == "120"
 
@@ -250,7 +248,7 @@ class TestSettingsWidgets:
         assert dlg._storage_bar is not None
 
     def test_about_widgets(self, qapp) -> None:
-        dlg = SettingsDialog()
+        SettingsDialog()
         # About page is just labels + update button
 
 

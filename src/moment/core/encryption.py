@@ -30,6 +30,7 @@ def get_or_create_fernet() -> "Fernet":
 
         try:
             import keyring
+
             key_b64 = keyring.get_password("moment", "webhook_encryption_key")
             if key_b64:
                 _fernet_cache = Fernet(key_b64.encode())
@@ -43,6 +44,7 @@ def get_or_create_fernet() -> "Fernet":
         _fernet_cache = Fernet(key)
         try:
             import keyring
+
             keyring.set_password("moment", "webhook_encryption_key", key.decode())
             logger.info("Generated and stored new webhook encryption key")
         except Exception as exc:
@@ -91,8 +93,7 @@ def run_health_check(db_path: str | None = None) -> None:
             header = fh.read(16)
         if header.startswith(b"SQLite format 3\x00"):
             logger.warning(
-                "Database file appears to be plaintext SQLite — "
-                "expected SQLCipher-encrypted file."
+                "Database file appears to be plaintext SQLite — expected SQLCipher-encrypted file."
             )
         else:
             logger.debug("Database file header OK (encrypted)")

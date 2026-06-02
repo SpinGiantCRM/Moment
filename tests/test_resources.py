@@ -1,18 +1,20 @@
 """Tests for ui/resources.py — QSS stylesheet, colour tokens, icon loading."""
 
 from __future__ import annotations
+
 import pytest
 
 from moment.ui.resources import (
     app_font,
+    apply_spacing,
     color,
     icon_pixmap,
     load_icon,
     qss_colors,
     set_font,
-    apply_spacing,
     stylesheet,
 )
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -120,6 +122,7 @@ class TestSetFont:
 
     def test_set_font_known_token(self, qapp) -> None:
         from PyQt6.QtWidgets import QLabel
+
         label = QLabel("Test")
         set_font(label, "title")
         font = label.font()
@@ -128,6 +131,7 @@ class TestSetFont:
 
     def test_set_font_unknown_token(self, qapp) -> None:
         from PyQt6.QtWidgets import QLabel
+
         label = QLabel("Test")
         # Should not raise, just log warning
         set_font(label, "nonexistent_token")
@@ -202,7 +206,10 @@ class TestIconLoading:
     def test_all_icons_load(self, qapp) -> None:
         """Smoke-test: every SVG in assets/icons/ loads without error."""
         from pathlib import Path
-        icons_dir = Path(__file__).resolve().parent.parent / "src" / "moment" / "ui" / "assets" / "icons"
+
+        icons_dir = (
+            Path(__file__).resolve().parent.parent / "src" / "moment" / "ui" / "assets" / "icons"
+        )
         svg_files = sorted(icons_dir.glob("*.svg"))
         for svg_path in svg_files:
             name = svg_path.stem

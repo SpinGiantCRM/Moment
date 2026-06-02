@@ -151,16 +151,25 @@ class TestMigrationDefs:
         conn.commit()
 
         expected_tables = {
-            "clips", "tags", "clip_tags", "edit_profiles",
-            "bookmarks", "webhooks", "webhook_log", "folders",
-            "game_profiles", "tasks", "url_history",
-            "folder_clips", "rate_limits", "pip_cache", "settings",
+            "clips",
+            "tags",
+            "clip_tags",
+            "edit_profiles",
+            "bookmarks",
+            "webhooks",
+            "webhook_log",
+            "folders",
+            "game_profiles",
+            "tasks",
+            "url_history",
+            "folder_clips",
+            "rate_limits",
+            "pip_cache",
+            "settings",
         }
         actual = {
             row["name"]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         assert expected_tables <= actual, f"Missing tables: {expected_tables - actual}"
         conn.close()

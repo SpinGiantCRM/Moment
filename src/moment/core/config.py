@@ -22,63 +22,64 @@ def _caller_frame() -> str:
     """Return 'file:line:function' of the first non-moment caller for audit logs."""
     for frame_info in inspect.stack():
         if "/moment/" not in frame_info.filename:
-            return (
-                f"{frame_info.filename}:{frame_info.lineno}:"
-                f"{frame_info.function}"
-            )
+            return f"{frame_info.filename}:{frame_info.lineno}:{frame_info.function}"
     return "<unknown>"
 
 
 # Allowed config keys — set() rejects any key not listed here.
 # Prefix patterns (path_*, gsr_*) are handled via prefix check.
-_ALLOWED_KEYS: frozenset[str] = frozenset({
-    # General
-    "autostart",
-    "minimize_to_tray",
-    "encode_timing",
-    # Encoding
-    "preferred_codec",
-    "encode_concurrency",
-    "preset",
-    "cq",
-    "bitrate_mbps",
-    "audio_codec",
-    "noise_suppression",
-    # Notifications
-    "toast_success",
-    "toast_info",
-    "toast_warning",
-    "toast_error",
-    "review_cards",
-    "sounds",
-    # Game detection
-    "auto_detect_games",
-    "game_processes",
-    "game_scan_interval",
-    "pause_encode_during_game",
-    "pause_thumbnail_during_game",
-    "minimize_during_game",
-    "game_exit_behavior",
-    # MCP / security
-    "mcp_api_token",
-    # Discord bot
-    "discord_bot_auto_start",
-    "discord_allowed_roles",
-    # Retention
-    "retention_trash_days",
-    "retention_remove_corrupt",
-    # Thumbnail
-    "thumbnail_cache_size",
-})
+_ALLOWED_KEYS: frozenset[str] = frozenset(
+    {
+        # General
+        "autostart",
+        "minimize_to_tray",
+        "encode_timing",
+        # Encoding
+        "preferred_codec",
+        "encode_concurrency",
+        "preset",
+        "cq",
+        "bitrate_mbps",
+        "audio_codec",
+        "noise_suppression",
+        # Notifications
+        "toast_success",
+        "toast_info",
+        "toast_warning",
+        "toast_error",
+        "review_cards",
+        "sounds",
+        # Game detection
+        "auto_detect_games",
+        "game_processes",
+        "game_scan_interval",
+        "pause_encode_during_game",
+        "pause_thumbnail_during_game",
+        "minimize_during_game",
+        "game_exit_behavior",
+        # MCP / security
+        "mcp_api_token",
+        # Discord bot
+        "discord_bot_auto_start",
+        "discord_allowed_roles",
+        # Retention
+        "retention_trash_days",
+        "retention_remove_corrupt",
+        # Thumbnail
+        "thumbnail_cache_size",
+    }
+)
 
 # Allowed key prefixes — set() checks these for path_* and gsr_* keys.
 _ALLOWED_PREFIXES: frozenset[str] = frozenset({"path_", "gsr_"})
 
 # Directories that path_* keys are allowed to resolve into.
-_ALLOWED_PATH_ROOTS: frozenset[str] = frozenset({
-    os.path.expanduser("~"),
-    "/tmp",
-})
+_ALLOWED_PATH_ROOTS: frozenset[str] = frozenset(
+    {
+        os.path.expanduser("~"),
+        "/tmp",
+    }
+)
 
 CONFIG_DIR = os.path.expanduser("~/.config/moment")
 AUTOSTART_DIR = os.path.expanduser("~/.config/autostart")
@@ -204,7 +205,8 @@ class Config:
             caller = _caller_frame()
             logger.warning(
                 "Rejected config write for unknown key '%s' (caller: %s)",
-                key, caller,
+                key,
+                caller,
             )
             raise ValueError(f"Unknown config key: {key!r}")
 
@@ -226,11 +228,11 @@ class Config:
                 caller = _caller_frame()
                 logger.warning(
                     "Rejected config write for '%s': path %s outside allowed roots (caller: %s)",
-                    key, resolved, caller,
+                    key,
+                    resolved,
+                    caller,
                 )
-                raise ValueError(
-                    f"Path for {key!r} must be within $HOME or /tmp, got: {resolved}"
-                )
+                raise ValueError(f"Path for {key!r} must be within $HOME or /tmp, got: {resolved}")
 
     def get_all(self) -> dict[str, Any]:
         """Return the entire settings table as a dictionary."""
@@ -346,6 +348,7 @@ class Config:
         # Clear auto-detect cache so it re-runs with potential new context
         if codec.strip() == "auto":
             from moment.utils.ffmpeg import reset_best_encoder
+
             reset_best_encoder()
 
     @staticmethod
@@ -392,6 +395,7 @@ class Config:
 # -------------------------------------------------------------------
 # Desktop entry template
 # -------------------------------------------------------------------
+
 
 def _autostart_desktop_content() -> str:
     return """[Desktop Entry]

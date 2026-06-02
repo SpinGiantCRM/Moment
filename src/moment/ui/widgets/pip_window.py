@@ -115,9 +115,7 @@ class PipWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.setStyleSheet(
-            f"background-color: {color('--bg-surface')}; border-radius: 6px;"
-        )
+        self.setStyleSheet(f"background-color: {color('--bg-surface')}; border-radius: 6px;")
 
         # --- Auto-close timer ---
         self._close_timer = QTimer(self)
@@ -146,7 +144,7 @@ class PipWindow(QWidget):
             f"""
             QPushButton {{
                 background-color: rgba(0, 0, 0, 0.5);
-                color: {color('--text-primary')};
+                color: {color("--text-primary")};
                 border: none;
                 border-radius: 10px;
                 font-size: 14px;
@@ -213,11 +211,15 @@ class PipWindow(QWidget):
             probe = _command.run(
                 [
                     "ffprobe",
-                    "-v", "error",
-                    "-select_streams", "v:0",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
                     "-count_packets",
-                    "-show_entries", "stream=nb_read_packets",
-                    "-of", "csv=p=0",
+                    "-show_entries",
+                    "stream=nb_read_packets",
+                    "-of",
+                    "csv=p=0",
                     str(self._source_path),
                 ],
                 text=True,
@@ -232,12 +234,18 @@ class PipWindow(QWidget):
             self._ffmpeg_proc = _command.run_popen(
                 [
                     "ffmpeg",
-                    "-loglevel", "error",
-                    "-i", str(self._source_path),
-                    "-f", "image2pipe",
-                    "-vcodec", "rawvideo",
-                    "-pix_fmt", "rgb24",
-                    "-vframes", "0",  # all frames
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    str(self._source_path),
+                    "-f",
+                    "image2pipe",
+                    "-vcodec",
+                    "rawvideo",
+                    "-pix_fmt",
+                    "rgb24",
+                    "-vframes",
+                    "0",  # all frames
                     "-",
                 ],
                 stdout=subprocess.PIPE,
@@ -285,7 +293,8 @@ class PipWindow(QWidget):
                 pixmap = QPixmap.fromImage(image)
                 self._image_label.setPixmap(
                     pixmap.scaled(
-                        _PIP_W - 4, _PIP_H - 4,
+                        _PIP_W - 4,
+                        _PIP_H - 4,
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation,
                     )

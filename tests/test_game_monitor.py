@@ -23,6 +23,7 @@ def monitor() -> GameMonitor:
 # Initialization
 # ---------------------------------------------------------------------------
 
+
 class TestInitialization:
     def test_default_state_is_idle(self, monitor: GameMonitor) -> None:
         assert monitor.state == "IDLE"
@@ -45,6 +46,7 @@ class TestInitialization:
 # ---------------------------------------------------------------------------
 # State machine
 # ---------------------------------------------------------------------------
+
 
 class TestStateMachine:
     def test_idle_to_active(self, monitor: GameMonitor) -> None:
@@ -106,6 +108,7 @@ class TestStateMachine:
 # Callbacks
 # ---------------------------------------------------------------------------
 
+
 class TestCallbacks:
     def test_state_change_callback(self) -> None:
         states: list[tuple[str, str | None]] = []
@@ -159,6 +162,7 @@ class TestCallbacks:
 # Process scanning
 # ---------------------------------------------------------------------------
 
+
 class TestProcessScanning:
     def test_find_game_in_proc(self, monitor: GameMonitor) -> None:
         """Mock reading /proc to find a game process."""
@@ -180,8 +184,10 @@ class TestProcessScanning:
             assert result == "cs2"
 
     def test_no_game_found(self, monitor: GameMonitor) -> None:
-        with patch("os.listdir", return_value=["1", "2"]), \
-             patch("builtins.open", side_effect=FileNotFoundError):
+        with (
+            patch("os.listdir", return_value=["1", "2"]),
+            patch("builtins.open", side_effect=FileNotFoundError),
+        ):
             result = monitor._find_game_process()
             assert result is None
 
@@ -204,6 +210,7 @@ class _MockFile:
 # /proc accessibility warning
 # ---------------------------------------------------------------------------
 
+
 class TestProcAccessibility:
     def test_warns_when_proc_restricted(self, monitor: GameMonitor) -> None:
         """When /proc/1/comm is not readable, a WARNING is logged once."""
@@ -215,8 +222,7 @@ class TestProcAccessibility:
             monitor._check_proc_accessible()  # second call should not log again
 
             warning_calls = [
-                c for c in mock_logger.warning.call_args_list
-                if c[0] and "hidepid" in str(c[0])
+                c for c in mock_logger.warning.call_args_list if c[0] and "hidepid" in str(c[0])
             ]
             assert len(warning_calls) == 1
             msg = warning_calls[0][0][0]
@@ -233,8 +239,7 @@ class TestProcAccessibility:
             monitor._check_proc_accessible()
 
             warning_calls = [
-                c for c in mock_logger.warning.call_args_list
-                if c[0] and "hidepid" in str(c[0])
+                c for c in mock_logger.warning.call_args_list if c[0] and "hidepid" in str(c[0])
             ]
             assert len(warning_calls) == 0
 
@@ -258,6 +263,7 @@ class TestProcAccessibility:
 # ---------------------------------------------------------------------------
 # Start / Stop
 # ---------------------------------------------------------------------------
+
 
 class TestStartStop:
     def test_start_starts_timer(self) -> None:

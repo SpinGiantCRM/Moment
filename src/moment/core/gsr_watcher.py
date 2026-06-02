@@ -20,6 +20,7 @@ _POLL_INTERVAL = 2.0  # seconds
 # Try to import inotify; fall back gracefully
 try:
     import inotify.adapters as _ia  # type: ignore[import-untyped]
+
     _INOTIFY_AVAILABLE = True
 except ImportError:
     _INOTIFY_AVAILABLE = False
@@ -55,10 +56,10 @@ class GSRWatcher:
         poll_interval: float = _POLL_INTERVAL,
     ) -> None:
         """Args:
-            output_dir: Directory where GSR writes buffer-dump files.
-            on_new_clip: Called as ``callback(path)`` when a new ``.mkv``
-                file is detected. Runs on a background thread.
-            poll_interval: Seconds between polls in polling mode.
+        output_dir: Directory where GSR writes buffer-dump files.
+        on_new_clip: Called as ``callback(path)`` when a new ``.mkv``
+            file is detected. Runs on a background thread.
+        poll_interval: Seconds between polls in polling mode.
         """
         self._dir = Path(output_dir).expanduser().resolve()
         self._on_new_clip = on_new_clip
@@ -130,11 +131,7 @@ class GSRWatcher:
             adapter = _ia.Inotify()
 
             # Monitor for IN_CLOSE_WRITE (file completely written)
-            mask = (
-                _ia.IN_CLOSE_WRITE
-                | _ia.IN_MOVED_TO
-                | _ia.IN_CREATE
-            )
+            mask = _ia.IN_CLOSE_WRITE | _ia.IN_MOVED_TO | _ia.IN_CREATE
             adapter.add_watch(str(self._dir), mask=mask)
 
             # Set a timeout so we can check self._running periodically

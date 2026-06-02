@@ -3,32 +3,31 @@
 from __future__ import annotations
 
 import builtins
-import os
 import sys
-import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from moment.core.encryption import (
-    _fernet_cache,
     get_or_create_fernet,
     reset_fernet_cache,
     run_health_check,
 )
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture(autouse=True)
-
 def _reset_fernet() -> None:
     reset_fernet_cache()
     yield
     reset_fernet_cache()
 
+
 # ---------------------------------------------------------------------------
 # get_or_create_fernet
 # ---------------------------------------------------------------------------
+
 
 class TestGetOrCreateFernet:
     def test_get_or_create_succeeds(self) -> None:
@@ -37,14 +36,15 @@ class TestGetOrCreateFernet:
         with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
             f = get_or_create_fernet()
             from cryptography.fernet import Fernet
+
             assert isinstance(f, Fernet)
 
     def test_get_or_create_returns_cached(self) -> None:
         """Second call returns the cached instance."""
         with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
-            f1 = get_or_create_fernet()
+            f = get_or_create_fernet()
             f2 = get_or_create_fernet()
-            assert f1 is f2
+            assert f is f2
 
     def test_raise_on_missing_keyring(self) -> None:
         """Missing keyring raises RuntimeError."""
@@ -69,9 +69,7 @@ class TestGetOrCreateFernet:
         with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
             f = get_or_create_fernet()
             assert f is not None
-            mock_keyring.get_password.assert_called_once_with(
-                "moment", "webhook_encryption_key"
-            )
+            mock_keyring.get_password.assert_called_once_with("moment", "webhook_encryption_key")
 
     def test_keyring_get_fails_raises_runtime_error(self) -> None:
         """If keyring.get_password AND set_password both fail, raises RuntimeError."""
@@ -98,9 +96,11 @@ class TestGetOrCreateFernet:
             f2 = get_or_create_fernet()
             assert f1 is not f2
 
+
 # ---------------------------------------------------------------------------
 # run_health_check
 # ---------------------------------------------------------------------------
+
 
 class TestRunHealthCheck:
     def test_health_check_encrypted_header(self, tmp_path) -> None:
@@ -133,9 +133,7 @@ class TestRunHealthCheck:
 
         mock_keyring = MagicMock()
         with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
-            with patch(
-                "moment.core.encryption.os.path.getsize", return_value=100
-            ):
+            with patch("moment.core.encryption.os.path.getsize", return_value=100):
                 run_health_check(str(db_path))
 
     def test_health_check_missing_keyring(self) -> None:
@@ -183,9 +181,11 @@ class TestRunHealthCheck:
             # Should not raise when db doesn't exist
             run_health_check(str(db_path))
 
+
 # ---------------------------------------------------------------------------
 # Concurrency — Fernet initialization race
 # ---------------------------------------------------------------------------
+
 
 class TestFernetConcurrency:
     def test_concurrent_initialization_returns_same_instance(self) -> None:
@@ -227,10 +227,10 @@ class TestFernetConcurrency:
 
         with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
             # Prime the cache
-            f1 = get_or_create_fernet()
+            get_or_create_fernet()
 
             def read_fernet() -> None:
-                f = get_or_create_fernet()
+                get_or_create_fernet()
                 with lock:
                     call_times.append(time.monotonic())
 
@@ -294,5 +294,3 @@ class TestFernetConcurrency:
             ct2 = f2.encrypt(b"test")
             pt2 = f2.decrypt(ct2)
             assert pt2 == b"test"
-
-

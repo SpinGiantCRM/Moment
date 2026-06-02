@@ -109,6 +109,7 @@ def list_clips(
     if visibility:
         try:
             from moment.core.models import ClipVisibility
+
             clip_visibility = ClipVisibility(visibility.lower())
         except ValueError:
             pass
@@ -192,7 +193,7 @@ def _redact_path(path_str: str) -> str:
     Otherwise return only the filename.
     """
     if path_str.startswith(_HOME):
-        return "~" + path_str[len(_HOME):]
+        return "~" + path_str[len(_HOME) :]
     return Path(path_str).name
 
 
@@ -412,6 +413,7 @@ def _owner_id_from_auth() -> str | None:
     """
     try:
         from moment.mcp.server import get_auth_scope
+
         scope = get_auth_scope()
         if scope == "mutation":
             return "*"
@@ -424,6 +426,7 @@ def _check_mutation_allowed() -> str | None:
     """Return an error message if the caller lacks mutation scope, or ``None``."""
     try:
         from moment.mcp.server import get_auth_scope
+
         if get_auth_scope() != "mutation":
             return "Forbidden: mutation-scoped token required for this operation"
     except Exception:
@@ -648,6 +651,7 @@ def _validate_export_dest(dest: Path) -> None:
     ]
     try:
         from moment.core.store import _get_config
+
         cfg = _get_config()
         if cfg is not None:
             for key in ("encode_dir", "recordings_dir"):
@@ -664,9 +668,7 @@ def _validate_export_dest(dest: Path) -> None:
                 return
         except ValueError:
             continue
-    raise ValueError(
-        f"Export destination {dest} is outside allowed directories"
-    )
+    raise ValueError(f"Export destination {dest} is outside allowed directories")
 
 
 # ---------------------------------------------------------------------------

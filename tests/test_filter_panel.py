@@ -1,9 +1,11 @@
 """Tests for ui/editor/filter_panel.py — video filter panel."""
 
 from __future__ import annotations
+
 import pytest
 
 from moment.ui.editor.filter_panel import FilterPanel
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -31,6 +33,7 @@ class TestFilterPanelInit:
         panel = FilterPanel()
         assert hasattr(panel, "profile_changed")
 
+
 class TestFilterPanelWidgets:
     """Tests for widget existence."""
 
@@ -48,6 +51,7 @@ class TestFilterPanelWidgets:
     def test_crop_combo_exists(self, qapp) -> None:
         panel = FilterPanel()
         assert panel._crop_lock_combo is not None
+
 
 class TestFilterPanelFilterGeneration:
     """Tests for filter list generation."""
@@ -70,6 +74,7 @@ class TestFilterPanelFilterGeneration:
         panel._on_contrast(20)
         assert panel._contrast == 20
 
+
 class TestFilterPanelEdgeCases:
     """Edge case tests."""
 
@@ -80,11 +85,10 @@ class TestFilterPanelEdgeCases:
 
     def test_set_profile_loads_filters(self, qapp) -> None:
         from moment.core.models import FilterConfig
+
         panel = FilterPanel()
         panel.set_profile(
             filters=[FilterConfig(filter_name="eq", params={"brightness": 0.5})],
             overlays=[],
         )
         assert panel._brightness == 50
-
-

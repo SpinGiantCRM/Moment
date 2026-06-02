@@ -13,27 +13,33 @@ from moment.core.models import Clip, ClipStatus, Task, TaskKind, TaskStatus
 from moment.core.pipeline import STATUS_INTERVAL, Pipeline
 from moment.core.store import Store
 from tests.conftest import wait_until
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def tmp_db_for_config() -> str:
-    import tempfile, os
+    import os
+    import tempfile
+
     fd, path = tempfile.mkstemp(suffix=".db", prefix="pipeline_config_")
     os.close(fd)
     yield path
     try:
         os.unlink(path)
         for sfx in ("", "-wal", "-shm"):
-            try: os.unlink(path + sfx)
-            except FileNotFoundError: pass
+            try:
+                os.unlink(path + sfx)
+            except FileNotFoundError:
+                pass
     except FileNotFoundError:
         pass
+
 
 @pytest.fixture
 def config(tmp_db_for_config: str) -> Config:
     return Config(db_path=tmp_db_for_config)
+
 
 @pytest.fixture
 def pipeline(store: Store, config: Config) -> Pipeline:
@@ -45,13 +51,20 @@ def pipeline(store: Store, config: Config) -> Pipeline:
         thumbnail_workers=0,
     )
 
+
 class TestInitialization:
     def test_default_state(self, pipeline: Pipeline) -> None:
         assert pipeline.paused is False
         assert pipeline.get_status() == "Idle"
 
     def test_start_creates_workers(self, store: Store, config: Config) -> None:
-        p = Pipeline(store=store, config=config, encode_workers=1, upload_workers=1, thumbnail_workers=1)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=1,
+            upload_workers=1,
+            thumbnail_workers=1,
+        )
         p.start()
         assert len(p._workers) == 3
         p.shutdown()
@@ -62,9 +75,15 @@ class TestInitialization:
             pipeline.start()
         pipeline.shutdown()
 
+
 class TestEnqueue:
     def test_enqueue_adds_to_queue(self, pipeline: Pipeline) -> None:
-        task = Task(id=str(uuid.uuid4()), type=TaskKind.ENCODE, priority=5, payload={"clip_id": "c1"})
+        task = Task(
+            id=str(uuid.uuid4()),
+            type=TaskKind.ENCODE,
+            priority=5,
+            payload={"clip_id": "c1"},
+        )
         pipeline.enqueue(task)
         assert pipeline._queue.qsize() == 1
 
@@ -85,17 +104,28 @@ class TestEnqueue:
         # Should not raise; logs warning and marks task FAILED
 
     def test_is_queued_checks_in_memory(self, pipeline: Pipeline) -> None:
-        task = Task(id="q-check", type=TaskKind.ENCODE, priority=1, payload={"clip_id": "clip-q"})
+        task = Task(
+            id="q-check",
+            type=TaskKind.ENCODE,
+            priority=1,
+            payload={"clip_id": "clip-q"},
+        )
         pipeline.enqueue(task)
         assert pipeline.is_queued("clip-q") is True
 
     def test_is_queued_checks_store(self, pipeline: Pipeline) -> None:
-        task = Task(id="q-store", type=TaskKind.ENCODE, payload={"clip_id": "clip-store"}, status=TaskStatus.PENDING)
+        task = Task(
+            id="q-store",
+            type=TaskKind.ENCODE,
+            payload={"clip_id": "clip-store"},
+            status=TaskStatus.PENDING,
+        )
         pipeline._store.insert_task(task)
         assert pipeline.is_queued("clip-store") is True
 
     def test_is_queued_false_for_nonexistent(self, pipeline: Pipeline) -> None:
         assert pipeline.is_queued("no-such-clip") is False
+
 
 class TestPauseResume:
     def test_pause_sets_flag(self, pipeline: Pipeline) -> None:
@@ -114,6 +144,7 @@ class TestPauseResume:
             pipeline.resume()
             # notify_all should have been called
             assert pipeline.paused is False
+
 
 class TestStatus:
     def test_status_encode(self, pipeline: Pipeline) -> None:
@@ -135,6 +166,7 @@ class TestStatus:
         assert "Encoding 1" in status
         assert "Uploading 1" in status
 
+
 class TestShutdown:
     def test_shutdown_changes_state(self, pipeline: Pipeline) -> None:
         pipeline.start()
@@ -151,6 +183,7 @@ class TestShutdown:
         with pytest.raises(RuntimeError, match="cannot be shut down"):
             pipeline.shutdown()
 
+
 class TestProcessEncode:
     def test_encode_missing_clip(self, pipeline: Pipeline) -> None:
         task = Task(id="enc-miss", type=TaskKind.ENCODE, payload={"clip_id": "nonexistent"})
@@ -159,10 +192,21 @@ class TestProcessEncode:
 
     def test_encode_success(self, store: Store, config: Config) -> None:
         clip_id = str(uuid.uuid4())
-        clip = Clip(id=clip_id, stem="test_encode", source_path=Path("/tmp/test_encode.mkv"), duration=10.0)
+        clip = Clip(
+            id=clip_id,
+            stem="test_encode",
+            source_path=Path("/tmp/test_encode.mkv"),
+            duration=10.0,
+        )
         store.insert_clip(clip)
 
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+        )
 
         with (
             patch("moment.core.pipeline.ffprobe") as mock_probe,
@@ -170,7 +214,15 @@ class TestProcessEncode:
         ):
             mock_probe.return_value = {
                 "format": {"duration": "10.0"},
-                "streams": [{"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080, "r_frame_rate": "60/1"}],
+                "streams": [
+                    {
+                        "codec_type": "video",
+                        "codec_name": "h264",
+                        "width": 1920,
+                        "height": 1080,
+                        "r_frame_rate": "60/1",
+                    }
+                ],
             }
             mock_encode.return_value = Path("/tmp/encoded.mp4")
 
@@ -182,10 +234,21 @@ class TestProcessEncode:
 
     def test_encode_failure(self, store: Store, config: Config) -> None:
         clip_id = str(uuid.uuid4())
-        clip = Clip(id=clip_id, stem="test_encode_fail", source_path=Path("/tmp/test_encode_fail.mkv"), duration=10.0)
+        clip = Clip(
+            id=clip_id,
+            stem="test_encode_fail",
+            source_path=Path("/tmp/test_encode_fail.mkv"),
+            duration=10.0,
+        )
         store.insert_clip(clip)
 
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+        )
 
         with (
             patch.object(p._encoder, "encode", side_effect=Exception("Encode failed")),
@@ -201,6 +264,7 @@ class TestProcessEncode:
 
         p.shutdown()
 
+
 class TestProcessUpload:
     def test_upload_missing_clip(self, pipeline: Pipeline) -> None:
         task = Task(id="up-miss", type=TaskKind.UPLOAD, payload={"clip_id": "nonexistent"})
@@ -210,11 +274,22 @@ class TestProcessUpload:
         clip = Clip(id="up-nofile", stem="test", source_path=Path("/tmp/up_nofile.mkv"))
         store.insert_clip(clip)
 
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0)
-        task = Task(id="up-nofile-task", type=TaskKind.UPLOAD, payload={"clip_id": "up-nofile", "path": "/tmp/nonexistent.mp4"})
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+        )
+        task = Task(
+            id="up-nofile-task",
+            type=TaskKind.UPLOAD,
+            payload={"clip_id": "up-nofile", "path": "/tmp/nonexistent.mp4"},
+        )
         p.start()
         p._process_upload(task)
         p.shutdown()
+
 
 class TestProcessThumbnail:
     def test_thumbnail_missing_clip(self, pipeline: Pipeline) -> None:
@@ -225,14 +300,25 @@ class TestProcessThumbnail:
         clip = Clip(id="thumb-ok", stem="test_thumb", source_path=Path("/tmp/test_thumb.mkv"))
         store.insert_clip(clip)
 
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+        )
 
         with patch.object(p._thumbnailer, "generate", return_value=Path("/tmp/thumb.jpg")):
-            task = Task(id="thumb-ok-task", type=TaskKind.THUMBNAIL, payload={"clip_id": "thumb-ok"})
+            task = Task(
+                id="thumb-ok-task",
+                type=TaskKind.THUMBNAIL,
+                payload={"clip_id": "thumb-ok"},
+            )
             p.start()
             p._process_thumbnail(task)
 
         p.shutdown()
+
 
 class TestEnqueueShutdownRace:
     def test_enqueue_after_shutdown_still_saves_to_db(self, pipeline: Pipeline) -> None:
@@ -254,6 +340,7 @@ class TestEnqueueShutdownRace:
 
         # Simulate concurrent enqueue + shutdown
         import threading
+
         results: list[Exception | None] = [None]
 
         def _enqueue_while_shutdown() -> None:
@@ -270,19 +357,33 @@ class TestEnqueueShutdownRace:
 
         assert results[0] is None
 
+
 @pytest.mark.slow
 class TestWrongTaskTypeRequeue:
     def test_encode_worker_requeues_upload_task(self, store: Store, config: Config) -> None:
         """If encode worker picks up a non-ENCODE task, it re-queues it."""
-        p = Pipeline(store=store, config=config, encode_workers=1, upload_workers=0, thumbnail_workers=0, on_status=lambda s: None)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=1,
+            upload_workers=0,
+            thumbnail_workers=0,
+            on_status=lambda s: None,
+        )
         p.start()
 
-        upload_task = Task(id="wrong-type", type=TaskKind.UPLOAD, priority=5, payload={"clip_id": "c1"})
+        upload_task = Task(
+            id="wrong-type",
+            type=TaskKind.UPLOAD,
+            priority=5,
+            payload={"clip_id": "c1"},
+        )
         p.enqueue(upload_task)
 
         # Worker polls with 1s timeout; wait for it to detect wrong type and re-queue
-        wait_until(lambda: any(t.id == "wrong-type" for t in store.get_pending_tasks()),
-                   timeout=3.0)
+        wait_until(
+            lambda: any(t.id == "wrong-type" for t in store.get_pending_tasks()), timeout=3.0
+        )
 
         # The upload task should have been re-queued
         p.shutdown()
@@ -291,14 +392,26 @@ class TestWrongTaskTypeRequeue:
 
     def test_thumbnail_worker_requeues_encode_task(self, store: Store, config: Config) -> None:
         """If thumbnail worker picks up a non-THUMBNAIL task, it re-queues it."""
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=1)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=1,
+        )
         p.start()
 
-        encode_task = Task(id="wrong-type-thumb", type=TaskKind.ENCODE, priority=3, payload={"clip_id": "c1"})
+        encode_task = Task(
+            id="wrong-type-thumb",
+            type=TaskKind.ENCODE,
+            priority=3,
+            payload={"clip_id": "c1"},
+        )
         p.enqueue(encode_task)
 
-        wait_until(lambda: any(t.id == "wrong-type-thumb" for t in store.get_pending_tasks()),
-                   timeout=3.0)
+        wait_until(
+            lambda: any(t.id == "wrong-type-thumb" for t in store.get_pending_tasks()), timeout=3.0
+        )
 
         p.shutdown()
         pending = store.get_pending_tasks()
@@ -306,18 +419,31 @@ class TestWrongTaskTypeRequeue:
 
     def test_upload_worker_requeues_encode_task(self, store: Store, config: Config) -> None:
         """If upload worker picks up a non-UPLOAD task, it re-queues it."""
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=1, thumbnail_workers=0)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=1,
+            thumbnail_workers=0,
+        )
         p.start()
 
-        encode_task = Task(id="wrong-type-up", type=TaskKind.ENCODE, priority=3, payload={"clip_id": "c1"})
+        encode_task = Task(
+            id="wrong-type-up",
+            type=TaskKind.ENCODE,
+            priority=3,
+            payload={"clip_id": "c1"},
+        )
         p.enqueue(encode_task)
 
-        wait_until(lambda: any(t.id == "wrong-type-up" for t in store.get_pending_tasks()),
-                   timeout=3.0)
+        wait_until(
+            lambda: any(t.id == "wrong-type-up" for t in store.get_pending_tasks()), timeout=3.0
+        )
 
         p.shutdown()
         pending = store.get_pending_tasks()
         assert any(t.id == "wrong-type-up" for t in pending)
+
 
 class TestSentinelHandling:
     def test_sentinels_not_persisted_by_shutdown(self, store: Store, config: Config) -> None:
@@ -327,7 +453,13 @@ class TestSentinelHandling:
         workers, bypassing enqueue() — the only path that persists to the DB.
         This test verifies no sentinel leaks into the tasks table.
         """
-        p = Pipeline(store=store, config=config, encode_workers=1, upload_workers=0, thumbnail_workers=0)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=1,
+            upload_workers=0,
+            thumbnail_workers=0,
+        )
         p.start()
 
         p.shutdown()
@@ -337,6 +469,7 @@ class TestSentinelHandling:
             "SELECT count(*) as cnt FROM tasks WHERE id = '__sentinel__'"
         ).fetchone()
         assert row["cnt"] == 0
+
 
 class TestQueueFull:
     def test_queue_full_marks_task_failed(self, pipeline: Pipeline) -> None:
@@ -348,7 +481,12 @@ class TestQueueFull:
         pipeline._queue.put_nowait.side_effect = __import__("queue").Full()
         pipeline._queue.maxsize = 100
 
-        task = Task(id="queue-full-test", type=TaskKind.ENCODE, priority=5, payload={"clip_id": "c1"})
+        task = Task(
+            id="queue-full-test",
+            type=TaskKind.ENCODE,
+            priority=5,
+            payload={"clip_id": "c1"},
+        )
         pipeline.enqueue(task)
 
         # Task should be marked FAILED
@@ -365,12 +503,20 @@ class TestQueueFull:
 
         pipeline.shutdown()
 
+
 @pytest.mark.slow
 class TestStatusTimer:
     def test_status_callback_fires(self, store: Store, config: Config) -> None:
         statuses: list[str] = []
 
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0, on_status=statuses.append)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+            on_status=statuses.append,
+        )
         p.start()
         assert "Idle" in statuses
         p.shutdown()
@@ -379,7 +525,14 @@ class TestStatusTimer:
         def bad_cb(s: str) -> None:
             raise RuntimeError("status error")
 
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0, on_status=bad_cb)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+            on_status=bad_cb,
+        )
         p.start()
         p.shutdown()
 
@@ -387,7 +540,14 @@ class TestStatusTimer:
         """After shutdown, the status timer should not fire."""
         statuses: list[str] = []
 
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0, on_status=statuses.append)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+            on_status=statuses.append,
+        )
         p.start()
         statuses.clear()
         p.shutdown()
@@ -399,7 +559,14 @@ class TestStatusTimer:
         """Status callback fires when active counts change."""
         statuses: list[str] = []
 
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0, on_status=statuses.append)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+            on_status=statuses.append,
+        )
         p.start()
         statuses.clear()
 
@@ -407,20 +574,36 @@ class TestStatusTimer:
         p._inc_counter("encode")
 
         # Wait for the status timer (STATUS_INTERVAL=3s) to fire
-        wait_until(lambda: any("Encoding" in s for s in statuses),
-                   timeout=STATUS_INTERVAL + 2.0)
+        wait_until(lambda: any("Encoding" in s for s in statuses), timeout=STATUS_INTERVAL + 2.0)
 
         assert any("Encoding" in s for s in statuses)
         p.shutdown()
 
+
 class TestPriorityOrdering:
     def test_higher_priority_tasks_dequeued_first(self, store: Store, config: Config) -> None:
         """Higher priority tasks should be processed before lower priority ones."""
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0)
+        p = Pipeline(
+            store=store,
+            config=config,
+            encode_workers=0,
+            upload_workers=0,
+            thumbnail_workers=0,
+        )
         p.start()
 
-        low = Task(id="prio-low", type=TaskKind.ENCODE, priority=1, payload={"clip_id": "c1"})
-        high = Task(id="prio-high", type=TaskKind.ENCODE, priority=10, payload={"clip_id": "c2"})
+        low = Task(
+            id="prio-low",
+            type=TaskKind.ENCODE,
+            priority=1,
+            payload={"clip_id": "c1"},
+        )
+        high = Task(
+            id="prio-high",
+            type=TaskKind.ENCODE,
+            priority=10,
+            payload={"clip_id": "c2"},
+        )
 
         # Enqueue low first, then high
         p.enqueue(low)
@@ -432,6 +615,7 @@ class TestPriorityOrdering:
         assert any(t.id == "prio-low" for t in pending)
         assert any(t.id == "prio-high" for t in pending)
 
+
 class TestCounterEdgeCases:
     def test_dec_multiple_times_below_zero(self, pipeline: Pipeline) -> None:
         """Multiple _dec_counter calls should not go below zero."""
@@ -442,6 +626,7 @@ class TestCounterEdgeCases:
     def test_counters_thread_safe(self, pipeline: Pipeline) -> None:
         """Concurrent inc/dec from multiple threads should not corrupt counts."""
         import threading
+
         errors: list[Exception] = []
 
         def worker() -> None:
@@ -461,6 +646,7 @@ class TestCounterEdgeCases:
         assert len(errors) == 0
         assert pipeline._active_counts["encode"] == 0
 
+
 class TestCounters:
     def test_inc_and_dec(self, pipeline: Pipeline) -> None:
         pipeline._inc_counter("encode")
@@ -473,23 +659,3 @@ class TestCounters:
     def test_dec_below_zero(self, pipeline: Pipeline) -> None:
         pipeline._dec_counter("upload")
         assert pipeline._active_counts["upload"] == 0
-
-@pytest.mark.slow
-class TestStatusTimer:
-    def test_status_callback_fires(self, store: Store, config: Config) -> None:
-        statuses: list[str] = []
-
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0, on_status=statuses.append)
-        p.start()
-        assert "Idle" in statuses
-        p.shutdown()
-
-    def test_status_callback_error_handled(self, store: Store, config: Config) -> None:
-        def bad_cb(s: str) -> None:
-            raise RuntimeError("status error")
-
-        p = Pipeline(store=store, config=config, encode_workers=0, upload_workers=0, thumbnail_workers=0, on_status=bad_cb)
-        p.start()
-        p.shutdown()
-
-

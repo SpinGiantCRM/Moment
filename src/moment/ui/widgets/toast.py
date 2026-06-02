@@ -48,11 +48,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _TOAST_PRESETS: dict[str, dict[str, str | int]] = {
-    "success":      {"accent": "--accent-green",  "icon": "✓", "duration_ms": 5000},
-    "info":         {"accent": "--accent-blue",   "icon": "ℹ", "duration_ms": 4000},
-    "warning":      {"accent": "--accent-orange", "icon": "!", "duration_ms": 6000},
-    "error":        {"accent": "--accent-red",    "icon": "✗", "duration_ms": 8000},
-    "copy_success": {"accent": "--accent-green",  "icon": "✓", "duration_ms": 1500},
+    "success": {"accent": "--accent-green", "icon": "✓", "duration_ms": 5000},
+    "info": {"accent": "--accent-blue", "icon": "ℹ", "duration_ms": 4000},
+    "warning": {"accent": "--accent-orange", "icon": "!", "duration_ms": 6000},
+    "error": {"accent": "--accent-red", "icon": "✗", "duration_ms": 8000},
+    "copy_success": {"accent": "--accent-green", "icon": "✓", "duration_ms": 1500},
 }
 
 _OFFSET_BOTTOM = 24
@@ -97,7 +97,7 @@ class ToastWidget(QFrame):
         self.setAccessibleDescription(f"{title}. {body}" if body else title)
         self.setStyleSheet(f"""
             #toastWidget {{
-                background-color: {color('--bg-surface')};
+                background-color: {color("--bg-surface")};
                 border-left: 3px solid {self._accent_color};
                 border-radius: 6px;
             }}
@@ -383,9 +383,12 @@ class ToastManager(QObject):
             subprocess.run(  # nosec B603
                 [
                     "notify-send",
-                    "--urgency", urgency,
-                    "--icon", icon,
-                    "--app-name", "Moment",
+                    "--urgency",
+                    urgency,
+                    "--icon",
+                    icon,
+                    "--app-name",
+                    "Moment",
                     title,
                     body,
                 ],

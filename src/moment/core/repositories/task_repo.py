@@ -24,11 +24,15 @@ class TaskRepository(BaseRepository):
                     retry_count, max_retries, error_message)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    task.id, task.type.value, task.priority,
+                    task.id,
+                    task.type.value,
+                    task.priority,
                     json_dumps(task.payload),
                     task.status.name,
-                    task.created_at.isoformat(), task.retry_count,
-                    task.max_retries, task.error_message,
+                    task.created_at.isoformat(),
+                    task.retry_count,
+                    task.max_retries,
+                    task.error_message,
                 ),
             )
         return task

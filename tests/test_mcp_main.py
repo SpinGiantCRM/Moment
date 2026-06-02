@@ -8,12 +8,14 @@ from unittest.mock import MagicMock, patch
 class TestResolveApiToken:
     def test_cli_token_takes_precedence(self):
         from moment.mcp.main import _resolve_api_token
+
         result = _resolve_api_token("cli-token")
         assert result == "cli-token"
 
     @patch.dict("os.environ", {"MOMENT_MCP_TOKEN": "env-token"}, clear=True)
     def test_env_token_fallback(self):
         from moment.mcp.main import _resolve_api_token
+
         result = _resolve_api_token(None)
         assert result == "env-token"
 
@@ -23,6 +25,7 @@ class TestResolveApiToken:
         mock_keyring.get_password.return_value = "keyring-token"
         with patch.dict("sys.modules", {"keyring": mock_keyring}):
             from moment.mcp.main import _resolve_api_token
+
             result = _resolve_api_token(None)
             assert result == "keyring-token"
 
@@ -30,6 +33,7 @@ class TestResolveApiToken:
     def test_no_token_returns_none(self):
         with patch.dict("sys.modules", {"keyring": None}):
             from moment.mcp.main import _resolve_api_token
+
             result = _resolve_api_token(None)
             assert result is None
 
@@ -37,11 +41,13 @@ class TestResolveApiToken:
 class TestParser:
     def test_build_parser(self):
         from moment.mcp.main import _build_parser
+
         parser = _build_parser()
         assert parser.prog == "moment mcp"
 
     def test_parser_defaults(self):
         from moment.mcp.main import _build_parser
+
         parser = _build_parser()
         args = parser.parse_args([])
         assert args.http is False
@@ -51,24 +57,28 @@ class TestParser:
 
     def test_parser_http_flag(self):
         from moment.mcp.main import _build_parser
+
         parser = _build_parser()
         args = parser.parse_args(["--http"])
         assert args.http is True
 
     def test_parser_custom_port(self):
         from moment.mcp.main import _build_parser
+
         parser = _build_parser()
         args = parser.parse_args(["--http", "--port", "9000"])
         assert args.port == 9000
 
     def test_parser_allow_mutations(self):
         from moment.mcp.main import _build_parser
+
         parser = _build_parser()
         args = parser.parse_args(["--allow-mutations"])
         assert args.allow_mutations is True
 
     def test_parser_api_token(self):
         from moment.mcp.main import _build_parser
+
         parser = _build_parser()
         args = parser.parse_args(["--api-token", "my-secret"])
         assert args.api_token == "my-secret"
@@ -79,6 +89,7 @@ class TestRunMcp:
     def test_returns_1_when_unavailable(self, mock_check):
         mock_check.return_value = False
         from moment.mcp.main import run_mcp
+
         result = run_mcp([])
         assert result == 1
 
@@ -91,6 +102,7 @@ class TestRunMcp:
         mock_create.side_effect = ImportError("fastmcp not found")
 
         from moment.mcp.main import run_mcp
+
         result = run_mcp([])
         assert result == 1
 
@@ -104,6 +116,7 @@ class TestRunMcp:
         mock_create.return_value = mock_server
 
         from moment.mcp.main import run_mcp
+
         result = run_mcp([])
         assert result == 0
         mock_server.run.assert_called_once_with(transport="stdio")
@@ -118,11 +131,10 @@ class TestRunMcp:
         mock_create.return_value = mock_server
 
         from moment.mcp.main import run_mcp
+
         result = run_mcp(["--http"])
         assert result == 0
-        mock_server.run.assert_called_once_with(
-            transport="http", host="127.0.0.1", port=8742
-        )
+        mock_server.run.assert_called_once_with(transport="http", host="127.0.0.1", port=8742)
 
     @patch("moment.mcp.server.check_available")
     @patch("moment.mcp.server.create_server")
@@ -134,11 +146,10 @@ class TestRunMcp:
         mock_create.return_value = mock_server
 
         from moment.mcp.main import run_mcp
+
         result = run_mcp(["--http", "--port", "9999"])
         assert result == 0
-        mock_server.run.assert_called_once_with(
-            transport="http", host="127.0.0.1", port=9999
-        )
+        mock_server.run.assert_called_once_with(transport="http", host="127.0.0.1", port=9999)
 
     @patch("moment.mcp.server.check_available")
     @patch("moment.mcp.server.create_server")
@@ -150,6 +161,7 @@ class TestRunMcp:
         mock_create.return_value = mock_server
 
         from moment.mcp.main import run_mcp
+
         run_mcp(["--allow-mutations", "--api-token", "token-123"])
         mock_create.assert_called_once_with(
             allow_mutations=True,

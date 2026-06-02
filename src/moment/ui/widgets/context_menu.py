@@ -133,9 +133,9 @@ class ContextMenuBuilder:
     def _menu_style() -> str:
         return f"""
             QMenu {{
-                background-color: {color('--bg-surface')};
-                color: {color('--text-primary')};
-                border: 1px solid {color('--border-menu')};
+                background-color: {color("--bg-surface")};
+                color: {color("--text-primary")};
+                border: 1px solid {color("--border-menu")};
                 border-radius: 6px;
                 padding: 4px 0;
                 font-size: 13px;
@@ -144,14 +144,14 @@ class ContextMenuBuilder:
                 padding: 6px 28px 6px 12px;
             }}
             QMenu::item:selected {{
-                background-color: {color('--bg-elevated')};
+                background-color: {color("--bg-elevated")};
             }}
             QMenu::item:disabled {{
-                color: {color('--text-muted')};
+                color: {color("--text-muted")};
             }}
             QMenu::separator {{
                 height: 1px;
-                background-color: {color('--border-menu')};
+                background-color: {color("--border-menu")};
                 margin: 4px 8px;
             }}
         """

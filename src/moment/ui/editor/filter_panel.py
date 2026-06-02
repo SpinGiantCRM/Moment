@@ -218,7 +218,9 @@ class FilterPanel(QWidget):
         # Preset sizes
         preset_row = QHBoxLayout()
         for label, w, h in [
-            ("1920×1080", 1920, 1080), ("1280×720", 1280, 720), ("854×480", 854, 480)
+            ("1920×1080", 1920, 1080),
+            ("1280×720", 1280, 720),
+            ("854×480", 854, 480),
         ]:
             btn = QPushButton(label)
             btn.setFixedSize(88, 28)
@@ -259,8 +261,14 @@ class FilterPanel(QWidget):
     # ------------------------------------------------------------------
 
     def _slider_row(
-        self, label: str, lo: int, hi: int, default: int, suffix: str,
-        attr_name: str, handler,
+        self,
+        label: str,
+        lo: int,
+        hi: int,
+        default: int,
+        suffix: str,
+        attr_name: str,
+        handler,
     ) -> QHBoxLayout:
         """Build a horizontal row: label | slider | value label."""
         row = QHBoxLayout()
@@ -337,7 +345,9 @@ class FilterPanel(QWidget):
     def _add_image_overlay(self) -> None:
         """Add an image overlay via file picker."""
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select Image Overlay", "",
+            self,
+            "Select Image Overlay",
+            "",
             "PNG Images (*.png);;All Files (*)",
         )
         if not path:
@@ -358,9 +368,7 @@ class FilterPanel(QWidget):
 
     def _update_overlay_label(self) -> None:
         count = len(self._overlays)
-        self._overlay_list_label.setText(
-            f"{count} overlay{'s' if count != 1 else ''} added"
-        )
+        self._overlay_list_label.setText(f"{count} overlay{'s' if count != 1 else ''} added")
 
     # ------------------------------------------------------------------
     # Crop / Rotate handlers

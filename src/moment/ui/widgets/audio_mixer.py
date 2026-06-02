@@ -242,9 +242,7 @@ class AudioMixer(QWidget):
         self._game_muted = not self._game_muted
         if self._game_muted:
             self._game_mute_btn.setText("Unmute")
-            self._game_mute_btn.setStyleSheet(
-                f"color: {color('--accent-red')}; font-size: 14px;"
-            )
+            self._game_mute_btn.setStyleSheet(f"color: {color('--accent-red')}; font-size: 14px;")
         else:
             self._game_mute_btn.setText("Mute")
             self._game_mute_btn.setStyleSheet("")
@@ -254,9 +252,7 @@ class AudioMixer(QWidget):
         self._mic_muted = not self._mic_muted
         if self._mic_muted:
             self._mic_mute_btn.setText("Unmute")
-            self._mic_mute_btn.setStyleSheet(
-                f"color: {color('--accent-red')}; font-size: 14px;"
-            )
+            self._mic_mute_btn.setStyleSheet(f"color: {color('--accent-red')}; font-size: 14px;")
         else:
             self._mic_mute_btn.setText("Mute")
             self._mic_mute_btn.setStyleSheet("")

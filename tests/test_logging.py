@@ -37,7 +37,9 @@ class TestSanitize:
         assert "MjE0MjUzODg0MjY4MjY0MTI4" not in result
 
     def test_webhook_url_redacted(self) -> None:
-        result = _sanitize("Sending to https://discord.com/api/webhooks/1234567890/abcdefghijklmnopqrstuvwxyz")
+        result = _sanitize(
+            "Sending to https://discord.com/api/webhooks/1234567890/abcdefghijklmnopqrstuvwxyz"
+        )
         assert "[WEBHOOK_URL_REDACTED]" in result
         assert "discord.com/api/webhooks" not in result
 
@@ -52,7 +54,9 @@ class TestSanitize:
         assert key not in result
 
     def test_cloud_url_redacted(self) -> None:
-        result = _sanitize("Uploaded to https://my-bucket.r2.cloudflarestorage.com/path/to/file.mp4")
+        result = _sanitize(
+            "Uploaded to https://my-bucket.r2.cloudflarestorage.com/path/to/file.mp4"
+        )
         assert "[CLOUD_URL_REDACTED]" in result
 
     def test_s3_url_redacted(self) -> None:
@@ -76,8 +80,13 @@ class TestSanitizingFilter:
         home = os.path.expanduser("~")
         f = SanitizingFilter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg=f"Path: {home}/Videos/test.mkv", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg=f"Path: {home}/Videos/test.mkv",
+            args=(),
+            exc_info=None,
         )
         assert f.filter(record) is True
         assert record.msg == "Path: ~/Videos/test.mkv"
@@ -86,8 +95,13 @@ class TestSanitizingFilter:
         home = os.path.expanduser("~")
         f = SanitizingFilter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="Copied %s → %s", args=(f"{home}/a.mkv", f"{home}/b.mkv"), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Copied %s → %s",
+            args=(f"{home}/a.mkv", f"{home}/b.mkv"),
+            exc_info=None,
         )
         assert f.filter(record) is True
         assert record.args == ("~/a.mkv", "~/b.mkv")
@@ -114,9 +128,7 @@ class TestSetupLogging:
         """Spec 25: All handlers should have a SanitizingFilter."""
         logger = setup_logging()
         for handler in logger.handlers:
-            has_filter = any(
-                isinstance(f, SanitizingFilter) for f in handler.filters
-            )
+            has_filter = any(isinstance(f, SanitizingFilter) for f in handler.filters)
             assert has_filter, f"Handler {handler} missing sanitizing filter"
 
     def test_log_file_0600_permissions(self) -> None:
@@ -124,6 +136,7 @@ class TestSetupLogging:
         logger = setup_logging()
         # Find the file handler
         from logging.handlers import RotatingFileHandler
+
         fh = next(
             (h for h in logger.handlers if isinstance(h, RotatingFileHandler)),
             None,

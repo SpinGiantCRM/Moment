@@ -87,21 +87,21 @@ class Pipeline:
         on_thumbnail_progress: Callable[[int, int, str], None] | None = None,
     ) -> None:
         """Args:
-            store: The application store.
-            config: Configuration access.
-            encoder: Encoder instance (created if not provided).
-            uploader: Uploader instance (created if not provided).
-            thumbnailer: Thumbnailer instance (created if not provided).
-            game_monitor: GameMonitor instance for game-aware pausing.
-            encode_workers: Number of encode worker threads.
-            upload_workers: Number of upload worker threads.
-            thumbnail_workers: Number of thumbnail worker threads.
-            on_clip_encoded: ``callback(stem)`` when encode completes.
-            on_clip_uploaded: ``callback(stem, url)`` when upload completes.
-            on_clip_errored: ``callback(stem, error_message)`` on failure.
-            on_status: ``callback(status_text)`` for processing banner updates.
-            on_thumbnail_progress: ``callback(current, total, clip_id)``
-                during batch thumbnail generation.
+        store: The application store.
+        config: Configuration access.
+        encoder: Encoder instance (created if not provided).
+        uploader: Uploader instance (created if not provided).
+        thumbnailer: Thumbnailer instance (created if not provided).
+        game_monitor: GameMonitor instance for game-aware pausing.
+        encode_workers: Number of encode worker threads.
+        upload_workers: Number of upload worker threads.
+        thumbnail_workers: Number of thumbnail worker threads.
+        on_clip_encoded: ``callback(stem)`` when encode completes.
+        on_clip_uploaded: ``callback(stem, url)`` when upload completes.
+        on_clip_errored: ``callback(stem, error_message)`` on failure.
+        on_status: ``callback(status_text)`` for processing banner updates.
+        on_thumbnail_progress: ``callback(current, total, clip_id)``
+            during batch thumbnail generation.
         """
         self._store = store
         self._config = config
@@ -197,19 +197,24 @@ class Pipeline:
             self._queue.put_nowait((-task.priority, task))
             logger.debug(
                 "Enqueued task %s (type=%s, pri=%d)",
-                task.id, task.type.value, task.priority,
+                task.id,
+                task.type.value,
+                task.priority,
             )
         except queue.Full:
             # Mark the task as FAILED so the orphaned DB row doesn't
             # linger as PENDING indefinitely (it won't be picked up until
             # the pipeline restarts).
             self._store.update_task_status(
-                task.id, TaskStatus.FAILED,
+                task.id,
+                TaskStatus.FAILED,
                 f"Queue full (maxsize={self._queue.maxsize})",
             )
             logger.warning(
                 "Task queue full (maxsize=%d) — dropping task %s (type=%s)",
-                self._queue.maxsize, task.id, task.type.value,
+                self._queue.maxsize,
+                task.id,
+                task.type.value,
             )
 
     def shutdown(self) -> None:
@@ -221,9 +226,7 @@ class Pipeline:
             if self._state in (_State.STOPPING, _State.STOPPED):
                 return
             if self._state != _State.RUNNING:
-                raise RuntimeError(
-                    f"Pipeline cannot be shut down from state {self._state.value}"
-                )
+                raise RuntimeError(f"Pipeline cannot be shut down from state {self._state.value}")
             self._state = _State.STOPPING
 
         self._shutdown.set()
@@ -254,8 +257,8 @@ class Pipeline:
         for w in self._workers:
             if w.is_alive():
                 logger.warning(
-                    "Pipeline worker %s did not exit within 30s — "
-                    "killing tracked child processes", w.name,
+                    "Pipeline worker %s did not exit within 30s — killing tracked child processes",
+                    w.name,
                 )
                 for pid in list(_child_pids):
                     try:
@@ -431,8 +434,7 @@ class Pipeline:
                     clip.resolution = (video_stream.get("width", 0), video_stream.get("height", 0))
 
                 audio_streams = [
-                    s for s in probe_data.get("streams", [])
-                    if s.get("codec_type") == "audio"
+                    s for s in probe_data.get("streams", []) if s.get("codec_type") == "audio"
                 ]
                 clip.has_game_audio = any(s.get("codec_name") != "opus" for s in audio_streams)
                 clip.has_mic_audio = any(s.get("codec_name") == "opus" for s in audio_streams)
@@ -461,12 +463,14 @@ class Pipeline:
                 self._on_clip_encoded(clip.stem)
 
             # Auto-enqueue upload
-            self.enqueue(Task(
-                id=str(uuid.uuid4()),
-                type=TaskKind.UPLOAD,
-                priority=1,
-                payload={"clip_id": clip.id, "path": str(output_path)},
-            ))
+            self.enqueue(
+                Task(
+                    id=str(uuid.uuid4()),
+                    type=TaskKind.UPLOAD,
+                    priority=1,
+                    payload={"clip_id": clip.id, "path": str(output_path)},
+                )
+            )
 
         except (EncoderError, Exception) as exc:
             logger.error("Encode failed for %s: %s", clip.stem, exc)
@@ -582,5 +586,3 @@ class Pipeline:
     def _dec_counter(self, name: str) -> None:
         with self._counts_lock:
             self._active_counts[name] = max(0, self._active_counts.get(name, 0) - 1)
-
-

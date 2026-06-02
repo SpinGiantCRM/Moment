@@ -10,11 +10,11 @@ import pytest
 
 from moment.core.models import Clip, ReviewCardConfig
 from moment.ui.widgets.review_card import ClipReviewCard
+
 pytestmark = [pytest.mark.gui]
 
 
 @pytest.fixture
-
 def test_clip() -> Clip:
     return Clip(
         id=str(uuid.uuid4()),
@@ -31,6 +31,7 @@ def test_clip() -> Clip:
         favorite=False,
         tags=["frag"],
     )
+
 
 class TestClipReviewCardInit:
     """Tests for ClipReviewCard construction."""
@@ -64,6 +65,7 @@ class TestClipReviewCardInit:
         card = ClipReviewCard(test_clip, game_active=True)
         assert card._game_active is True
 
+
 class TestClipReviewCardSignals:
     """Tests for signal emission."""
 
@@ -87,6 +89,7 @@ class TestClipReviewCardSignals:
         card._on_open_player()
         assert emitted == [test_clip.id]
 
+
 class TestClipReviewCardDismiss:
     """Tests for card dismissal."""
 
@@ -99,6 +102,7 @@ class TestClipReviewCardDismiss:
         assert test_clip.favorite is False
         card._on_favorite()
         assert test_clip.favorite is True
+
 
 class TestFormatHelpers:
     """Tests for static formatting helpers."""
@@ -124,5 +128,3 @@ class TestFormatHelpers:
     def test_fmt_size_bytes(self) -> None:
         result = ClipReviewCard._fmt_size(500)
         assert "B" in result
-
-

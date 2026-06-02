@@ -58,6 +58,7 @@ def wait_until(predicate, timeout: float = 2.0, interval: float = 0.01) -> None:
     Raises ``AssertionError`` if the condition is not met before timeout.
     """
     import time as _time
+
     deadline = _time.monotonic() + timeout
     while _time.monotonic() < deadline:
         if predicate():
@@ -73,6 +74,7 @@ def _setup_test_fernet() -> None:
     Store._fernet_cache = _TEST_FERNET
     if Store._fernet_lock is None:
         import threading
+
         Store._fernet_lock = threading.Lock()
 
 
@@ -98,6 +100,7 @@ def store(db_path: str) -> Store:
     Uses a mocked ``_connect_encrypted`` to bypass the mandatory
     pysqlcipher3 requirement for test environments.
     """
+
     def _fresh_test_conn(path: str) -> sqlite3.Connection:
         return _make_test_conn(path)
 

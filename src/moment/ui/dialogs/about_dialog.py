@@ -100,7 +100,9 @@ along with this program.  If not, see &lt;https://www.gnu.org/licenses/&gt;.
 
 """
 
-_GPL_FULL = _GPL_HEADER + """\
+_GPL_FULL = (
+    _GPL_HEADER
+    + """\
 ───────────────────────────────────────────────────────
 
                     GNU GENERAL PUBLIC LICENSE
@@ -778,6 +780,7 @@ the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 <https://www.gnu.org/licenses/why-not-lgpl.html>.
 """
+)
 
 
 class AboutDialog(QDialog):

@@ -88,8 +88,8 @@ class MergePanel(QWidget):
         self._list.setStyleSheet(
             f"""
             QListWidget {{
-                background-color: {color('--bg-inset')};
-                border: 1px solid {color('--border-menu')};
+                background-color: {color("--bg-inset")};
+                border: 1px solid {color("--border-menu")};
                 border-radius: 4px;
                 padding: 4px;
             }}
@@ -97,10 +97,10 @@ class MergePanel(QWidget):
                 padding: 6px 10px;
                 border-radius: 3px;
                 margin: 1px 0;
-                background-color: {color('--bg-surface')};
+                background-color: {color("--bg-surface")};
             }}
             QListWidget::item:selected {{
-                background-color: {color('--accent-blue')};
+                background-color: {color("--accent-blue")};
                 color: #ffffff;
             }}
             """
@@ -195,8 +195,10 @@ class MergePanel(QWidget):
         """Move the selected clip up in the order."""
         idx = self._list.currentRow()
         if idx > 0:
-            self._clip_ids[idx], self._clip_ids[idx - 1] = \
-                self._clip_ids[idx - 1], self._clip_ids[idx]
+            self._clip_ids[idx], self._clip_ids[idx - 1] = (
+                self._clip_ids[idx - 1],
+                self._clip_ids[idx],
+            )
             self._refresh_list()
             self._list.setCurrentRow(idx - 1)
             self.profile_changed.emit()
@@ -205,8 +207,10 @@ class MergePanel(QWidget):
         """Move the selected clip down in the order."""
         idx = self._list.currentRow()
         if 0 <= idx < len(self._clip_ids) - 1:
-            self._clip_ids[idx], self._clip_ids[idx + 1] = \
-                self._clip_ids[idx + 1], self._clip_ids[idx]
+            self._clip_ids[idx], self._clip_ids[idx + 1] = (
+                self._clip_ids[idx + 1],
+                self._clip_ids[idx],
+            )
             self._refresh_list()
             self._list.setCurrentRow(idx + 1)
             self.profile_changed.emit()
@@ -217,9 +221,7 @@ class MergePanel(QWidget):
         if dialog.exec() == TransitionPicker.DialogCode.Accepted:
             t = dialog.selected_transition()
             self._transitions.append(t)
-            self._trans_label.setText(
-                f"{t['type'].replace('_', ' ').title()} ({t['duration']}s)"
-            )
+            self._trans_label.setText(f"{t['type'].replace('_', ' ').title()} ({t['duration']}s)")
             self.profile_changed.emit()
 
     def _on_preview(self) -> None:

@@ -63,12 +63,15 @@ class TestTrashPageRefresh:
 
     def test_refresh_with_deleted_clips(self, qapp) -> None:
         from datetime import datetime, timezone
+
         from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 
         clip = Clip(
-            id="del-1", stem="deleted_clip",
+            id="del-1",
+            stem="deleted_clip",
             source_path=__import__("pathlib").Path("/tmp/del.mkv"),
-            duration=30.0, status=ClipStatus.DONE,
+            duration=30.0,
+            status=ClipStatus.DONE,
             visibility=ClipVisibility.PRIVATE,
             clip_type=ClipType.VIDEO,
             deleted_at=datetime.now(timezone.utc),
@@ -76,12 +79,17 @@ class TestTrashPageRefresh:
         store = MagicMock()
         store.list_clips.return_value = [clip]
 
-        with patch("moment.ui.widgets.clip_delegate.ClipDelegate.build_item_data",
-                   return_value={"id": "del-1", "title": "Deleted Clip"}), \
-             patch("moment.ui.widgets.clip_delegate.ClipDelegate.paint",
-                   return_value=None), \
-             patch("moment.ui.widgets.clip_delegate.ClipDelegate.sizeHint",
-                   return_value=QSize(260, 190)):
+        with (
+            patch(
+                "moment.ui.widgets.clip_delegate.ClipDelegate.build_item_data",
+                return_value={"id": "del-1", "title": "Deleted Clip"},
+            ),
+            patch("moment.ui.widgets.clip_delegate.ClipDelegate.paint", return_value=None),
+            patch(
+                "moment.ui.widgets.clip_delegate.ClipDelegate.sizeHint",
+                return_value=QSize(260, 190),
+            ),
+        ):
             page = TrashPage(store=store)
             page.refresh()
             assert page._empty_widget.isHidden()

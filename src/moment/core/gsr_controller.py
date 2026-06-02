@@ -90,23 +90,21 @@ class GSRController:
         on_file_ready: "callable[[Path], None] | None" = None,
     ) -> None:
         """Args:
-            output_dir: Directory for buffer-dump files.
-            fps: Capture frame rate.
-            quality: GSR quality preset (``very_high``, ``high``, …).
-            container: Output container (``mp4`` or ``mkv``).
-            replay_duration: Circular buffer size in seconds.
-            audio_device: Audio input device (``-a`` flag). None = no audio.
-            record_area: ``-w`` flag value (``screen``, ``window``, etc.).
-            show_cursor: Whether GSR renders the cursor (``--show-cursor``).
-            video_codec: ``-v`` flag value (e.g. ``h264_nvenc``). None = auto.
-            on_crash: Called as ``callback(message)`` when process dies
-                irrecoverably.
-            on_file_ready: Called as ``callback(path)`` when a replay file
-                has been dumped and is ready for import.
+        output_dir: Directory for buffer-dump files.
+        fps: Capture frame rate.
+        quality: GSR quality preset (``very_high``, ``high``, …).
+        container: Output container (``mp4`` or ``mkv``).
+        replay_duration: Circular buffer size in seconds.
+        audio_device: Audio input device (``-a`` flag). None = no audio.
+        record_area: ``-w`` flag value (``screen``, ``window``, etc.).
+        show_cursor: Whether GSR renders the cursor (``--show-cursor``).
+        video_codec: ``-v`` flag value (e.g. ``h264_nvenc``). None = auto.
+        on_crash: Called as ``callback(message)`` when process dies
+            irrecoverably.
+        on_file_ready: Called as ``callback(path)`` when a replay file
+            has been dumped and is ready for import.
         """
-        self._output_dir = Path(
-            os.path.expanduser(output_dir or "~/Videos/Moment")
-        ).resolve()
+        self._output_dir = Path(os.path.expanduser(output_dir or "~/Videos/Moment")).resolve()
         self._fps = fps
         self._quality = quality
         self._container = container
@@ -147,7 +145,9 @@ class GSRController:
         try:
             result = _sp.run(
                 ["pgrep", "-x", GSR_BINARY],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
         except (FileNotFoundError, _sp.TimeoutExpired):
             return
@@ -179,7 +179,9 @@ class GSRController:
         # SIGKILL survivors
         remaining = _sp.run(
             ["pgrep", "-x", GSR_BINARY],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if remaining.returncode == 0 and remaining.stdout.strip():
             for pid_text in remaining.stdout.strip().splitlines():
@@ -203,8 +205,7 @@ class GSRController:
         # Check GSR binary availability
         if not shutil.which(GSR_BINARY):
             raise GSRControllerError(
-                f"{GSR_BINARY} not found in PATH. "
-                "Install gpu-screen-recorder to use replay mode."
+                f"{GSR_BINARY} not found in PATH. Install gpu-screen-recorder to use replay mode."
             )
 
         with self._lock:
@@ -281,12 +282,17 @@ class GSRController:
         """Build the GSR command line for instant-replay mode."""
         cmd: list[str] = [
             GSR_BINARY,
-            "-w", self._record_area,
-            "-f", str(self._fps),
-            "-c", self._container,
-            "-q", self._quality,
+            "-w",
+            self._record_area,
+            "-f",
+            str(self._fps),
+            "-c",
+            self._container,
+            "-q",
+            self._quality,
             "-k",  # instant replay (circular buffer)
-            "-o", str(self._output_dir),
+            "-o",
+            str(self._output_dir),
         ]
 
         if self._video_codec:
@@ -317,9 +323,7 @@ class GSRController:
                 start_new_session=True,  # os.setsid in child
             )
         except (OSError, FileNotFoundError) as exc:
-            raise GSRControllerError(
-                f"Failed to start {GSR_BINARY}: {exc}"
-            ) from exc
+            raise GSRControllerError(f"Failed to start {GSR_BINARY}: {exc}") from exc
 
         # Start crash-monitor thread
         t = threading.Thread(target=self._monitor_process, daemon=True)
@@ -382,10 +386,7 @@ class GSRController:
             self._proc = None
 
             if not self._can_restart():
-                msg = (
-                    f"GSR crashed {_MAX_RESTARTS}× in "
-                    f"{_RESTART_WINDOW}s; giving up"
-                )
+                msg = f"GSR crashed {_MAX_RESTARTS}× in {_RESTART_WINDOW}s; giving up"
                 logger.error(msg)
                 cb = self._on_crash
                 self._lock.release()

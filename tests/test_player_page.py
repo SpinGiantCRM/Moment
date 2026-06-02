@@ -67,9 +67,9 @@ class TestSeekBar:
         bar.setFixedWidth(300)
         # Simulate a click at ~75% of the track
         # Track runs from 44+4=48 to 300-44-4=252; 75% = 48+0.75*204=201
-        from PyQt6.QtCore import QPointF
+        from PyQt6.QtCore import QPointF, Qt
         from PyQt6.QtGui import QMouseEvent
-        from PyQt6.QtCore import Qt
+
         event = QMouseEvent(
             QMouseEvent.Type.MouseButtonPress,
             QPointF(201, 12),
@@ -137,6 +137,7 @@ class TestPlayerPageInit:
 
     def test_player_stopped_initially(self, page: PlayerPage) -> None:
         from PyQt6.QtMultimedia import QMediaPlayer
+
         assert page._player.playbackState() == QMediaPlayer.PlaybackState.StoppedState
 
     def test_signals_exist(self, qapp) -> None:
@@ -172,11 +173,10 @@ class TestPlayerPageControls:
 
     def test_fade_out_controls_while_playing(self, qapp) -> None:
         from PyQt6.QtMultimedia import QMediaPlayer
+
         page = PlayerPage()
         # Simulate playing state
-        page._player.playbackState = MagicMock(
-            return_value=QMediaPlayer.PlaybackState.PlayingState
-        )
+        page._player.playbackState = MagicMock(return_value=QMediaPlayer.PlaybackState.PlayingState)
         page._controls_visible = True
         page._fade_out_controls()
         assert not page._controls_visible
@@ -227,9 +227,12 @@ class TestPlayerPageLoad:
         from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 
         clip = Clip(
-            id="player-1", stem="play_clip",
+            id="player-1",
+            stem="play_clip",
             source_path=__import__("pathlib").Path("/tmp/play.mkv"),
-            duration=45.0, title="Play Clip", game="CS2",
+            duration=45.0,
+            title="Play Clip",
+            game="CS2",
             file_size=75_000_000,
             status=ClipStatus.DONE,
             visibility=ClipVisibility.PRIVATE,
@@ -256,9 +259,12 @@ class TestPlayerPageLoad:
         from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 
         clip = Clip(
-            id="player-2", stem="test_clip",
+            id="player-2",
+            stem="test_clip",
             source_path=__import__("pathlib").Path("/tmp/test.mkv"),
-            duration=30.0, title="Test Clip", game="Valorant",
+            duration=30.0,
+            title="Test Clip",
+            game="Valorant",
             file_size=50_000_000,
             status=ClipStatus.DONE,
             visibility=ClipVisibility.PRIVATE,
@@ -295,6 +301,7 @@ class TestPlayerPageLoad:
         mock_loader = MagicMock()
         page._loader = mock_loader
         from PyQt6.QtGui import QHideEvent
+
         page.hideEvent(QHideEvent())
         mock_loader.cancel.assert_called_once()
         assert page._loader is None

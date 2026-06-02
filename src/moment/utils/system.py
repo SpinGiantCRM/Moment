@@ -70,7 +70,7 @@ def human_size(num_bytes: int) -> str:
     units = ("B", "KB", "MB", "GB", "TB", "PB", "EB")
     i = int(math.floor(math.log(abs(num_bytes), 1024)))
     i = min(i, len(units) - 1)
-    size = num_bytes / (1024 ** i)
+    size = num_bytes / (1024**i)
     if i == 0:
         return f"{int(size)} {units[i]}"
     return f"{size:.1f} {units[i]}"
@@ -107,9 +107,9 @@ def is_nvidia_gpu() -> bool:
 
 # Context-specific regex patterns for validate_arg
 _VALIDATORS: dict[str, re.Pattern[str]] = {
-    "device": re.compile(r"^[a-zA-Z0-9_., -]+$"),     # No forward slash (path traversal)
-    "filename": re.compile(r"^[\w._-]+$"),              # Unicode-aware filenames
-    "generic": re.compile(r"^[a-zA-Z0-9_., /-]+$"),    # Original permissive pattern
+    "device": re.compile(r"^[a-zA-Z0-9_., -]+$"),  # No forward slash (path traversal)
+    "filename": re.compile(r"^[\w._-]+$"),  # Unicode-aware filenames
+    "generic": re.compile(r"^[a-zA-Z0-9_., /-]+$"),  # Original permissive pattern
 }
 
 
@@ -151,8 +151,7 @@ def validate_arg(
 
     if not regex.fullmatch(value):
         raise ValueError(
-            f"Invalid value {value!r}: must match pattern "
-            f"{regex.pattern!r} (context={context})"
+            f"Invalid value {value!r}: must match pattern {regex.pattern!r} (context={context})"
         )
     return value
 
@@ -171,6 +170,7 @@ def sanitize_stem(stem: str) -> str:
         Sanitised stem safe for path construction.
     """
     import re
+
     # Remove parent-dir traversal and root-anchored / path-separator components
     cleaned = stem.replace("..", "_").lstrip("/").lstrip("\\")
     # Strip leading dots, underscores, and hyphens (prevents hidden files)

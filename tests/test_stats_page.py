@@ -28,8 +28,11 @@ def mock_store() -> MagicMock:
         ],
         "recent_uploads": [
             {
-                "id": "clip-1", "title": "Ace", "game": "CS2",
-                "uploaded_at": "2026-05-28T12:00:00+00:00", "file_size": 50_000_000,
+                "id": "clip-1",
+                "title": "Ace",
+                "game": "CS2",
+                "uploaded_at": "2026-05-28T12:00:00+00:00",
+                "file_size": 50_000_000,
             },
         ],
     }
@@ -149,12 +152,14 @@ class TestDonutChart:
 
     def test_create(self, qapp) -> None:
         from moment.ui.pages.stats_page import _DonutChart
+
         chart = _DonutChart()
         assert chart is not None
         assert chart._data == []
 
     def test_set_data_builds_segments(self, qapp) -> None:
         from moment.ui.pages.stats_page import _DonutChart
+
         chart = _DonutChart()
         data = [
             {"game": "CS2", "count": 20, "storage": 500_000},
@@ -166,14 +171,17 @@ class TestDonutChart:
 
     def test_set_data_empty(self, qapp) -> None:
         from moment.ui.pages.stats_page import _DonutChart
+
         chart = _DonutChart()
         chart.set_data([])
         assert chart._segments == []
         assert chart._total_count == 0
 
     def test_hover_detection(self, qapp) -> None:
-        from moment.ui.pages.stats_page import _DonutChart
         from PyQt6.QtCore import QPoint
+
+        from moment.ui.pages.stats_page import _DonutChart
+
         chart = _DonutChart()
         chart.resize(300, 300)
         data = [
@@ -190,11 +198,13 @@ class TestBarChart:
 
     def test_create(self, qapp) -> None:
         from moment.ui.pages.stats_page import _BarChart
+
         chart = _BarChart()
         assert chart is not None
 
     def test_set_data(self, qapp) -> None:
         from moment.ui.pages.stats_page import _BarChart
+
         chart = _BarChart()
         data = [
             {"game": "CS2", "count": 10},
@@ -205,6 +215,7 @@ class TestBarChart:
 
     def test_set_data_empty(self, qapp) -> None:
         from moment.ui.pages.stats_page import _BarChart
+
         chart = _BarChart()
         chart.set_data([])
         assert chart._data == []

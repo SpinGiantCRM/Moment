@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -12,6 +12,7 @@ from moment.core.updater import (
     _parse_version,
     check_for_updates,
 )
+
 pytestmark = [pytest.mark.integration]
 
 
@@ -45,6 +46,7 @@ class TestParseVersion:
     def test_partial_numeric(self) -> None:
         assert _parse_version("1.2.3rc1") == (1, 2, 3)
 
+
 class TestIsNewer:
     def test_strictly_newer(self) -> None:
         assert _is_newer("1.0.0", "0.9.0") is True
@@ -58,18 +60,18 @@ class TestIsNewer:
     def test_calver_newer(self) -> None:
         assert _is_newer("2025.01.0", "2024.12.0") is True
 
+
 class TestCheckForUpdates:
     def test_returns_result_on_success(self) -> None:
         """Happy path: newer version available."""
+
         async def run() -> None:
             with (
                 patch("asyncio.get_running_loop") as mock_loop,
                 patch("moment.core.updater._is_newer", return_value=True),
             ):
                 mock_loop.return_value = AsyncMock()
-                mock_loop.return_value.run_in_executor = AsyncMock(
-                    return_value=("2.0.0", "1.0.0")
-                )
+                mock_loop.return_value.run_in_executor = AsyncMock(return_value=("2.0.0", "1.0.0"))
 
                 result = await check_for_updates("1.0.0")
                 assert result["available"] is True
@@ -80,15 +82,14 @@ class TestCheckForUpdates:
 
     def test_no_update_available(self) -> None:
         """When versions are equal, available=False."""
+
         async def run() -> None:
             with (
                 patch("asyncio.get_running_loop") as mock_loop,
                 patch("moment.core.updater._is_newer", return_value=False),
             ):
                 mock_loop.return_value = AsyncMock()
-                mock_loop.return_value.run_in_executor = AsyncMock(
-                    return_value=("1.0.0", "1.0.0")
-                )
+                mock_loop.return_value.run_in_executor = AsyncMock(return_value=("1.0.0", "1.0.0"))
 
                 result = await check_for_updates("1.0.0")
                 assert result["available"] is False
@@ -97,6 +98,7 @@ class TestCheckForUpdates:
 
     def test_network_failure_returns_no_update(self) -> None:
         """On network error, returns current version as latest."""
+
         async def run() -> None:
             with (
                 patch("asyncio.get_running_loop") as mock_loop,
@@ -112,6 +114,7 @@ class TestCheckForUpdates:
 
     def test_exception_in_check_handled_gracefully(self) -> None:
         """Any exception during check returns current version as latest."""
+
         async def run() -> None:
             with (
                 patch("asyncio.get_running_loop", side_effect=RuntimeError("no loop")),
@@ -124,14 +127,13 @@ class TestCheckForUpdates:
 
     def test_same_version_no_update(self) -> None:
         """When latest == current, available=False even if is_newer is false."""
+
         async def run() -> None:
             with (
                 patch("asyncio.get_running_loop") as mock_loop,
             ):
                 mock_loop.return_value = AsyncMock()
-                mock_loop.return_value.run_in_executor = AsyncMock(
-                    return_value=("1.0.0", "1.0.0")
-                )
+                mock_loop.return_value.run_in_executor = AsyncMock(return_value=("1.0.0", "1.0.0"))
 
                 result = await check_for_updates("1.0.0")
                 assert result["available"] is False
@@ -140,6 +142,7 @@ class TestCheckForUpdates:
 
     def test_fetch_returns_none_on_exception(self) -> None:
         """When _fetch_and_parse raises, returns None gracefully."""
+
         async def run() -> None:
             with (
                 patch("asyncio.get_running_loop") as mock_loop,
@@ -153,5 +156,3 @@ class TestCheckForUpdates:
                 assert result["latest_version"] == "1.0.0"
 
         asyncio.run(run())
-
-

@@ -132,7 +132,9 @@ async def check_for_updates(current_version: str) -> UpdateResult:
 
             logger.debug(
                 "Update check: installed=%s  latest=%s  available=%s",
-                current, latest, result["available"],
+                current,
+                latest,
+                result["available"],
             )
     except Exception as exc:
         logger.debug("Update check failed (non-fatal): %s", exc)

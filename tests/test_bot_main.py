@@ -8,17 +8,20 @@ from unittest.mock import MagicMock, patch
 class TestParser:
     def test_build_parser(self):
         from moment.bot.main import _build_parser
+
         parser = _build_parser()
         assert parser.prog == "moment bot"
 
     def test_parser_defaults(self):
         from moment.bot.main import _build_parser
+
         parser = _build_parser()
         args = parser.parse_args([])
         assert args.daemon is False
 
     def test_parser_daemon(self):
         from moment.bot.main import _build_parser
+
         parser = _build_parser()
         args = parser.parse_args(["--daemon"])
         assert args.daemon is True
@@ -28,6 +31,7 @@ class TestRunBot:
     @patch("moment.core.discord_bot._DISCORD_AVAILABLE", False)
     def test_returns_1_when_unavailable(self):
         from moment.bot.main import run_bot
+
         result = run_bot([])
         assert result == 1
 
@@ -41,6 +45,7 @@ class TestRunBot:
         mock_store_cls.return_value = MagicMock()
 
         from moment.bot.main import run_bot
+
         result = run_bot([])
         assert result == 1
 
@@ -57,6 +62,7 @@ class TestRunBot:
         mock_bot_cls.return_value = mock_bot
 
         from moment.bot.main import run_bot
+
         result = run_bot(["--daemon"])
         assert result == 0
         mock_bot.start.assert_called_once()

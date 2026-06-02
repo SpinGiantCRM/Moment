@@ -15,6 +15,7 @@ from typing import Literal
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class ClipStatus(Enum):
     """Processing state of a clip in the pipeline."""
 
@@ -67,6 +68,7 @@ class TaskKind(Enum):
 # ---------------------------------------------------------------------------
 # Primary dataclasses
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Clip:
@@ -121,6 +123,7 @@ class Clip:
 # Editing models
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SegmentEdit:
     """A segment of a clip with optional speed adjustment."""
@@ -173,6 +176,7 @@ class EditProfile:
 # ---------------------------------------------------------------------------
 # Supporting models
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Bookmark:

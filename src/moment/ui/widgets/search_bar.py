@@ -33,15 +33,15 @@ class SearchBar(QLineEdit):
         self.setClearButtonEnabled(True)
         self.setStyleSheet(f"""
             QLineEdit {{
-                background-color: {color('--bg-inset')};
-                color: {color('--text-primary')};
-                border: 1px solid {color('--border-menu')};
+                background-color: {color("--bg-inset")};
+                color: {color("--text-primary")};
+                border: 1px solid {color("--border-menu")};
                 border-radius: 4px;
                 padding: 5px 32px 5px 8px;
                 font-size: 13px;
             }}
             QLineEdit:focus {{
-                border-color: {color('--accent-blue')};
+                border-color: {color("--accent-blue")};
             }}
         """)
 

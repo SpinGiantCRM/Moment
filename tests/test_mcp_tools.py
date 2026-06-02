@@ -12,11 +12,12 @@ from moment.core.models import Clip, ClipStatus, ClipType, GameProfile
 # We test the module-level functions, so we need to mock _get_store
 pytestmark = [pytest.mark.integration]
 
-@pytest.fixture
 
+@pytest.fixture
 def mock_store():
     store = MagicMock()
     return store
+
 
 class TestListClips:
     @patch("moment.mcp.tools._get_store")
@@ -38,6 +39,7 @@ class TestListClips:
         mock_store.list_clips.return_value = [clip]
 
         from moment.mcp.tools import list_clips
+
         result = list_clips()
         assert len(result) == 1
         # Path fields must NOT be present
@@ -62,6 +64,7 @@ class TestListClips:
         mock_store.list_clips.return_value = [clip]
 
         from moment.mcp.tools import list_clips
+
         result = list_clips()
         assert result[0]["r2_url"] is None
 
@@ -82,6 +85,7 @@ class TestListClips:
         mock_store.list_clips.return_value = [clip]
 
         from moment.mcp.tools import list_clips
+
         result = list_clips(include_urls=True)
         assert result[0]["r2_url"] == "https://cdn.example.com/clip2.mp4"
 
@@ -91,6 +95,7 @@ class TestListClips:
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import list_clips
+
         list_clips(status="UPLOADED")
         mock_store.list_clips.assert_called_once()
         call_kwargs = mock_store.list_clips.call_args.kwargs
@@ -102,6 +107,7 @@ class TestListClips:
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import list_clips
+
         list_clips(status="NONEXISTENT")
         call_kwargs = mock_store.list_clips.call_args.kwargs
         assert call_kwargs["status"] is None
@@ -112,11 +118,13 @@ class TestListClips:
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import list_clips
+
         list_clips(game="Elden Ring", limit=10, offset=0)
         call_kwargs = mock_store.list_clips.call_args.kwargs
         assert call_kwargs["game"] == "Elden Ring"
         assert call_kwargs["limit"] == 10
         assert call_kwargs["offset"] == 0
+
 
 class TestSearchClips:
     @patch("moment.mcp.tools._get_store")
@@ -137,6 +145,7 @@ class TestSearchClips:
         mock_store.list_clips.return_value = [clip]
 
         from moment.mcp.tools import search_clips
+
         result = search_clips("found")
         assert len(result) == 1
         assert result[0]["title"] == "Found Clip"
@@ -145,11 +154,13 @@ class TestSearchClips:
         assert "encoded_path" not in result[0]
         assert "thumb_path" not in result[0]
 
+
 class TestGetClip:
     @patch("moment.mcp.tools._get_store")
     def test_get_clip_found(self, mock_get_store, mock_store):
         mock_get_store.return_value = mock_store
         import os
+
         home = os.path.expanduser("~")
         clip = Clip(
             id="full-id",
@@ -174,6 +185,7 @@ class TestGetClip:
         mock_store.get_clip.return_value = clip
 
         from moment.mcp.tools import get_clip
+
         result = get_clip("full-id")
         assert result is not None
         assert result["id"] == "full-id"
@@ -203,6 +215,7 @@ class TestGetClip:
         mock_store.get_clip.return_value = clip
 
         from moment.mcp.tools import get_clip
+
         result = get_clip("full-id", show_paths=True)
         assert result is not None
         assert result["source_path"] == "/home/user/Videos/Moment/full.mkv"
@@ -225,6 +238,7 @@ class TestGetClip:
         mock_store.get_clip.return_value = clip
 
         from moment.mcp.tools import get_clip
+
         result = get_clip("ext-id")
         assert result is not None
         assert result["source_path"] == "clip.mkv"
@@ -235,8 +249,10 @@ class TestGetClip:
         mock_store.get_clip.return_value = None
 
         from moment.mcp.tools import get_clip
+
         result = get_clip("missing-id")
         assert result is None
+
 
 class TestGetStats:
     @patch("moment.mcp.tools._get_store")
@@ -245,8 +261,10 @@ class TestGetStats:
         mock_store.get_aggregate_stats.return_value = {"total_clips": 42}
 
         from moment.mcp.tools import get_stats
+
         result = get_stats()
         assert result == {"total_clips": 42}
+
 
 class TestListGameProfiles:
     @patch("moment.mcp.tools._get_store")
@@ -264,10 +282,12 @@ class TestListGameProfiles:
         mock_store.list_game_profiles.return_value = [profile]
 
         from moment.mcp.tools import list_game_profiles
+
         result = list_game_profiles()
         assert len(result) == 1
         assert result[0]["game_name"] == "Elden Ring"
         assert result[0]["capture_fps"] == 60
+
 
 class TestEnqueueEncode:
     @patch("moment.mcp.tools._get_store")
@@ -286,6 +306,7 @@ class TestEnqueueEncode:
         mock_store.get_clip.return_value = clip
 
         from moment.mcp.tools import enqueue_encode
+
         result = enqueue_encode("enc-id")
         assert result["status"] == "queued"
         assert result["clip_id"] == "enc-id"
@@ -297,8 +318,10 @@ class TestEnqueueEncode:
         mock_store.get_clip.return_value = None
 
         from moment.mcp.tools import enqueue_encode
+
         result = enqueue_encode("missing")
         assert "error" in result
+
 
 class TestEnqueueUpload:
     @patch("moment.mcp.tools._get_store")
@@ -318,6 +341,7 @@ class TestEnqueueUpload:
         mock_store.get_clip.return_value = clip
 
         from moment.mcp.tools import enqueue_upload
+
         result = enqueue_upload("up-id")
         assert result["status"] == "queued"
 
@@ -338,6 +362,7 @@ class TestEnqueueUpload:
         mock_store.get_clip.return_value = clip
 
         from moment.mcp.tools import enqueue_upload
+
         result = enqueue_upload("up-id")
         assert "error" in result
         assert "encoded" in result["error"].lower()
@@ -349,8 +374,10 @@ class TestEnqueueUpload:
         mock_store.get_clip.return_value = None
 
         from moment.mcp.tools import enqueue_upload
+
         result = enqueue_upload("missing")
         assert "error" in result
+
 
 class TestSaveGameProfile:
     @patch("moment.mcp.tools._get_store")
@@ -359,11 +386,16 @@ class TestSaveGameProfile:
         mock_get_store.return_value = mock_store
 
         from moment.mcp.tools import save_game_profile
-        result = save_game_profile(json.dumps({
-            "game_name": "Elden Ring",
-            "replay_duration": 60,
-            "capture_fps": 120,
-        }))
+
+        result = save_game_profile(
+            json.dumps(
+                {
+                    "game_name": "Elden Ring",
+                    "replay_duration": 60,
+                    "capture_fps": 120,
+                }
+            )
+        )
         assert result["status"] == "saved"
         assert result["game_name"] == "Elden Ring"
         mock_store.save_game_profile.assert_called_once()
@@ -374,6 +406,7 @@ class TestSaveGameProfile:
         mock_get_store.return_value = mock_store
 
         from moment.mcp.tools import save_game_profile
+
         result = save_game_profile("not json")
         assert "error" in result
 
@@ -383,9 +416,11 @@ class TestSaveGameProfile:
         mock_get_store.return_value = mock_store
 
         from moment.mcp.tools import save_game_profile
+
         result = save_game_profile(json.dumps({"replay_duration": 30}))
         assert "error" in result
         assert "game_name" in result["error"]
+
 
 class TestWebhookRateLimit:
     @patch("moment.mcp.tools._get_store")
@@ -396,6 +431,7 @@ class TestWebhookRateLimit:
         # First call allowed, second blocked
         mock_store.check_persistent_rate.side_effect = [None, "Please wait 59 seconds"]
         from moment.mcp.tools import _check_webhook_rate_limit
+
         hash_key = "test-hash-123"
         result1 = _check_webhook_rate_limit(hash_key)
         assert result1 is None
@@ -410,15 +446,18 @@ class TestWebhookRateLimit:
         mock_get_store.return_value = mock_store
         mock_store.check_persistent_rate.side_effect = [None, None, "Please wait 55 seconds"]
         from moment.mcp.tools import _check_webhook_rate_limit
+
         assert _check_webhook_rate_limit("hash-a") is None
         assert _check_webhook_rate_limit("hash-b") is None
         result = _check_webhook_rate_limit("hash-a")
         assert result is not None
 
+
 class TestRegisterTools:
     def test_register_read_tools(self):
         mock_server = MagicMock()
         from moment.mcp.tools import register_all_tools
+
         register_all_tools(mock_server, allow_mutations=False)
         # Check that tool() was called (read tools)
         assert mock_server.tool.call_count == 7
@@ -426,13 +465,16 @@ class TestRegisterTools:
     def test_register_with_mutations(self):
         mock_server = MagicMock()
         from moment.mcp.tools import register_all_tools
+
         register_all_tools(mock_server, allow_mutations=True)
         # 7 read + 6 mutation = 13
         assert mock_server.tool.call_count == 13
 
+
 # ---------------------------------------------------------------------------
 # Visibility enforcement in MCP (Spec 24)
 # ---------------------------------------------------------------------------
+
 
 class TestMCPVisibility:
     @patch("moment.mcp.tools._get_store")
@@ -443,6 +485,7 @@ class TestMCPVisibility:
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import list_clips
+
         list_clips()
         call_kwargs = mock_store.list_clips.call_args.kwargs
         assert call_kwargs["owner_id"] is None
@@ -456,6 +499,7 @@ class TestMCPVisibility:
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import list_clips
+
         list_clips()
         call_kwargs = mock_store.list_clips.call_args.kwargs
         assert call_kwargs["owner_id"] == "*"
@@ -464,10 +508,12 @@ class TestMCPVisibility:
     def test_list_clips_visibility_filter(self, mock_get_store, mock_store):
         """Explicit visibility filter is passed through."""
         from moment.core.models import ClipVisibility
+
         mock_get_store.return_value = mock_store
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import list_clips
+
         list_clips(visibility="public")
         call_kwargs = mock_store.list_clips.call_args.kwargs
         assert call_kwargs["visibility"] == ClipVisibility.PUBLIC
@@ -480,6 +526,7 @@ class TestMCPVisibility:
         mock_store.list_clips.return_value = []
 
         from moment.mcp.tools import search_clips
+
         search_clips("test")
         call_kwargs = mock_store.list_clips.call_args.kwargs
         assert call_kwargs["owner_id"] == "*"
@@ -488,6 +535,7 @@ class TestMCPVisibility:
     def test_list_clips_response_includes_visibility(self, mock_get_store, mock_store):
         """list_clips response includes visibility field."""
         from moment.core.models import ClipVisibility
+
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="vis-clip",
@@ -502,6 +550,7 @@ class TestMCPVisibility:
         mock_store.list_clips.return_value = [clip]
 
         from moment.mcp.tools import list_clips
+
         result = list_clips()
         assert len(result) == 1
         assert result[0]["visibility"] == "public"
@@ -510,6 +559,7 @@ class TestMCPVisibility:
     def test_search_clips_response_includes_visibility(self, mock_get_store, mock_store):
         """search_clips response includes visibility field."""
         from moment.core.models import ClipVisibility
+
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="srch-vis",
@@ -524,9 +574,11 @@ class TestMCPVisibility:
         mock_store.list_clips.return_value = [clip]
 
         from moment.mcp.tools import search_clips
+
         result = search_clips("sv")
         assert len(result) == 1
         assert result[0]["visibility"] == "unlisted"
+
 
 class TestMCPScopedTokens:
     """Tests for scoped token enforcement."""
@@ -539,6 +591,7 @@ class TestMCPScopedTokens:
     def test_enqueue_encode_rejected_for_readonly(self, mock_check, mock_get_store, mock_store):
         """enqueue_encode rejects read-only tokens."""
         from moment.mcp.tools import enqueue_encode
+
         result = enqueue_encode("some-id")
         assert "error" in result
         assert "mutation" in result["error"].lower()
@@ -560,8 +613,10 @@ class TestMCPScopedTokens:
         mock_store.get_clip.return_value = clip
 
         from moment.mcp.tools import enqueue_encode
+
         result = enqueue_encode("enc-id")
         assert result["status"] == "queued"
+
 
 class TestPersistentRateLimit:
     """Tests for persistent SQLite-based rate limiting."""
@@ -573,6 +628,7 @@ class TestPersistentRateLimit:
         mock_store.check_persistent_rate.return_value = None
 
         from moment.mcp.tools import _check_webhook_rate_limit
+
         result = _check_webhook_rate_limit("test-hash")
         assert result is None
         mock_store.check_persistent_rate.assert_called_once_with("webhook_test:test-hash", 60.0)
@@ -584,7 +640,6 @@ class TestPersistentRateLimit:
         mock_store.check_persistent_rate.return_value = "Please wait 55 seconds"
 
         from moment.mcp.tools import _check_webhook_rate_limit
+
         result = _check_webhook_rate_limit("blocked")
         assert "wait" in result.lower()
-
-

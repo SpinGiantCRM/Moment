@@ -64,14 +64,14 @@ class RetentionManager:
         trash_dir: str | None = None,
     ) -> None:
         """Args:
-            store: The application store.
-            source_max_age_days: Trash source MKVs older than this.
-            encoded_max_age_days: Trash encoded MP4s older than this.
-            cloud_size_limit_bytes: Cloud storage limit (FIFO eviction).
-            on_purged: Called as ``on_purged(count, freed_bytes)`` after purge.
-            config: Optional Config for reading ``retention_trash_days``
-                and ``retention_remove_corrupt`` settings.
-            trash_dir: Override trash directory (useful for testing).
+        store: The application store.
+        source_max_age_days: Trash source MKVs older than this.
+        encoded_max_age_days: Trash encoded MP4s older than this.
+        cloud_size_limit_bytes: Cloud storage limit (FIFO eviction).
+        on_purged: Called as ``on_purged(count, freed_bytes)`` after purge.
+        config: Optional Config for reading ``retention_trash_days``
+            and ``retention_remove_corrupt`` settings.
+        trash_dir: Override trash directory (useful for testing).
         """
         self._store = store
         self._source_max_age = source_max_age_days
@@ -86,9 +86,7 @@ class RetentionManager:
         self._watchdog_thread: threading.Thread | None = None
 
         # Cache config values at init time (avoid repeated SQLite reads)
-        self._trash_days: int = (
-            config.get("retention_trash_days", 30) if config else 30
-        )
+        self._trash_days: int = config.get("retention_trash_days", 30) if config else 30
         self._remove_corrupt: bool = (
             config.get("retention_remove_corrupt", False) if config else False
         )
@@ -189,7 +187,8 @@ class RetentionManager:
                 logger.warning(
                     "RetentionManager timer appears stuck — no tick for %.1fs "
                     "(expected interval %.1fs)",
-                    elapsed, RETENTION_INTERVAL,
+                    elapsed,
+                    RETENTION_INTERVAL,
                 )
 
     def _on_tick(self) -> None:
@@ -211,9 +210,7 @@ class RetentionManager:
         batch_size = 500
 
         while True:
-            rows = self._store.list_old_source_clips(
-                cutoff_iso, limit=batch_size, offset=offset
-            )
+            rows = self._store.list_old_source_clips(cutoff_iso, limit=batch_size, offset=offset)
             if not rows:
                 break
             offset += batch_size
@@ -235,12 +232,14 @@ class RetentionManager:
                         recorded_dt = datetime.fromisoformat(row["recorded_at"])
                         logger.debug(
                             "Retention: trashed source %s (%s old)",
-                            row["stem"], _age_str(recorded_dt),
+                            row["stem"],
+                            _age_str(recorded_dt),
                         )
                     except OSError as exc:
                         logger.debug(
                             "Failed to trash source file %s: %s",
-                            row["stem"], exc,
+                            row["stem"],
+                            exc,
                         )
 
         return purged, freed
@@ -255,9 +254,7 @@ class RetentionManager:
         batch_size = 500
 
         while True:
-            rows = self._store.list_old_encoded_clips(
-                cutoff_iso, limit=batch_size, offset=offset
-            )
+            rows = self._store.list_old_encoded_clips(cutoff_iso, limit=batch_size, offset=offset)
             if not rows:
                 break
             offset += batch_size
@@ -279,12 +276,14 @@ class RetentionManager:
                         recorded_dt = datetime.fromisoformat(row["recorded_at"])
                         logger.debug(
                             "Retention: trashed encoded %s (%s old)",
-                            row["stem"], _age_str(recorded_dt),
+                            row["stem"],
+                            _age_str(recorded_dt),
                         )
                     except OSError as exc:
                         logger.debug(
                             "Failed to trash encoded file %s: %s",
-                            row["stem"], exc,
+                            row["stem"],
+                            exc,
                         )
 
         return purged, freed
@@ -331,9 +330,7 @@ class RetentionManager:
         to_delete: list[str] = []
 
         while total_size > self._cloud_limit:
-            rows = self._store.list_uploaded_clips_oldest_first(
-                limit=batch_size, offset=offset
-            )
+            rows = self._store.list_uploaded_clips_oldest_first(limit=batch_size, offset=offset)
             if not rows:
                 break
             offset += batch_size
@@ -351,7 +348,8 @@ class RetentionManager:
                 purged += 1
                 logger.debug(
                     "Retention: cloud-FIFO purged %s (%s)",
-                    row["stem"], human_size(row["file_size"]),
+                    row["stem"],
+                    human_size(row["file_size"]),
                 )
 
         if to_delete:
@@ -363,6 +361,7 @@ class RetentionManager:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _age_str(dt: datetime) -> str:
     """Human-readable age string, e.g. ``"12d"``."""

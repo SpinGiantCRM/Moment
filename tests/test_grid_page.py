@@ -8,6 +8,7 @@ import pytest
 from PyQt6.QtCore import QSize
 
 from moment.ui.pages.grid_page import ClipFilterProxyModel, GridPage
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -16,6 +17,7 @@ def _cleanup_grid_page(page: GridPage) -> None:
 
     page.close()
     page.deleteLater()
+
 
 class TestClipFilterProxyModel:
     """Tests for the filter/sort proxy model."""
@@ -32,6 +34,7 @@ class TestClipFilterProxyModel:
         model = ClipFilterProxyModel()
         model.set_filter_text("test")
         assert model._filter_text == "test"
+
 
 class TestGridPageInit:
     """Tests for GridPage construction."""
@@ -66,6 +69,7 @@ class TestGridPageInit:
         assert page._batch_bar.isHidden()
         _cleanup_grid_page(page)
 
+
 class TestGridPageRefresh:
     """Tests for refresh() method."""
 
@@ -87,9 +91,12 @@ class TestGridPageRefresh:
         from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 
         clip = Clip(
-            id="grid-1", stem="test_clip",
+            id="grid-1",
+            stem="test_clip",
             source_path=__import__("pathlib").Path("/tmp/test.mkv"),
-            duration=30.0, title="Test Clip", game="CS2",
+            duration=30.0,
+            title="Test Clip",
+            game="CS2",
             status=ClipStatus.DONE,
             visibility=ClipVisibility.PRIVATE,
             clip_type=ClipType.VIDEO,
@@ -97,12 +104,17 @@ class TestGridPageRefresh:
         store = MagicMock()
         store.list_clips.return_value = [clip]
 
-        with patch("moment.ui.widgets.clip_delegate.ClipDelegate.build_item_data",
-                   return_value={"id": "grid-1", "title": "Test Clip"}), \
-             patch("moment.ui.widgets.clip_delegate.ClipDelegate.paint",
-                   return_value=None), \
-             patch("moment.ui.widgets.clip_delegate.ClipDelegate.sizeHint",
-                   return_value=QSize(260, 190)):
+        with (
+            patch(
+                "moment.ui.widgets.clip_delegate.ClipDelegate.build_item_data",
+                return_value={"id": "grid-1", "title": "Test Clip"},
+            ),
+            patch("moment.ui.widgets.clip_delegate.ClipDelegate.paint", return_value=None),
+            patch(
+                "moment.ui.widgets.clip_delegate.ClipDelegate.sizeHint",
+                return_value=QSize(260, 190),
+            ),
+        ):
             page = GridPage(store=store)
             page._on_data_ready([clip])
             assert page._empty_widget.isHidden()
@@ -125,5 +137,3 @@ class TestGridPageRefresh:
         page = GridPage()
         page.set_search_text("test")
         _cleanup_grid_page(page)
-
-

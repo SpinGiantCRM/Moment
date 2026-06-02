@@ -60,10 +60,10 @@ class Screenshot:
         on_captured: Callable[[Path], None] | None = None,
     ) -> None:
         """Args:
-            output_dir: Directory for screenshot output.
-                Defaults to ``~/Pictures/Moment``.
-            on_captured: Called as ``callback(path)`` when a screenshot
-                is captured and post-processed.
+        output_dir: Directory for screenshot output.
+            Defaults to ``~/Pictures/Moment``.
+        on_captured: Called as ``callback(path)`` when a screenshot
+            is captured and post-processed.
         """
         self._output_dir = ensure_dir(output_dir or SCREENSHOT_DIR)
         self._on_captured = on_captured
@@ -109,10 +109,14 @@ class Screenshot:
         cmd = [
             "ffmpeg",
             "-y",
-            "-f", "x11grab",
-            "-video_size", resolution,
-            "-i", display,
-            "-vframes", "1",
+            "-f",
+            "x11grab",
+            "-video_size",
+            resolution,
+            "-i",
+            display,
+            "-vframes",
+            "1",
             str(output),
         ]
 
@@ -181,9 +185,7 @@ class Screenshot:
         """
         if re.fullmatch(r"^:[0-9]+(\.[0-9]+)?$", value):
             return value
-        logger.warning(
-            "Invalid DISPLAY value %r — falling back to :0.0", value
-        )
+        logger.warning("Invalid DISPLAY value %r — falling back to :0.0", value)
         return ":0.0"
 
     @staticmethod
@@ -281,7 +283,9 @@ class Screenshot:
                 else:
                     logger.debug(
                         "%s failed (code=%d): %s",
-                        name, result.returncode, result.stderr.strip()[-200:],
+                        name,
+                        result.returncode,
+                        result.stderr.strip()[-200:],
                     )
             except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
                 logger.debug("%s unavailable: %s", name, exc)
@@ -292,7 +296,9 @@ class Screenshot:
             logger.info("Wayland screenshot: trying xdg-desktop-portal via dbus-send")
             result = _command.run(
                 [
-                    "dbus-send", "--session", "--type=method_call",
+                    "dbus-send",
+                    "--session",
+                    "--type=method_call",
                     "--print-reply",
                     "--dest=org.freedesktop.portal.Desktop",
                     "/org/freedesktop/portal/desktop",
@@ -333,8 +339,10 @@ class Screenshot:
         cmd = [
             "ffmpeg",
             "-y",
-            "-i", str(path),
-            "-vf", f"crop={w}:{h}:{x}:{y}",
+            "-i",
+            str(path),
+            "-vf",
+            f"crop={w}:{h}:{x}:{y}",
             str(output),
         ]
         result = run_sandboxed(cmd)
@@ -355,9 +363,12 @@ class Screenshot:
             cmd = [
                 "ffmpeg",
                 "-y",
-                "-i", str(source),
-                "-vf", "scale=320:-1",
-                "-q:v", "2",
+                "-i",
+                str(source),
+                "-vf",
+                "scale=320:-1",
+                "-q:v",
+                "2",
                 str(output),
             ]
             result = run_sandboxed(cmd, timeout=10)

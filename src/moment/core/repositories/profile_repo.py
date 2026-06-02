@@ -73,9 +73,7 @@ class ProfileRepository(BaseRepository):
     # ------------------------------------------------------------------
 
     def save_game_profile(self, profile: GameProfile) -> GameProfile:
-        review_card_json = (
-            json_dumps(profile.review_card.__dict__) if profile.review_card else None
-        )
+        review_card_json = json_dumps(profile.review_card.__dict__) if profile.review_card else None
         with self.tx() as cur:
             cur.execute(
                 """INSERT OR REPLACE INTO game_profiles
@@ -85,13 +83,18 @@ class ProfileRepository(BaseRepository):
                     min_duration, post_capture_action)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    profile.id, profile.game_name, profile.display_name,
+                    profile.id,
+                    profile.game_name,
+                    profile.display_name,
                     profile.replay_duration,
                     json_dumps(profile.audio_config),
                     profile.capture_fps,
-                    profile.encode_timing, profile.quality_preset,
-                    int(profile.pause_encode), int(profile.pause_thumbnail),
-                    int(profile.auto_tag), int(profile.auto_open_editor),
+                    profile.encode_timing,
+                    profile.quality_preset,
+                    int(profile.pause_encode),
+                    int(profile.pause_thumbnail),
+                    int(profile.auto_tag),
+                    int(profile.auto_open_editor),
                     review_card_json,
                     profile.min_duration,
                     profile.post_capture_action,
@@ -147,23 +150,25 @@ class ProfileRepository(BaseRepository):
                 rc_data = json_loads(r["review_card"])
                 if isinstance(rc_data, dict):
                     review_card = ReviewCardConfig(**rc_data)
-            profiles.append(GameProfile(
-                id=r["id"],
-                game_name=r["game_name"],
-                display_name=r["display_name"],
-                replay_duration=r["replay_duration"],
-                audio_config=json_loads(r["audio_config"]),
-                capture_fps=r["capture_fps"],
-                encode_timing=r["encode_timing"],
-                quality_preset=r["quality_preset"],
-                pause_encode=bool(r["pause_encode"]),
-                pause_thumbnail=bool(r["pause_thumbnail"]),
-                auto_tag=bool(r["auto_tag"]),
-                auto_open_editor=bool(r["auto_open_editor"]),
-                review_card=review_card,
-                min_duration=r["min_duration"],
-                post_capture_action=r["post_capture_action"] or "card",
-            ))
+            profiles.append(
+                GameProfile(
+                    id=r["id"],
+                    game_name=r["game_name"],
+                    display_name=r["display_name"],
+                    replay_duration=r["replay_duration"],
+                    audio_config=json_loads(r["audio_config"]),
+                    capture_fps=r["capture_fps"],
+                    encode_timing=r["encode_timing"],
+                    quality_preset=r["quality_preset"],
+                    pause_encode=bool(r["pause_encode"]),
+                    pause_thumbnail=bool(r["pause_thumbnail"]),
+                    auto_tag=bool(r["auto_tag"]),
+                    auto_open_editor=bool(r["auto_open_editor"]),
+                    review_card=review_card,
+                    min_duration=r["min_duration"],
+                    post_capture_action=r["post_capture_action"] or "card",
+                )
+            )
         return profiles
 
     def delete_game_profile(self, game_name: str) -> None:

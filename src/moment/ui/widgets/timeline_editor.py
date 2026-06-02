@@ -77,8 +77,10 @@ class TimelineEditor(QWidget):
         """Return the drawable area (with padding for handles)."""
         margin = _HANDLE_W
         return QRectF(
-            margin, self.height() / 2 - _BAR_H / 2,
-            self.width() - 2 * margin, _BAR_H,
+            margin,
+            self.height() / 2 - _BAR_H / 2,
+            self.width() - 2 * margin,
+            _BAR_H,
         )
 
     def _pos_to_frac(self, x: float) -> float:
@@ -136,7 +138,8 @@ class TimelineEditor(QWidget):
             p.setBrush(QColor(color))
             p.drawRoundedRect(
                 QRectF(hx - _HANDLE_W / 2, r.y() - 2, _HANDLE_W, r.height() + 4),
-                2, 2,
+                2,
+                2,
             )
 
             # Glow on hover/drag
@@ -147,7 +150,8 @@ class TimelineEditor(QWidget):
                 p.setPen(glow)
                 p.drawRoundedRect(
                     QRectF(hx - _HANDLE_W / 2 - 2, r.y() - 4, _HANDLE_W + 4, r.height() + 8),
-                    3, 3,
+                    3,
+                    3,
                 )
 
         # Time labels below handles

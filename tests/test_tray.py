@@ -1,9 +1,11 @@
 """Tests for ui/tray.py — TrayIcon with dynamic context menu."""
 
 from __future__ import annotations
+
 import pytest
 
 from moment.ui.tray import TrayIcon
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -28,6 +30,7 @@ class TestTrayIconInit:
     def test_has_icon(self, qapp) -> None:
         tray = TrayIcon()
         assert not tray._icon.isNull()
+
 
 class TestTrayIconSignals:
     """Tests for TrayIcon signal definitions."""
@@ -61,6 +64,7 @@ class TestTrayIconSignals:
         tray.recent_clicked.emit("clip_123")
         assert called == ["clip_123"]
 
+
 class TestTrayIconStatus:
     """Tests for status updates."""
 
@@ -74,6 +78,7 @@ class TestTrayIconStatus:
         tray.update_status("Ready")
         tooltip = tray.toolTip()
         assert "Ready" in tooltip
+
 
 class TestTrayIconRecentClips:
     """Tests for recent clips management."""
@@ -95,6 +100,7 @@ class TestTrayIconRecentClips:
         tray.update_recent([])
         assert tray._recent_clips == []
 
+
 class TestTrayIconRecordingState:
     """Tests for recording state toggle."""
 
@@ -108,6 +114,7 @@ class TestTrayIconRecordingState:
         tray.set_recording(True)
         tray.set_recording(False)
         assert tray._recording is False
+
 
 class TestTrayIconMenu:
     """Tests for context menu construction."""
@@ -135,5 +142,3 @@ class TestTrayIconMenu:
         tray = TrayIcon()
         texts = [a.text() for a in tray._menu.actions() if not a.isSeparator()]
         assert any("Quit" in t for t in texts)
-
-

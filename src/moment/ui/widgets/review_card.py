@@ -53,9 +53,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _SIZE_MAP: dict[str, tuple[int, int]] = {
-    "small":  (320, 260),
+    "small": (320, 260),
     "medium": (420, 340),
-    "large":  (520, 420),
+    "large": (520, 420),
 }
 
 _OFFSET_FROM_EDGE = 24
@@ -118,7 +118,7 @@ class ClipReviewCard(QWidget):
 
         self.setStyleSheet(f"""
             ClipReviewCard {{
-                background-color: {color('--bg-surface')};
+                background-color: {color("--bg-surface")};
                 border-radius: 6px;
             }}
         """)
@@ -156,7 +156,8 @@ class ClipReviewCard(QWidget):
             pixmap = QPixmap(str(self._clip.thumb_path))
             if not pixmap.isNull():
                 scaled = pixmap.scaled(
-                    self.width() - 16, self.height() // 2,
+                    self.width() - 16,
+                    self.height() // 2,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -188,8 +189,7 @@ class ClipReviewCard(QWidget):
         if self._config.show_game_name and self._clip.game:
             game_label = QLabel(self._clip.game)
             game_label.setStyleSheet(
-                f"color: {color('--accent-blue')};"
-                " font-size: 11px; font-weight: 600;"
+                f"color: {color('--accent-blue')}; font-size: 11px; font-weight: 600;"
             )
             info_layout.addWidget(game_label)
 
@@ -212,15 +212,15 @@ class ClipReviewCard(QWidget):
             self._rename_edit.setPlaceholderText("Clip name…")
             self._rename_edit.setStyleSheet(f"""
                 QLineEdit {{
-                    background-color: {color('--bg-inset')};
-                    color: {color('--text-primary')};
-                    border: 1px solid {color('--border-menu')};
+                    background-color: {color("--bg-inset")};
+                    color: {color("--text-primary")};
+                    border: 1px solid {color("--border-menu")};
                     border-radius: 4px;
                     padding: 4px 8px;
                     font-size: 13px;
                 }}
                 QLineEdit:focus {{
-                    border-color: {color('--accent-blue')};
+                    border-color: {color("--accent-blue")};
                 }}
             """)
             self._rename_edit.returnPressed.connect(self._on_rename)
@@ -312,8 +312,9 @@ class ClipReviewCard(QWidget):
         global _visible_cards
         # Clean up destroyed cards (skip those not yet shown)
         _visible_cards = [
-            c for c in _visible_cards
-            if c.isVisible() or (hasattr(c, '_anim') and c._anim is not None)
+            c
+            for c in _visible_cards
+            if c.isVisible() or (hasattr(c, "_anim") and c._anim is not None)
         ]
 
         if len(_visible_cards) >= _MAX_VISIBLE:

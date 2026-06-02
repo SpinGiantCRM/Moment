@@ -39,7 +39,7 @@ class GameProfileManager:
 
     def __init__(self, store: Store) -> None:
         """Args:
-            store: The application store instance.
+        store: The application store instance.
         """
         self._store = store
 
@@ -143,21 +143,23 @@ class GameProfileManager:
             * ``"editor"`` — open directly in the editor.
         """
         threshold = (
-            min_duration_override
-            if min_duration_override is not None
-            else profile.min_duration
+            min_duration_override if min_duration_override is not None else profile.min_duration
         )
 
         if clip_duration < threshold:
             logger.debug(
                 "Clip too short for %s (%.1fs < %ds threshold) → discard",
-                profile.game_name, clip_duration, threshold,
+                profile.game_name,
+                clip_duration,
+                threshold,
             )
             return "discard"
 
         action = profile.post_capture_action
         logger.debug(
             "Game exit for %s: duration=%.1fs, action=%s",
-            profile.game_name, clip_duration, action,
+            profile.game_name,
+            clip_duration,
+            action,
         )
         return action

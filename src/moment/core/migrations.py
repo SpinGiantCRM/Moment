@@ -75,8 +75,9 @@ def migrate_from_json(store: "Store", old_path: Path) -> int:
                 id=entry.get("id", str(uuid.uuid4())),
                 stem=entry.get("stem", ""),
                 source_path=Path(entry.get("source_path", "")),
-                recorded_at=(parse_datetime(entry.get("recorded_at"))
-                             or datetime.now(timezone.utc)),
+                recorded_at=(
+                    parse_datetime(entry.get("recorded_at")) or datetime.now(timezone.utc)
+                ),
                 duration=float(entry.get("duration", 0)),
                 file_size=int(entry.get("file_size", 0)),
                 title=entry.get("title", ""),
@@ -84,10 +85,14 @@ def migrate_from_json(store: "Store", old_path: Path) -> int:
                 folder=entry.get("folder"),
                 favorite=bool(entry.get("favorite", False)),
                 status=parse_enum(
-                    entry.get("status"), ClipStatus, ClipStatus.DONE,
+                    entry.get("status"),
+                    ClipStatus,
+                    ClipStatus.DONE,
                 ),
                 visibility=parse_enum(
-                    entry.get("visibility"), ClipVisibility, ClipVisibility.PUBLIC,
+                    entry.get("visibility"),
+                    ClipVisibility,
+                    ClipVisibility.PUBLIC,
                 ),
             )
             store.insert_clip(clip)

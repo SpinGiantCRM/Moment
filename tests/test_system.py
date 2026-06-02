@@ -84,6 +84,7 @@ class TestNvidiaGPU:
 
     def test_nvidia_smi_found(self) -> None:
         import subprocess as sp_mod
+
         with (
             patch("shutil.which", return_value="/usr/bin/nvidia-smi"),
             patch("subprocess.run") as mock_run,
@@ -93,12 +94,14 @@ class TestNvidiaGPU:
             )
             # Reset cache
             import moment.utils.system as sys_mod
+
             sys_mod._nvidia_check = None
             assert is_nvidia_gpu() is True
 
     def test_nvidia_smi_not_found(self) -> None:
         with patch("shutil.which", return_value=None):
             import moment.utils.system as sys_mod
+
             sys_mod._nvidia_check = None
             assert is_nvidia_gpu() is False
 
@@ -179,9 +182,7 @@ class TestValidateArg:
         assert validate_arg("alsa_output.pci-0000_00_1f.3.analog-stereo") == (
             "alsa_output.pci-0000_00_1f.3.analog-stereo"
         )
-        assert validate_arg("Built-in Audio Analog Stereo") == (
-            "Built-in Audio Analog Stereo"
-        )
+        assert validate_arg("Built-in Audio Analog Stereo") == ("Built-in Audio Analog Stereo")
         assert validate_arg("output") == "output"
         assert validate_arg("input") == "input"
 

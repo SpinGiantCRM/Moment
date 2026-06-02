@@ -47,12 +47,12 @@ class NoiseSuppressor:
         on_complete: Callable[[str], None] | None = None,
     ) -> None:
         """Args:
-            enabled: Whether suppression is active.  Set to ``False`` to
-                skip processing without raising.
-            model_path: Path to a custom RNNoise model.  Defaults to the
-                built-in ffmpeg model.
-            on_complete: Called as ``callback(stem)`` when processing
-                finishes.
+        enabled: Whether suppression is active.  Set to ``False`` to
+            skip processing without raising.
+        model_path: Path to a custom RNNoise model.  Defaults to the
+            built-in ffmpeg model.
+        on_complete: Called as ``callback(stem)`` when processing
+            finishes.
         """
         self._enabled = enabled
         self._model_path = model_path
@@ -114,9 +114,7 @@ class NoiseSuppressor:
         try:
             self._apply_rnnoise(path, output, audio_streams)
         except subprocess.CalledProcessError as exc:
-            stderr_tail = (
-                exc.stderr.strip()[-200:] if exc.stderr else ""
-            )
+            stderr_tail = exc.stderr.strip()[-200:] if exc.stderr else ""
             raise NoiseSuppressorError(
                 f"RNNoise processing failed (code={exc.returncode}): {stderr_tail}"
             ) from exc
@@ -153,8 +151,10 @@ class NoiseSuppressor:
         result = _command.run(
             [
                 "ffprobe",
-                "-v", "quiet",
-                "-print_format", "json",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
                 "-show_streams",
                 str(path),
             ],
@@ -165,6 +165,7 @@ class NoiseSuppressor:
             return []
 
         import json
+
         data = json.loads(result.stdout)
         return [s for s in data.get("streams", []) if s.get("codec_type") == "audio"]
 
@@ -192,9 +193,7 @@ class NoiseSuppressor:
                     raise FileNotFoundError(f"RNNoise model not found: {valid_path}")
                 arnndn_filter = f"arnndn=m={valid_path}"
             except (ValueError, FileNotFoundError) as exc:
-                logger.warning(
-                    "Invalid RNNoise model path, falling back to default: %s", exc
-                )
+                logger.warning("Invalid RNNoise model path, falling back to default: %s", exc)
                 arnndn_filter = "arnndn"
         else:
             arnndn_filter = "arnndn"
@@ -203,17 +202,25 @@ class NoiseSuppressor:
         cmd = [
             "ffmpeg",
             "-y",
-            "-i", str(input_path),
+            "-i",
+            str(input_path),
             # Copy video stream
-            "-c:v", "copy",
+            "-c:v",
+            "copy",
             # Copy game audio (first audio stream)
-            "-map", "0:a:0",
-            "-c:a:0", "copy",
+            "-map",
+            "0:a:0",
+            "-c:a:0",
+            "copy",
             # Process mic audio (second audio stream) through RNNoise
-            "-map", "0:a:1",
-            "-c:a:1", "aac",
-            "-b:a:1", "96k",
-            "-af", arnndn_filter,
+            "-map",
+            "0:a:1",
+            "-c:a:1",
+            "aac",
+            "-b:a:1",
+            "96k",
+            "-af",
+            arnndn_filter,
             str(output_path),
         ]
 

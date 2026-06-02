@@ -8,13 +8,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from moment.core.screenshot import Screenshot, ScreenshotError
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def screenshot(tmp_path: Path) -> Screenshot:
     return Screenshot(output_dir=str(tmp_path / "screenshots"))
+
 
 @pytest.fixture
 def fake_screenshot(tmp_path: Path) -> Path:
@@ -24,9 +25,11 @@ def fake_screenshot(tmp_path: Path) -> Path:
     p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
     return p
 
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
+
 
 class TestInitialization:
     def test_output_dir_created(self, screenshot: Screenshot) -> None:
@@ -37,9 +40,11 @@ class TestInitialization:
             Screenshot()
             mock_ensure.assert_called_once()
 
+
 # ---------------------------------------------------------------------------
 # Fallback capture
 # ---------------------------------------------------------------------------
+
 
 class TestFallbackCapture:
     def test_capture_successful(self, screenshot: Screenshot, tmp_path: Path) -> None:
@@ -61,8 +66,10 @@ class TestFallbackCapture:
             output_file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
 
             # Patch the output path construction
-            with patch("pathlib.Path.is_file", return_value=True), \
-                 patch("pathlib.Path.stat") as mock_stat:
+            with (
+                patch("pathlib.Path.is_file", return_value=True),
+                patch("pathlib.Path.stat") as mock_stat,
+            ):
                 mock_stat.return_value.st_size = 1000
 
                 result = screenshot.capture_fallback(label="test")
@@ -104,9 +111,11 @@ class TestFallbackCapture:
             with pytest.raises(ScreenshotError, match="empty"):
                 screenshot.capture_fallback()
 
+
 # ---------------------------------------------------------------------------
 # Callbacks
 # ---------------------------------------------------------------------------
+
 
 class TestCallbacks:
     def test_on_captured_callback(self, tmp_path: Path) -> None:
@@ -159,9 +168,11 @@ class TestCallbacks:
             result = s.capture_fallback()
             assert result is not None
 
+
 # ---------------------------------------------------------------------------
 # Post-processing
 # ---------------------------------------------------------------------------
+
 
 class TestPostProcessing:
     def test_post_process_no_modifications(
@@ -174,9 +185,7 @@ class TestPostProcessing:
             result = screenshot.post_process(fake_screenshot)
             assert result == fake_screenshot
 
-    def test_post_process_with_crop(
-        self, screenshot: Screenshot, fake_screenshot: Path
-    ) -> None:
+    def test_post_process_with_crop(self, screenshot: Screenshot, fake_screenshot: Path) -> None:
         def _create_cropped_output(*args, **kwargs):
             """Create the expected _cropped.png output file."""
             cropped_path = fake_screenshot.with_stem(f"{fake_screenshot.stem}_cropped")
@@ -196,7 +205,8 @@ class TestPostProcessing:
 
             # Should have called ffmpeg for crop
             crop_calls = [
-                c for c in mock_run.call_args_list
+                c
+                for c in mock_run.call_args_list
                 if "crop=" in " ".join(str(a) for a in (c[0][0] if c[0] else []))
             ]
             assert len(crop_calls) >= 1
@@ -214,14 +224,17 @@ class TestPostProcessing:
 
             # At least one call for thumbnail (scale=320:-1)
             thumb_calls = [
-                c for c in mock_run.call_args_list
+                c
+                for c in mock_run.call_args_list
                 if "scale=320:-1" in " ".join(str(a) for a in (c[0][0] if c[0] else []))
             ]
             assert len(thumb_calls) >= 1
 
+
 # ---------------------------------------------------------------------------
 # Resolution detection
 # ---------------------------------------------------------------------------
+
 
 class TestValidateDisplay:
     def test_valid_display(self, screenshot: Screenshot) -> None:
@@ -233,6 +246,7 @@ class TestValidateDisplay:
         assert screenshot._validate_display("") == ":0.0"
         assert screenshot._validate_display("bad") == ":0.0"
         assert screenshot._validate_display("localhost:0") == ":0.0"
+
 
 class TestResolutionDetection:
     def test_detect_from_xdpyinfo(self, screenshot: Screenshot) -> None:
@@ -250,6 +264,7 @@ class TestResolutionDetection:
 
     def test_detect_from_xrandr(self, screenshot: Screenshot) -> None:
         """When xdpyinfo fails, try xrandr for primary output."""
+
         def side_effect(*args, **kwargs):
             cmd = args[0] if args else kwargs.get("args", [])
             result = MagicMock()
@@ -270,6 +285,7 @@ class TestResolutionDetection:
 
     def test_detect_from_wlr_randr(self, screenshot: Screenshot) -> None:
         """When on Wayland, try wlr-randr."""
+
         def side_effect(*args, **kwargs):
             cmd = args[0] if args else kwargs.get("args", [])
             result = MagicMock()
@@ -296,9 +312,11 @@ class TestResolutionDetection:
             res = screenshot._detect_resolution(":0.0")
             assert res == "1920x1080"
 
+
 class TestWaylandCapture:
     def test_wayland_capture_grim_success(self, screenshot: Screenshot, tmp_path: Path) -> None:
         """Wayland capture with grim succeeds."""
+
         def side_effect(*args, **kwargs):
             cmd = args[0] if args else kwargs.get("args", [])
             result = MagicMock()
@@ -335,7 +353,6 @@ class TestWaylandCapture:
         call_count = [0]
 
         def side_effect(*args, **kwargs):
-            cmd = args[0] if args else kwargs.get("args", [])
             result = MagicMock()
             call_count[0] += 1
             if call_count[0] == 1:
@@ -373,8 +390,13 @@ class TestWaylandCapture:
             with pytest.raises(ScreenshotError, match="ffmpeg not available"):
                 screenshot.capture_fallback()
 
+
 class TestCropFailure:
-    def test_crop_failure_returns_original(self, screenshot: Screenshot, fake_screenshot: Path) -> None:
+    def test_crop_failure_returns_original(
+        self,
+        screenshot: Screenshot,
+        fake_screenshot: Path,
+    ) -> None:
         """If crop ffmpeg command fails, return original path."""
         with (
             patch("subprocess.run") as mock_run,
@@ -385,5 +407,3 @@ class TestCropFailure:
 
             result = screenshot.post_process(fake_screenshot, crop=(10, 10, 100, 100))
             assert result == fake_screenshot  # Original returned
-
-

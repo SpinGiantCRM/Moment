@@ -217,7 +217,9 @@ class GifExporter(QDialog):
         """Open a save dialog to choose the output GIF path."""
         os.makedirs(os.path.dirname(self._output_path), exist_ok=True)
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save GIF As", self._output_path,
+            self,
+            "Save GIF As",
+            self._output_path,
             "GIF Images (*.gif);;All Files (*)",
         )
         if path:
@@ -254,13 +256,12 @@ class GifExporter(QDialog):
 
         # Step 1: palette generation
         cmd_palette = [
-            "ffmpeg", "-y",
-            "-i", str(self._source_path),
-            "-vf", (
-                f"fps={self._fps},"
-                f"scale={width}:{height}:"
-                "flags=lanczos,palettegen=stats_mode=diff"
-            ),
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(self._source_path),
+            "-vf",
+            (f"fps={self._fps},scale={width}:{height}:flags=lanczos,palettegen=stats_mode=diff"),
             palette_path,
         ]
         try:
@@ -273,9 +274,12 @@ class GifExporter(QDialog):
 
         # Step 2: palette use
         cmd_gif = [
-            "ffmpeg", "-y",
-            "-i", str(self._source_path),
-            "-i", palette_path,
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(self._source_path),
+            "-i",
+            palette_path,
             "-lavfi",
             f"fps={self._fps},scale={width}:{height}:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5",
             str(self._output_path),
@@ -310,4 +314,3 @@ class GifExporter(QDialog):
         """Cancel any running export on close."""
         self._running = False
         super().closeEvent(event)
-

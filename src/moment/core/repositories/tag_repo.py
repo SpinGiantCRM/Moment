@@ -50,9 +50,7 @@ class TagRepository(BaseRepository):
                     "INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)",
                     (str(uuid.uuid4()), name),
                 )
-                tag_row = cur.execute(
-                    "SELECT id FROM tags WHERE name = ?", (name,)
-                ).fetchone()
+                tag_row = cur.execute("SELECT id FROM tags WHERE name = ?", (name,)).fetchone()
                 if tag_row:
                     cur.execute(
                         "INSERT OR IGNORE INTO clip_tags (clip_id, tag_id) VALUES (?, ?)",

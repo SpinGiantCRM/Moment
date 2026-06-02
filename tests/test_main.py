@@ -54,6 +54,7 @@ class TestMainModule:
 
     def test_main_importable(self) -> None:
         from moment.__main__ import main as entry_main
+
         assert callable(entry_main)
 
 

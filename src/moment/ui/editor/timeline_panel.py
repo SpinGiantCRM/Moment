@@ -98,10 +98,7 @@ class _TimelineWidget(QWidget):
 
     @property
     def segments(self) -> list[SegmentEdit]:
-        return [
-            SegmentEdit(start=s.start, end=s.end, speed=s.speed)
-            for s in self._segments
-        ]
+        return [SegmentEdit(start=s.start, end=s.end, speed=s.speed) for s in self._segments]
 
     @property
     def split_points(self) -> list[float]:
@@ -160,7 +157,7 @@ class _TimelineWidget(QWidget):
                     speed=seg.speed,
                     color=_SEGMENT_COLORS[(len(self._segments) + 1) % len(_SEGMENT_COLORS)],
                 )
-                self._segments[i:i + 1] = [left, right]
+                self._segments[i : i + 1] = [left, right]
                 self._split_points.append(position)
                 self._split_points.sort()
                 self.timeline_changed.emit()
@@ -267,16 +264,22 @@ class _TimelineWidget(QWidget):
             clr = "#f87171" if (name == "trim_in" and val >= self._trim_end) else trim_colors[name]
             p.setBrush(QColor(clr))
             p.drawRoundedRect(
-                QRectF(hx - _HANDLE_W // 2, r.y() - 4, _HANDLE_W, r.height() + 8), 3, 3,
+                QRectF(hx - _HANDLE_W // 2, r.y() - 4, _HANDLE_W, r.height() + 8),
+                3,
+                3,
             )
             if is_active:
                 p.setPen(QPen(QColor(clr), 2))
                 p.setBrush(Qt.BrushStyle.NoBrush)
                 p.drawRoundedRect(
                     QRectF(
-                        hx - _HANDLE_W // 2 - 2, r.y() - 6,
-                        _HANDLE_W + 4, r.height() + 12,
-                    ), 4, 4,
+                        hx - _HANDLE_W // 2 - 2,
+                        r.y() - 6,
+                        _HANDLE_W + 4,
+                        r.height() + 12,
+                    ),
+                    4,
+                    4,
                 )
 
         # Time labels
@@ -391,9 +394,7 @@ class _TimelineWidget(QWidget):
                 if old.start <= s < old.end:
                     speed = old.speed
                     break
-            new_segments.append(
-                _Segment(s, e, speed, _SEGMENT_COLORS[i % len(_SEGMENT_COLORS)])
-            )
+            new_segments.append(_Segment(s, e, speed, _SEGMENT_COLORS[i % len(_SEGMENT_COLORS)]))
         self._segments = new_segments
 
 

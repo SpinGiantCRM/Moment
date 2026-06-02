@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 # Optional python-magic for MIME type detection
 try:
     import magic
+
     _HAS_MAGIC = True
 except ImportError:
     _HAS_MAGIC = False
@@ -70,8 +71,8 @@ class ImportExport:
 
     def __init__(self, store: Store, *, thumbnailer: Thumbnailer | None = None) -> None:
         """Args:
-            store: The application store instance.
-            thumbnailer: Optional Thumbnailer instance (created if not provided).
+        store: The application store instance.
+        thumbnailer: Optional Thumbnailer instance (created if not provided).
         """
         self._store = store
         self._thumbnailer = thumbnailer
@@ -143,7 +144,8 @@ class ImportExport:
 
             # Copy to temp file first, then atomic rename after validation
             fd, tmp_name = tempfile.mkstemp(
-                dir=str(dest_dir), suffix=".tmp",
+                dir=str(dest_dir),
+                suffix=".tmp",
             )
             os.close(fd)
             tmp_path = Path(tmp_name)
@@ -204,7 +206,8 @@ class ImportExport:
         if fps == 0.0:
             fps = 30.0
             logger.debug(
-                "parse_fps returned 0.0 for %s — falling back to 30fps", stem,
+                "parse_fps returned 0.0 for %s — falling back to 30fps",
+                stem,
             )
         resolution = (video_stream.get("width", 0), video_stream.get("height", 0))
 
@@ -343,6 +346,7 @@ class ImportExport:
         # If a Config is available, include its encode + recordings paths
         try:
             from moment.core.store import _get_config
+
             cfg = _get_config()
             if cfg is not None:
                 for key in ("encode_dir", "recordings_dir"):
@@ -427,4 +431,3 @@ class ImportExport:
         raise ClipImportError(
             f"Not a recognised video or audio file: {path.name} (MIME: {mime_type})"
         )
-

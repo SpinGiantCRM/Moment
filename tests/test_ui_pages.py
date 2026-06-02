@@ -16,18 +16,18 @@ import pytest
 from PyQt6.QtCore import Qt
 
 from moment.core.models import Clip, ClipStatus
+
 pytestmark = [pytest.mark.gui]
 
 
 @pytest.fixture
-
 def mock_store() -> MagicMock:
     """Return a mocked Store with basic clip data."""
     store = MagicMock()
     store.list_clips.return_value = [
         Clip(
             id=f"c{i}",
-            stem=f"2026-05-{i+1:02d}_12-00-00",
+            stem=f"2026-05-{i + 1:02d}_12-00-00",
             source_path=Path(f"/tmp/clip{i}.mkv"),
             duration=30.0 + i,
             file_size=10_000_000 + i * 100,
@@ -41,9 +41,11 @@ def mock_store() -> MagicMock:
     ]
     return store
 
+
 # ---------------------------------------------------------------------------
 # GridPage
 # ---------------------------------------------------------------------------
+
 
 class TestGridPage:
     def test_creates_without_crash(self, qapp) -> None:
@@ -67,9 +69,12 @@ class TestGridPage:
         from moment.core.models import Clip, ClipStatus
 
         clip = Clip(
-            id="test-id", stem="test_clip",
+            id="test-id",
+            stem="test_clip",
             source_path=__import__("pathlib").Path("/tmp/test.mkv"),
-            duration=30.0, title="Test Clip", game="CS2",
+            duration=30.0,
+            title="Test Clip",
+            game="CS2",
             status=ClipStatus.DONE,
         )
 
@@ -154,9 +159,11 @@ class TestGridPage:
         page.close()
         page.deleteLater()
 
+
 # ---------------------------------------------------------------------------
 # RecordingPage
 # ---------------------------------------------------------------------------
+
 
 class TestRecordingPage:
     def test_creates_in_ready_state(self, qapp) -> None:
@@ -267,9 +274,11 @@ class TestRecordingPage:
         dot.close()
         dot.deleteLater()
 
+
 # ---------------------------------------------------------------------------
 # ClipFilterProxyModel
 # ---------------------------------------------------------------------------
+
 
 class TestClipFilterProxyModel:
     def test_creates(self, qapp) -> None:
@@ -300,5 +309,3 @@ class TestClipFilterProxyModel:
         model = ClipFilterProxyModel()
         model.set_sort_column("-file_size")
         assert model._sort_column == "-file_size"
-
-

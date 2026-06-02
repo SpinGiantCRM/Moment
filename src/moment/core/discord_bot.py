@@ -112,7 +112,6 @@ def _fmt_size(n_bytes: int) -> str:
 # ---------------------------------------------------------------------------
 
 if _DISCORD_AVAILABLE:
-
     # -- Auth helpers ---------------------------------------------------------
 
     def _get_allowed_roles(store: Store) -> set[str]:
@@ -144,9 +143,7 @@ if _DISCORD_AVAILABLE:
                     # No roles configured → allow all (backward compat)
                     return await func(interaction, *args, **kwargs)
 
-                user_roles = {
-                    r.name for r in getattr(interaction.user, "roles", [])
-                }
+                user_roles = {r.name for r in getattr(interaction.user, "roles", [])}
                 if not allowed & user_roles:
                     await interaction.response.send_message(
                         "❌ You don't have permission to use this command.",
@@ -166,9 +163,7 @@ if _DISCORD_AVAILABLE:
     class _ClipBotClient(discord.Client):
         """discord.py Client subclass with slash commands for clip queries."""
 
-        def __init__(
-            self, store: Store, *, intents: discord.Intents | None = None
-        ) -> None:
+        def __init__(self, store: Store, *, intents: discord.Intents | None = None) -> None:
             intents = intents or discord.Intents.default()
             super().__init__(intents=intents)
             self._store = store
@@ -208,9 +203,7 @@ if _DISCORD_AVAILABLE:
                 visibility=ClipVisibility.PUBLIC,
             )
             if not clips:
-                await interaction.response.send_message(
-                    "📭 No clips yet!", ephemeral=True
-                )
+                await interaction.response.send_message("📭 No clips yet!", ephemeral=True)
                 return
 
             lines: list[str] = [f"**Last {len(clips)} clip(s):**"]
@@ -274,13 +267,14 @@ if _DISCORD_AVAILABLE:
             """Search for PUBLIC + UNLISTED clips by title, game, or tag."""
             owner_id = _get_caller_id(interaction)
             clips = store.list_clips(
-                search=query, game=game, tag=tag, limit=10,
+                search=query,
+                game=game,
+                tag=tag,
+                limit=10,
                 owner_id=owner_id,
             )
             if not clips:
-                await interaction.response.send_message(
-                    "🔍 No clips found.", ephemeral=True
-                )
+                await interaction.response.send_message("🔍 No clips found.", ephemeral=True)
                 return
 
             lines = [f"**🔍 Found {len(clips)} clip(s):**"]
@@ -323,9 +317,8 @@ if _DISCORD_AVAILABLE:
                 return
 
             # Visibility enforcement — deny by default when ownership is ambiguous
-            if (
-                clip.visibility == ClipVisibility.PRIVATE
-                and (not clip.discord_user_id or clip.discord_user_id != owner_id)
+            if clip.visibility == ClipVisibility.PRIVATE and (
+                not clip.discord_user_id or clip.discord_user_id != owner_id
             ):
                 await interaction.response.send_message(
                     f"❌ Clip `{clip_id}` not found.", ephemeral=True
@@ -363,7 +356,7 @@ if _DISCORD_AVAILABLE:
             else:
                 embed.add_field(
                     name="URL",
-                    value='Use `/clip <id> --include-url` for URL',
+                    value="Use `/clip <id> --include-url` for URL",
                     inline=False,
                 )
         if clip.tags:
@@ -387,6 +380,7 @@ else:
     def _require_role(store: Store):
         def decorator(func):
             return func
+
         return decorator
 
     def _get_caller_id(interaction: Any = None) -> str:
@@ -412,9 +406,7 @@ class DiscordBot:
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._running = False
-        self._auto_start_mode: str = config.get(
-            "discord_bot_auto_start", AUTO_START_DISABLED
-        )
+        self._auto_start_mode: str = config.get("discord_bot_auto_start", AUTO_START_DISABLED)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -495,9 +487,7 @@ class DiscordBot:
             return
 
         if mode == AUTO_START_AUTO_DELAYED:
-            logger.info(
-                "Discord bot auto-start delayed (%ds)", _AUTO_START_DELAY_SECONDS
-            )
+            logger.info("Discord bot auto-start delayed (%ds)", _AUTO_START_DELAY_SECONDS)
             timer = threading.Timer(_AUTO_START_DELAY_SECONDS, self.start)
             timer.daemon = True
             timer.start()
@@ -544,12 +534,8 @@ class DiscordBot:
                 color=discord.Color.green(),
                 timestamp=clip.created_at,
             )
-            embed.add_field(
-                name="Duration", value=_fmt_duration(clip.duration), inline=True
-            )
-            embed.add_field(
-                name="Size", value=_fmt_size(clip.file_size), inline=True
-            )
+            embed.add_field(name="Duration", value=_fmt_duration(clip.duration), inline=True)
+            embed.add_field(name="Size", value=_fmt_size(clip.file_size), inline=True)
             if clip.r2_url and webhook.include_clip_url:
                 embed.add_field(name="Link", value=clip.r2_url, inline=False)
             if clip.tags:

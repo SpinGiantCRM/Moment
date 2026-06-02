@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,15 +9,16 @@ import pytest
 
 from moment.core.gsr_watcher import GSRWatcher
 from tests.conftest import wait_until
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def watcher(tmp_path: Path) -> GSRWatcher:
     d = tmp_path / "gsr_output"
     d.mkdir()
     return GSRWatcher(output_dir=str(d))
+
 
 class TestInitialization:
     def test_not_running_initially(self, watcher: GSRWatcher) -> None:
@@ -34,8 +34,10 @@ class TestInitialization:
 
     def test_poll_interval_default(self) -> None:
         from moment.core.gsr_watcher import _POLL_INTERVAL
+
         w = GSRWatcher(output_dir="/tmp")
         assert w._poll_interval == _POLL_INTERVAL
+
 
 class TestStartStop:
     def test_start_seeds_known_files(self, tmp_path: Path) -> None:
@@ -61,15 +63,23 @@ class TestStartStop:
         w.stop()
         assert w._thread is None or not w._thread.is_alive()
 
+
 class TestPollingLoop:
     def test_detects_new_file(self, tmp_path: Path) -> None:
         detected: list[Path] = []
         d = tmp_path / "poll_out"
         d.mkdir()
-        w = GSRWatcher(output_dir=str(d), on_new_clip=lambda p: detected.append(p), poll_interval=0.1)
+        w = GSRWatcher(
+            output_dir=str(d),
+            on_new_clip=lambda p: detected.append(p),
+            poll_interval=0.1,
+        )
         w.start()
         (d / "new_clip.mkv").touch()
-        wait_until(lambda: any("new_clip" in str(p) for p in detected), timeout=2.0)
+        wait_until(
+            lambda: any("new_clip" in str(p) for p in detected),
+            timeout=2.0,
+        )
         w.stop()
         assert any("new_clip" in str(p) for p in detected)
 
@@ -77,7 +87,11 @@ class TestPollingLoop:
         detected: list[Path] = []
         d = tmp_path / "cb_out"
         d.mkdir()
-        w = GSRWatcher(output_dir=str(d), on_new_clip=lambda p: detected.append(p), poll_interval=0.1)
+        w = GSRWatcher(
+            output_dir=str(d),
+            on_new_clip=lambda p: detected.append(p),
+            poll_interval=0.1,
+        )
         w.start()
         (d / "replay.mkv").touch()
         wait_until(lambda: len(detected) >= 1, timeout=2.0)
@@ -88,13 +102,18 @@ class TestPollingLoop:
         detected: list[Path] = []
         d = tmp_path / "nonmkv"
         d.mkdir()
-        w = GSRWatcher(output_dir=str(d), on_new_clip=lambda p: detected.append(p), poll_interval=0.1)
+        w = GSRWatcher(
+            output_dir=str(d),
+            on_new_clip=lambda p: detected.append(p),
+            poll_interval=0.1,
+        )
         w.start()
         (d / "notes.txt").touch()
         # Non-.mkv files are ignored — we need one poll cycle to confirm no
         # detection.  No positive condition exists (we're verifying absence),
         # so a brief sleep is the simplest reliable synchronisation.
         import time as _time
+
         _time.sleep(0.3)
         w.stop()
         assert len(detected) == 0
@@ -111,27 +130,33 @@ class TestPollingLoop:
         # No positive predicate exists (the callback raises internally),
         # so wait one poll cycle to confirm the exception is handled.
         import time as _time
+
         _time.sleep(0.3)
         w.stop()
         # Should not raise
+
 
 class TestFileTracking:
     def test_fires_once_per_file(self, tmp_path: Path) -> None:
         detected: list[Path] = []
         d = tmp_path / "once"
         d.mkdir()
-        w = GSRWatcher(output_dir=str(d), on_new_clip=lambda p: detected.append(p), poll_interval=0.1)
+        w = GSRWatcher(
+            output_dir=str(d),
+            on_new_clip=lambda p: detected.append(p),
+            poll_interval=0.1,
+        )
         w.start()
         f = d / "unique.mkv"
         f.touch()
         # Wait for at least one detection, then two poll cycles to ensure
         # the file is tracked and not re-detected
-        wait_until(lambda: len([p for p in detected if p.name == "unique.mkv"]) >= 1,
-                   timeout=2.0)
+        wait_until(lambda: len([p for p in detected if p.name == "unique.mkv"]) >= 1, timeout=2.0)
         w.stop()
         # File should only be detected once
         mkv_detected = [p for p in detected if p.name == "unique.mkv"]
         assert len(mkv_detected) == 1
+
 
 class TestInotifyFallback:
     def test_poll_fallback_when_inotify_unavailable(self, tmp_path: Path) -> None:
@@ -139,11 +164,13 @@ class TestInotifyFallback:
             d = tmp_path / "fallback"
             d.mkdir()
             detected: list[Path] = []
-            w = GSRWatcher(output_dir=str(d), on_new_clip=lambda p: detected.append(p), poll_interval=0.1)
+            w = GSRWatcher(
+                output_dir=str(d),
+                on_new_clip=lambda p: detected.append(p),
+                poll_interval=0.1,
+            )
             w.start()
             (d / "fallback_test.mkv").touch()
             wait_until(lambda: len(detected) >= 1, timeout=2.0)
             w.stop()
             assert len(detected) >= 1
-
-

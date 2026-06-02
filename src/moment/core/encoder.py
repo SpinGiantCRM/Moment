@@ -45,8 +45,7 @@ _DEFAULT_ENCODE_DIR = os.path.expanduser("~/.local/share/moment/encoded")
 
 # Full list of all known encoders (flat)
 _ALL_ENCODERS: list[str] = [
-    enc for vendor in ("nvidia", "amd", "intel")
-    for enc in _VENDOR_ENCODERS[vendor].values()
+    enc for vendor in ("nvidia", "amd", "intel") for enc in _VENDOR_ENCODERS[vendor].values()
 ]
 
 # Software fallbacks
@@ -72,13 +71,14 @@ class Encoder:
     each instance creates its own semaphore sized from config.
     """
 
-    def __init__(self, codec: str = "h264", quality: int | None = None,
-                 config: "Config | None" = None) -> None:
+    def __init__(
+        self, codec: str = "h264", quality: int | None = None, config: "Config | None" = None
+    ) -> None:
         """Args:
-            codec: One of ``"h264"``, ``"h265"``, ``"hevc"``, ``"av1"``.
-            quality: CQ value 0–51.  Lower = better quality.  Defaults to
-                a codec-appropriate value if omitted.
-            config: Optional Config for path overrides and encode concurrency.
+        codec: One of ``"h264"``, ``"h265"``, ``"hevc"``, ``"av1"``.
+        quality: CQ value 0–51.  Lower = better quality.  Defaults to
+            a codec-appropriate value if omitted.
+        config: Optional Config for path overrides and encode concurrency.
         """
         self._codec = codec.lower()
         self._quality = quality if quality is not None else _DEFAULT_CQ.get(self._codec, 23)
@@ -185,16 +185,26 @@ class Encoder:
         # -ss before -i is already handled above for GPU-accelerated seeking.
 
         # -- Video encoder --------------------------------------------------
-        cmd.extend([
-            "-c:v", encoder_name,
-            "-preset", "p7" if "nvenc" in encoder_name else "medium",
-            "-rc", "vbr" if "nvenc" in encoder_name else "crf",
-            "-cq" if "nvenc" in encoder_name else "-crf", str(self._quality),
-            "-b:v", "12M",
-            "-maxrate", "18M",
-            "-bufsize", "24M",
-            "-pix_fmt", "yuv420p",
-        ])
+        cmd.extend(
+            [
+                "-c:v",
+                encoder_name,
+                "-preset",
+                "p7" if "nvenc" in encoder_name else "medium",
+                "-rc",
+                "vbr" if "nvenc" in encoder_name else "crf",
+                "-cq" if "nvenc" in encoder_name else "-crf",
+                str(self._quality),
+                "-b:v",
+                "12M",
+                "-maxrate",
+                "18M",
+                "-bufsize",
+                "24M",
+                "-pix_fmt",
+                "yuv420p",
+            ]
+        )
 
         # -- Audio ----------------------------------------------------------
         if clip.has_game_audio or clip.has_mic_audio:
@@ -216,8 +226,10 @@ class Encoder:
                     cmd.extend(["-af", f"volume={profile.mic_audio_volume}"])
 
         # -- Output ---------------------------------------------------------
-        out_dir = Path(output_dir) if output_dir else Path(
-            self._config.get_path("encode_dir") if self._config else _DEFAULT_ENCODE_DIR
+        out_dir = (
+            Path(output_dir)
+            if output_dir
+            else Path(self._config.get_path("encode_dir") if self._config else _DEFAULT_ENCODE_DIR)
         )
         ensure_dir(out_dir)
         output_path = out_dir / f"{sanitize_stem(clip.stem)}.mp4"
@@ -265,7 +277,9 @@ class Encoder:
                 if vendor_encoder and _encoder_works(vendor_encoder):
                     logger.info(
                         "Auto-detected %s → using %s for codec %s",
-                        vendor, vendor_encoder, self._codec,
+                        vendor,
+                        vendor_encoder,
+                        self._codec,
                     )
                     return vendor_encoder
                 break  # Vendor found but doesn't support this codec

@@ -11,11 +11,11 @@ import pytest
 from PyQt6.QtWidgets import QWidget
 
 from moment.ui.services.global_hotkey import GlobalHotkeyManager
+
 pytestmark = [pytest.mark.gui]
 
 
 @pytest.fixture
-
 def parent_widget(qapp) -> QWidget:
     """Provide a clean QWidget parent, properly cleaned up after each test."""
     widget = QWidget()
@@ -23,9 +23,11 @@ def parent_widget(qapp) -> QWidget:
     widget.close()
     widget.deleteLater()
 
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
+
 
 class TestInit:
     def test_default_key(self) -> None:
@@ -47,9 +49,11 @@ class TestInit:
         mgr = GlobalHotkeyManager()
         assert mgr.backend is None
 
+
 # ---------------------------------------------------------------------------
 # KDE kglobalaccel (mocked)
 # ---------------------------------------------------------------------------
+
 
 class TestKDEBackend:
     def _mock_dbus_env(self) -> tuple[MagicMock, MagicMock, MagicMock]:
@@ -152,9 +156,11 @@ class TestKDEBackend:
 
             assert triggered == [1]
 
+
 # ---------------------------------------------------------------------------
 # QShortcut fallback
 # ---------------------------------------------------------------------------
+
 
 class TestQShortcutFallback:
     def test_falls_back_when_no_dbus(self, parent_widget: QWidget) -> None:
@@ -182,9 +188,11 @@ class TestQShortcutFallback:
             mgr.unregister()
             assert mgr.backend is None
 
+
 # ---------------------------------------------------------------------------
 # update_key
 # ---------------------------------------------------------------------------
+
 
 class TestUpdateKey:
     def test_updates_key_string(self, parent_widget: QWidget) -> None:
@@ -194,13 +202,13 @@ class TestUpdateKey:
             mgr.update_key("Ctrl+Shift+Z", parent_widget)
             assert mgr.key_string == "Ctrl+Shift+Z"
 
+
 # ---------------------------------------------------------------------------
 # key_to_kde
 # ---------------------------------------------------------------------------
+
 
 class TestKeyConversion:
     def test_passthrough(self) -> None:
         assert GlobalHotkeyManager._key_to_kde("Alt+Z") == "Alt+Z"
         assert GlobalHotkeyManager._key_to_kde("Ctrl+Shift+F1") == "Ctrl+Shift+F1"
-
-

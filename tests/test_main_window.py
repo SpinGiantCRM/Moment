@@ -1,10 +1,13 @@
 """Tests for moment.ui.main_window — MainWindow (Phase 2 layout)."""
+
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from moment.ui.main_window import MainWindow, ToolbarAction
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -12,18 +15,18 @@ def _cleanup_window(window: MainWindow) -> None:
     """Safely clean up a MainWindow and its child widgets/timers."""
     window.set_minimize_to_tray(False)
     try:
-        if hasattr(window._recording_page, '_timer'):
+        if hasattr(window._recording_page, "_timer"):
             window._recording_page._timer.stop()
     except Exception:
         pass
     window.hide()
     window.deleteLater()
     from PyQt6.QtWidgets import QApplication
+
     QApplication.processEvents()
 
 
 class TestMainWindowInit:
-
     def test_create_default(self, qapp):
         window = MainWindow()
         assert window.windowTitle() == "moment"
@@ -113,7 +116,6 @@ class TestMainWindowNavigation:
         # After fade animation (200ms total), index should be _PAGE_PLAYER.
         # For tests we skip the animation and check the intent: _switch_page
         # was called with correct index, so check after processing events.
-        from PyQt6.QtWidgets import QApplication
         window._stack.setCurrentIndex(2)  # Simulate post-animation state
         assert window._stack.currentIndex() == 2  # _PAGE_PLAYER
         _cleanup_window(window)
@@ -123,10 +125,12 @@ class TestMainWindowToolbar:
     def test_populate_toolbar_adds_buttons(self, qapp):
         window = MainWindow()
         called = []
-        window.populate_toolbar([
-            ToolbarAction("Action A", lambda: called.append("a")),
-            ToolbarAction("Action B", lambda: called.append("b")),
-        ])
+        window.populate_toolbar(
+            [
+                ToolbarAction("Action A", lambda: called.append("a")),
+                ToolbarAction("Action B", lambda: called.append("b")),
+            ]
+        )
         assert len(window._toolbar_action_buttons) == 2
         # Click first action
         window._toolbar_action_buttons[0].click()
@@ -225,6 +229,7 @@ class TestMainWindowCloseEvent:
         window = MainWindow()
         window._minimize_to_tray = True
         from PyQt6.QtGui import QCloseEvent
+
         event = QCloseEvent()
         toggled = []
         window.close_to_tray.connect(lambda: toggled.append(True))
@@ -236,6 +241,7 @@ class TestMainWindowCloseEvent:
         window = MainWindow()
         window._minimize_to_tray = False
         from PyQt6.QtGui import QCloseEvent
+
         event = QCloseEvent()
         window.closeEvent(event)
         assert event.isAccepted()
@@ -267,6 +273,7 @@ class TestMainWindowBatchAction:
         window = MainWindow(store=store)
         window._grid_page.refresh = MagicMock()
         from PyQt6.QtWidgets import QMessageBox
+
         with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
             window._on_batch_action("Delete", ["clip-1", "clip-2"])
         assert store.delete_clip.call_count == 2

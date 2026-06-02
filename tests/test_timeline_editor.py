@@ -1,9 +1,11 @@
 """Tests for ui/widgets/timeline_editor.py — dual-handle range selector."""
 
 from __future__ import annotations
+
 import pytest
 
 from moment.ui.widgets.timeline_editor import TimelineEditor, _fmt
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -22,6 +24,7 @@ class TestFormatHelper:
 
     def test_negative_rounds_to_zero(self) -> None:
         assert _fmt(-5) == "0:00"
+
 
 class TestTimelineEditorInit:
     """Tests for TimelineEditor construction."""
@@ -51,6 +54,7 @@ class TestTimelineEditorInit:
         editor = TimelineEditor(total_duration=60.0, start=-10.0)
         assert editor.trim_start == 0.0
 
+
 class TestSetRange:
     """Tests for programmatic set_range."""
 
@@ -70,6 +74,7 @@ class TestSetRange:
         editor.set_range(10.0, 150.0)
         assert editor.trim_end == 100.0
 
+
 class TestSignals:
     """Tests for signal emission."""
 
@@ -80,6 +85,7 @@ class TestSignals:
 
         def handler(start: float, end: float) -> None:
             calls.append((start, end))
+
         editor.trim_changed.connect(handler)
 
         editor.set_range(10.0, 50.0)
@@ -87,6 +93,7 @@ class TestSignals:
         # Verify the signal is connectable at least.
         editor.trim_changed.disconnect(handler)
         assert len(calls) == 0
+
 
 class TestSizeHint:
     """Tests for size hint."""
@@ -99,6 +106,7 @@ class TestSizeHint:
         editor = TimelineEditor(total_duration=60.0)
         assert editor.sizeHint().height() >= 40
 
+
 class TestTimelineEditorEdgeCases:
     """Edge case tests."""
 
@@ -110,5 +118,3 @@ class TestTimelineEditorEdgeCases:
         editor = TimelineEditor(total_duration=0.01)
         assert editor.trim_start >= 0.0
         assert editor.trim_end > 0.0
-
-

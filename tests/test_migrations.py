@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from moment.core.models import Clip
 from moment.core.migrations import (
-    OLD_JSON_PATH,
     migrate_from_json,
     migrate_old_dirs,
 )
+from moment.core.models import Clip
+
 pytestmark = [pytest.mark.integration]
 
 
@@ -67,6 +66,7 @@ class TestMigrateOldDirs:
             # Old should still exist since rename failed
             assert old.is_dir()
 
+
 class TestMigrateFromJson:
     def test_no_file_returns_zero(self, store, tmp_path: Path) -> None:
         """When old_path doesn't exist, returns 0."""
@@ -80,7 +80,12 @@ class TestMigrateFromJson:
         json_path.write_text("[]")
 
         # Insert a real clip so the DB has data (COUNT > 0)
-        clip = Clip(id="has-data-test", stem="pre-existing", source_path=Path("/tmp/test.mkv"), duration=10.0)
+        clip = Clip(
+            id="has-data-test",
+            stem="pre-existing",
+            source_path=Path("/tmp/test.mkv"),
+            duration=10.0,
+        )
         store.insert_clip(clip)
 
         result = migrate_from_json(store, json_path)
@@ -119,7 +124,9 @@ class TestMigrateFromJson:
     def test_imports_from_legacy_dict_format(self, store, tmp_path: Path) -> None:
         """Also handles legacy format where JSON is a dict with 'clips' key."""
         json_path = tmp_path / "clips.json"
-        data = {"clips": [{"stem": "legacy_clip", "source_path": "/tmp/legacy.mkv", "duration": 15.0}]}
+        data = {
+            "clips": [{"stem": "legacy_clip", "source_path": "/tmp/legacy.mkv", "duration": 15.0}]
+        }
         json_path.write_text(json.dumps(data))
 
         result = migrate_from_json(store, json_path)
@@ -145,5 +152,3 @@ class TestMigrateFromJson:
         with patch("os.rename", side_effect=OSError("read-only filesystem")):
             result = migrate_from_json(store, json_path)
             assert result == 0  # empty array, no clips imported
-
-

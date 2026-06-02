@@ -44,8 +44,8 @@ class ProcessingBanner(QWidget):
         super().__init__(parent)
         self.setFixedHeight(_BANNER_HEIGHT)
         self.setStyleSheet(f"""
-            background-color: {color('--bg-surface')};
-            border-bottom: 1px solid {color('--border-menu')};
+            background-color: {color("--bg-surface")};
+            border-bottom: 1px solid {color("--border-menu")};
         """)
 
         self._dismissed = False
@@ -58,7 +58,7 @@ class ProcessingBanner(QWidget):
         # Status text label
         self._label = QLabel("Idle")
         self._label.setStyleSheet(f"""
-            color: {color('--text-primary')};
+            color: {color("--text-primary")};
             font-size: 12px;
             font-weight: 500;
             border: none;
@@ -74,12 +74,12 @@ class ProcessingBanner(QWidget):
         self._progress.setRange(0, 0)  # indeterminate
         self._progress.setStyleSheet(f"""
             QProgressBar {{
-                background-color: {color('--bg-inset')};
+                background-color: {color("--bg-inset")};
                 border: none;
                 border-radius: 2px;
             }}
             QProgressBar::chunk {{
-                background-color: {color('--accent-blue')};
+                background-color: {color("--accent-blue")};
                 border-radius: 2px;
             }}
         """)
@@ -124,7 +124,8 @@ class ProcessingBanner(QWidget):
             verb = (
                 "Encoding"
                 if status == "encoding"
-                else "Uploading" if status == "uploading"
+                else "Uploading"
+                if status == "uploading"
                 else "Processing"
             )
             self._label.setText(f"{verb} {count}/{total} clips…")
@@ -161,5 +162,3 @@ class ProcessingBanner(QWidget):
         """Hide the banner until next status update."""
         self._dismissed = True
         self.setVisible(False)
-
-

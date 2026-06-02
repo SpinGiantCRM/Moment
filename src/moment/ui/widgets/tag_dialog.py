@@ -53,8 +53,7 @@ class TagDialog(QDialog):
 
         # Buttons
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel,
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -68,8 +67,4 @@ class TagDialog(QDialog):
         raw = self._input.text().strip()
         if not raw:
             return []
-        return [
-            t.strip()
-            for t in raw.split(",")
-            if t.strip()
-        ]
+        return [t.strip() for t in raw.split(",") if t.strip()]

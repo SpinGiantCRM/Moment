@@ -111,7 +111,9 @@ def _detect_vendor() -> str | None:
     try:
         result = _command.run(
             ["nvidia-smi", "-L"],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode == 0 and "GPU" in result.stdout:
             return "nvidia"
@@ -121,7 +123,10 @@ def _detect_vendor() -> str | None:
     # AMD
     try:
         result = _command.run(
-            ["lspci"], capture_output=True, text=True, check=False,
+            ["lspci"],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode == 0:
             out = result.stdout.lower()
@@ -172,7 +177,9 @@ def _encoder_works(encoder: str) -> bool:
             return False
         result = _command.run(  # tokenized args, no shell=True
             [ffmpeg, "-hide_banner", "-encoders"],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if result.returncode != 0:
             return False
@@ -259,8 +266,10 @@ def probe(path: str | Path) -> dict[str, Any]:
     find_ffprobe()
     cmd = [
         "ffprobe",
-        "-v", "quiet",
-        "-print_format", "json",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
         "-show_format",
         "-show_streams",
         str(path),
@@ -306,10 +315,14 @@ def thumbnail(input_path: str | Path, output_path: str | Path, time: float = 0.0
     cmd = [
         "ffmpeg",
         "-y",
-        "-ss", str(time),
-        "-i", str(input_path),
-        "-vframes", "1",
-        "-q:v", "2",
+        "-ss",
+        str(time),
+        "-i",
+        str(input_path),
+        "-vframes",
+        "1",
+        "-q:v",
+        "2",
         str(output_path),
     ]
     logger.debug("Generating thumbnail: %s", cmd)
@@ -317,8 +330,7 @@ def thumbnail(input_path: str | Path, output_path: str | Path, time: float = 0.0
     result = run_sandboxed(cmd)
     if result.returncode != 0:
         raise FFmpegError(
-            f"thumbnail generation failed (code={result.returncode}):"
-            f" {result.stderr.strip()}"
+            f"thumbnail generation failed (code={result.returncode}): {result.stderr.strip()}"
         )
 
 

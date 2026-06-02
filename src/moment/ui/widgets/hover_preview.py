@@ -62,7 +62,7 @@ class HoverPreviewWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setStyleSheet(f"""
-            background-color: {color('--bg-surface')};
+            background-color: {color("--bg-surface")};
             border-radius: {_RADIUS}px;
         """)
 
@@ -96,7 +96,8 @@ class HoverPreviewWidget(QWidget):
                 pixmap = QPixmap(str(path))
                 if not pixmap.isNull():
                     scaled = pixmap.scaled(
-                        _IMG_W, _IMG_H,
+                        _IMG_W,
+                        _IMG_H,
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation,
                     )
@@ -106,9 +107,7 @@ class HoverPreviewWidget(QWidget):
                     p = QPainter(rounded)
                     p.setRenderHint(QPainter.RenderHint.Antialiasing)
                     clip = QPainterPath()
-                    clip.addRoundedRect(
-                        0, 0, scaled.width(), scaled.height(), _RADIUS, _RADIUS
-                    )
+                    clip.addRoundedRect(0, 0, scaled.width(), scaled.height(), _RADIUS, _RADIUS)
                     p.setClipPath(clip)
                     p.drawPixmap(0, 0, scaled)
                     p.end()

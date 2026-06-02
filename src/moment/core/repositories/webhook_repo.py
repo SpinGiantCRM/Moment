@@ -39,7 +39,9 @@ class WebhookRepository(BaseRepository):
                    (id, url, name, enabled, notify_on, per_game_filter, include_clip_url)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    wh.id, wh.url, wh.name,
+                    wh.id,
+                    wh.url,
+                    wh.name,
                     int(wh.enabled),
                     json_dumps(wh.notify_on) if wh.notify_on else "[]",
                     json_dumps(wh.per_game_filter) if wh.per_game_filter else None,
@@ -53,15 +55,17 @@ class WebhookRepository(BaseRepository):
         result: list[Webhook] = []
         for r in rows:
             # Return raw stored values; Store facade handles encryption/decryption
-            result.append(Webhook(
-                id=r["id"],
-                url=r["url"],
-                name=r["name"] or "",
-                enabled=bool(r["enabled"]),
-                notify_on=json_loads(r["notify_on"]) or [],
-                per_game_filter=json_loads(r["per_game_filter"]),
-                include_clip_url=bool(r["include_clip_url"]),
-            ))
+            result.append(
+                Webhook(
+                    id=r["id"],
+                    url=r["url"],
+                    name=r["name"] or "",
+                    enabled=bool(r["enabled"]),
+                    notify_on=json_loads(r["notify_on"]) or [],
+                    per_game_filter=json_loads(r["per_game_filter"]),
+                    include_clip_url=bool(r["include_clip_url"]),
+                )
+            )
         return result
 
     def get_raw_url(self, webhook_id: str) -> str | None:
@@ -81,9 +85,13 @@ class WebhookRepository(BaseRepository):
                    (id, webhook_id, clip_id, delivered_at, success, status_code, error_message)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    entry.id, entry.webhook_id, entry.clip_id,
+                    entry.id,
+                    entry.webhook_id,
+                    entry.clip_id,
                     entry.delivered_at.isoformat(),
-                    int(entry.success), entry.status_code, entry.error_message,
+                    int(entry.success),
+                    entry.status_code,
+                    entry.error_message,
                 ),
             )
         return entry
@@ -134,7 +142,5 @@ class WebhookRepository(BaseRepository):
                 (webhook_id,),
             ).fetchone()
         else:
-            row = self._read_conn.execute(
-                "SELECT COUNT(*) as cnt FROM webhook_log"
-            ).fetchone()
+            row = self._read_conn.execute("SELECT COUNT(*) as cnt FROM webhook_log").fetchone()
         return row["cnt"] if row else 0

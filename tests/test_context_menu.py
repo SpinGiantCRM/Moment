@@ -1,10 +1,12 @@
 """Tests for context_menu.py — right-click clip context menu builder."""
 
 from __future__ import annotations
+
 import pytest
 
 from moment.core.models import Clip, ClipStatus, ClipType, ClipVisibility
 from moment.ui.widgets.context_menu import ContextMenuBuilder
+
 pytestmark = [pytest.mark.gui]
 
 
@@ -23,6 +25,7 @@ def _make_clip(**kwargs) -> Clip:
     defaults.update(kwargs)
     return Clip(**defaults)
 
+
 class TestContextMenuBuilderInit:
     """Tests for ContextMenuBuilder construction."""
 
@@ -37,15 +40,23 @@ class TestContextMenuBuilderInit:
         # pyqtSignal descriptors raise TypeError on non-QObject instances,
         # so check on the class instead.
         signal_names = [
-            "copy_url_triggered", "rename_triggered", "open_source_triggered",
-            "open_encoded_triggered", "open_player_triggered",
-            "reencode_triggered", "reupload_triggered",
-            "favorite_triggered", "manage_tags_triggered",
-            "set_game_triggered", "protect_triggered",
-            "delete_triggered", "select_triggered",
+            "copy_url_triggered",
+            "rename_triggered",
+            "open_source_triggered",
+            "open_encoded_triggered",
+            "open_player_triggered",
+            "reencode_triggered",
+            "reupload_triggered",
+            "favorite_triggered",
+            "manage_tags_triggered",
+            "set_game_triggered",
+            "protect_triggered",
+            "delete_triggered",
+            "select_triggered",
         ]
         for name in signal_names:
             assert hasattr(ContextMenuBuilder, name), f"Missing signal: {name}"
+
 
 class TestContextMenuBuilderBuild:
     """Tests for build() method."""
@@ -120,8 +131,7 @@ class TestContextMenuBuilderBuild:
         found = False
         for action in menu.actions():
             if action and (
-                "Unfavorite" in (action.text() or "")
-                or "Favorite" in (action.text() or "")
+                "Unfavorite" in (action.text() or "") or "Favorite" in (action.text() or "")
             ):
                 assert "★" in action.text() or "Unfavorite" in action.text()
                 found = True
@@ -147,6 +157,7 @@ class TestContextMenuBuilderBuild:
         for action in menu.actions():
             if action and "Unprotect" in (action.text() or ""):
                 assert "Unprotect" in action.text()
+
 
 class TestContextMenuBuilderSignals:
     """Tests for actions exist and are wired to the correct clip_id.
@@ -202,5 +213,3 @@ class TestContextMenuBuilderSignals:
         menu = builder.build()
         texts = [a.text() for a in menu.actions() if a]
         assert any("encode" in t.lower() for t in texts)
-
-

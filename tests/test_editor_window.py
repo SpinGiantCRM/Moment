@@ -10,15 +10,16 @@ from PyQt6.QtWidgets import QMessageBox
 
 from moment.core.models import EditProfile
 from moment.ui.editor.editor_window import EditorWindow
+
 pytestmark = [pytest.mark.gui]
 
 
 @pytest.fixture
-
 def mock_store():
     store = MagicMock()
     store.get_edit_profile.return_value = None  # No existing profile
     return store
+
 
 @pytest.fixture
 def window(qapp, mock_store):
@@ -28,6 +29,7 @@ def window(qapp, mock_store):
     yield w
     w.close()
     w.deleteLater()
+
 
 class TestEditorWindowInit:
     def test_create_without_existing_profile(self, window):
@@ -54,6 +56,7 @@ class TestEditorWindowInit:
         assert hasattr(window, "profile_saved")
         assert hasattr(window, "close_requested")
 
+
 class TestEditorWindowTabs:
     def test_four_tabs_exist(self, window):
         assert window._tabs.count() == 4
@@ -64,6 +67,7 @@ class TestEditorWindowTabs:
         assert "Filters" in labels
         assert "Merge" in labels
         assert "Music" in labels
+
 
 class TestEditorWindowAutoSave:
     def test_schedule_save_starts_timer(self, window):
@@ -87,6 +91,7 @@ class TestEditorWindowAutoSave:
         window._do_save()
         assert fired == ["test"]
 
+
 class TestEditorWindowClose:
     def test_close_event_saves_and_emits(self, window):
         # Make window dirty first so closeEvent triggers save
@@ -101,6 +106,7 @@ class TestEditorWindowClose:
         window._store.save_edit_profile.assert_called_once()
         assert len(fired) == 1
 
+
 class TestEditorWindowPanels:
     def test_panel_instances_exist(self, window):
         assert window._timeline is not None
@@ -113,5 +119,3 @@ class TestEditorWindowPanels:
         window._save_timer.stop()
         window._timeline.profile_changed.emit()
         assert window._save_timer.isActive()
-
-

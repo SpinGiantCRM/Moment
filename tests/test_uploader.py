@@ -9,21 +9,24 @@ from unittest.mock import patch
 import pytest
 
 from moment.core.uploader import _MAX_RETRIES, _RETRY_DELAYS, Uploader, UploaderError
+
 pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def test_path() -> Path:
     return Path("/tmp/test_upload_clip.mp4")
+
 
 @pytest.fixture
 def uploader() -> Uploader:
     return Uploader(remote="test-remote", bucket="test-bucket", base_url="https://cdn.example.com")
 
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+
 
 class TestConfiguration:
     def test_remote_and_bucket(self) -> None:
@@ -45,17 +48,22 @@ class TestConfiguration:
             assert u.remote == "r2"
 
     def test_env_override(self) -> None:
-        with patch.dict("os.environ", {
-            "MOMENT_RCLONE_REMOTE": "prod-r2",
-            "MOMENT_RCLONE_BUCKET": "clips-prod",
-        }):
+        with patch.dict(
+            "os.environ",
+            {
+                "MOMENT_RCLONE_REMOTE": "prod-r2",
+                "MOMENT_RCLONE_BUCKET": "clips-prod",
+            },
+        ):
             u = Uploader()
             assert u.remote == "prod-r2"
             assert u.bucket == "clips-prod"
 
+
 # ---------------------------------------------------------------------------
 # Upload (mocked rclone)
 # ---------------------------------------------------------------------------
+
 
 class TestUpload:
     def test_successful_upload(self, test_path: Path, uploader: Uploader) -> None:
@@ -130,9 +138,11 @@ class TestUpload:
             url = u.upload(test_path)
             assert url.startswith("r2:clips/")
 
+
 # ---------------------------------------------------------------------------
 # Re-upload
 # ---------------------------------------------------------------------------
+
 
 class TestReUpload:
     def test_deletes_then_uploads(self, test_path: Path, uploader: Uploader) -> None:
@@ -168,9 +178,11 @@ class TestReUpload:
             url = uploader.re_upload(test_path, "missing.mp4")
             assert url == "https://cdn.example.com/new.mp4"
 
+
 # ---------------------------------------------------------------------------
 # Rclone availability
 # ---------------------------------------------------------------------------
+
 
 class TestRcloneAvailability:
     def test_missing_rclone_raises(self, test_path: Path) -> None:
@@ -193,9 +205,11 @@ class TestRcloneAvailability:
             result = u.upload(test_path)
             assert result.startswith("r2:clips/")
 
+
 # ---------------------------------------------------------------------------
 # Log sanitization
 # ---------------------------------------------------------------------------
+
 
 class TestLogSanitization:
     """Verify that remote/bucket names are not leaked in info-level logs."""
@@ -211,8 +225,7 @@ class TestLogSanitization:
             uploader.upload(test_path)
             # Find the info-level log calls
             info_calls = [
-                c for c in mock_logger.info.call_args_list
-                if c[0] and isinstance(c[0][0], str)
+                c for c in mock_logger.info.call_args_list if c[0] and isinstance(c[0][0], str)
             ]
             for call in info_calls:
                 msg = call[0][0] % call[0][1:] if len(call[0]) > 1 else call[0][0]
@@ -225,8 +238,7 @@ class TestLogSanitization:
             uploader._build_url("foo.mp4")
             # Should not call info
             info_calls = [
-                c for c in mock_logger.info.call_args_list
-                if c[0] and "rclone path" in str(c[0])
+                c for c in mock_logger.info.call_args_list if c[0] and "rclone path" in str(c[0])
             ]
             assert len(info_calls) == 0
 
@@ -238,17 +250,16 @@ class TestLogSanitization:
         ):
             mock_run.return_value.returncode = 0
             uploader._do_copy(Path("/tmp/test.mp4"), "test-remote:test-bucket/foo.mp4")
-            info_calls = [
-                c for c in mock_logger.info.call_args_list
-                if c[0]
-            ]
+            info_calls = [c for c in mock_logger.info.call_args_list if c[0]]
             for call in info_calls:
                 msg = call[0][0] if call[0] else ""
                 assert "test-remote:test-bucket" not in str(msg)
 
+
 # ---------------------------------------------------------------------------
 # Retry config
 # ---------------------------------------------------------------------------
+
 
 class TestRetryConfig:
     def test_retry_delays_values(self) -> None:
@@ -260,9 +271,11 @@ class TestRetryConfig:
         for i in range(1, len(_RETRY_DELAYS)):
             assert _RETRY_DELAYS[i] > _RETRY_DELAYS[i - 1]
 
+
 # ---------------------------------------------------------------------------
 # Total deadline (Spec 20)
 # ---------------------------------------------------------------------------
+
 
 class TestDeadline:
     def test_deadline_not_exceeded_for_quick_upload(
@@ -314,14 +327,17 @@ class TestDeadline:
             with pytest.raises(UploaderError, match="deadline exceeded"):
                 u.upload(test_path)
 
+
 # ---------------------------------------------------------------------------
 # Circuit breaker (Spec 20)
 # ---------------------------------------------------------------------------
+
 
 class TestCircuitBreaker:
     def setup_method(self):
         """Reset circuit breaker state before each test."""
         import moment.core.uploader as up_mod
+
         with up_mod.Uploader._failure_lock:
             up_mod.Uploader._consecutive_failures = 0
             up_mod.Uploader._circuit_open_until = 0.0
@@ -375,6 +391,7 @@ class TestCircuitBreaker:
 
         # Failures should be reset to 0
         from moment.core.uploader import Uploader as Up
+
         assert Up._consecutive_failures == 0
 
     def test_circuit_breaker_is_thread_safe(self, test_path: Path) -> None:
@@ -406,5 +423,3 @@ class TestCircuitBreaker:
         # After exactly 3 failures, circuit breaker should be open
         with up_mod.Uploader._failure_lock:
             assert up_mod.Uploader._consecutive_failures >= 3
-
-

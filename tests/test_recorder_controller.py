@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import signal
 from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from moment.core.models import GameProfile
 from moment.core.recorder_controller import (
-    DEFAULT_CAPTURE_FPS,
-    DEFAULT_REPLAY_DURATION,
     RecorderController,
     RecorderError,
     replay_signal_for_duration,
@@ -25,13 +22,13 @@ pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
-
 def controller(tmp_path: Path) -> RecorderController:
     return RecorderController(
         output_dir=str(tmp_path / "videos"),
         default_fps=60,
         default_duration=30,
     )
+
 
 @pytest.fixture
 def running_controller(controller: RecorderController) -> RecorderController:
@@ -43,9 +40,11 @@ def running_controller(controller: RecorderController) -> RecorderController:
     controller._proc = mock_proc
     return controller
 
+
 # ---------------------------------------------------------------------------
 # Replay signal helper
 # ---------------------------------------------------------------------------
+
 
 class TestReplaySignalForDuration:
     def test_known_durations(self) -> None:
@@ -58,14 +57,16 @@ class TestReplaySignalForDuration:
         assert replay_signal_for_duration(0) is None
         assert replay_signal_for_duration(-1) is None
 
+
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
 
+
 class TestInitialization:
     def test_output_dir_created(self, tmp_path: Path) -> None:
         d = tmp_path / "recordings"
-        rc = RecorderController(output_dir=str(d))
+        RecorderController(output_dir=str(d))
         assert d.exists()
 
     def test_default_output_dir(self) -> None:
@@ -86,9 +87,11 @@ class TestInitialization:
     def test_no_gsr_controller_initially(self, controller: RecorderController) -> None:
         assert controller.gsr_controller is None
 
+
 # ---------------------------------------------------------------------------
 # Properties
 # ---------------------------------------------------------------------------
+
 
 class TestProperties:
     def test_output_dir_with_gsr_controller(self, tmp_path: Path) -> None:
@@ -112,9 +115,11 @@ class TestProperties:
         controller._current_profile = profile
         assert controller.current_profile == profile
 
+
 # ---------------------------------------------------------------------------
 # Start recording
 # ---------------------------------------------------------------------------
+
 
 class TestStartRecording:
     def test_spawns_process(self, controller: RecorderController) -> None:
@@ -145,9 +150,11 @@ class TestStartRecording:
             controller.start_recording(profile=profile)
             assert controller.current_profile == profile
 
+
 # ---------------------------------------------------------------------------
 # Stop recording
 # ---------------------------------------------------------------------------
+
 
 class TestStopRecording:
     def test_stops_process(self, controller: RecorderController) -> None:
@@ -175,9 +182,11 @@ class TestStopRecording:
             controller.stop_recording()
             assert controller._stopped_intentionally is True
 
+
 # ---------------------------------------------------------------------------
 # Save replay
 # ---------------------------------------------------------------------------
+
 
 class TestSaveReplay:
     def test_delegates_to_gsr_when_recording(self, controller: RecorderController) -> None:
@@ -196,7 +205,10 @@ class TestSaveReplay:
             assert args[0] == 12345
             assert args[1] == signal.SIGRTMIN
 
-    def test_unsupported_duration_uses_default(self, running_controller: RecorderController) -> None:
+    def test_unsupported_duration_uses_default(
+        self,
+        running_controller: RecorderController,
+    ) -> None:
         with patch("os.killpg") as mock_killpg:
             running_controller.save_replay(120)  # not in _SIGNAL_MAP
             mock_killpg.assert_called_once()
@@ -220,9 +232,11 @@ class TestSaveReplay:
         with patch("os.killpg", side_effect=ProcessLookupError("no process")):
             running_controller.save_replay(30)  # Should not raise
 
+
 # ---------------------------------------------------------------------------
 # Take screenshot
 # ---------------------------------------------------------------------------
+
 
 class TestTakeScreenshot:
     def test_sends_sigusr1(self, running_controller: RecorderController) -> None:
@@ -242,9 +256,11 @@ class TestTakeScreenshot:
         with patch("os.killpg", side_effect=ProcessLookupError):
             running_controller.take_screenshot()  # Should not raise
 
+
 # ---------------------------------------------------------------------------
 # _build_command
 # ---------------------------------------------------------------------------
+
 
 class TestBuildCommand:
     def test_basic_command(self) -> None:
@@ -298,15 +314,20 @@ class TestBuildCommand:
         assert "default" in cmd
         assert "-q" not in cmd
 
+
 # ---------------------------------------------------------------------------
 # _spawn_process_unlocked
 # ---------------------------------------------------------------------------
 
+
 class TestSpawnProcess:
     def test_spawn_with_profile(self, controller: RecorderController, tmp_path: Path) -> None:
         profile = GameProfile(
-            id="gp3", game_name="cs2", display_name="CS2",
-            capture_fps=120, replay_duration=60,
+            id="gp3",
+            game_name="cs2",
+            display_name="CS2",
+            capture_fps=120,
+            replay_duration=60,
         )
         controller._current_profile = profile
         with (
@@ -326,15 +347,20 @@ class TestSpawnProcess:
 
     def test_spawn_oserror_raises(self, controller: RecorderController) -> None:
         with (
-            patch("moment.core.recorder_controller.Popen_sandboxed", side_effect=FileNotFoundError("not found")),
+            patch(
+                "moment.core.recorder_controller.Popen_sandboxed",
+                side_effect=FileNotFoundError("not found"),
+            ),
             patch("threading.Thread"),
         ):
             with pytest.raises(RecorderError, match="Failed to start"):
                 controller._spawn_process_unlocked()
 
+
 # ---------------------------------------------------------------------------
 # _stop_process_unlocked
 # ---------------------------------------------------------------------------
+
 
 class TestStopProcess:
     def test_none_proc_noop(self, controller: RecorderController) -> None:
@@ -367,6 +393,7 @@ class TestStopProcess:
         controller._proc = mock_proc
 
         import subprocess as _sp
+
         with (
             patch("os.killpg") as mock_killpg,
             patch.object(mock_proc, "wait", side_effect=[_sp.TimeoutExpired("cmd", 5), None]),
@@ -383,9 +410,11 @@ class TestStopProcess:
         controller._stop_process_unlocked()
         assert controller._proc is None
 
+
 # ---------------------------------------------------------------------------
 # _can_restart
 # ---------------------------------------------------------------------------
+
 
 class TestCanRestart:
     def test_can_restart_initially(self, controller: RecorderController) -> None:
@@ -396,9 +425,11 @@ class TestCanRestart:
             controller._can_restart()
         assert controller._can_restart() is False
 
+
 # ---------------------------------------------------------------------------
 # crash recovery
 # ---------------------------------------------------------------------------
+
 
 class TestCrashRecovery:
     def test_monitor_crash_triggers_restart(self, controller: RecorderController) -> None:
@@ -500,9 +531,11 @@ class TestCrashRecovery:
         assert controller._proc is None
         controller._monitor_process()  # Should not raise
 
+
 # ---------------------------------------------------------------------------
 # GSR controller delegation
 # ---------------------------------------------------------------------------
+
 
 class TestGSRDelegation:
     def test_output_dir_delegates(self, tmp_path: Path) -> None:
@@ -521,5 +554,3 @@ class TestGSRDelegation:
     def test_gsr_controller_none_by_default(self) -> None:
         rc = RecorderController()
         assert rc.gsr_controller is None
-
-

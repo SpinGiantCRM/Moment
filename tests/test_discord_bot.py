@@ -188,6 +188,7 @@ class TestRoleAuth:
         with patch("moment.core.discord_bot._get_allowed_roles") as mock_fn:
             mock_fn.return_value = {"Moment User"}
             from moment.core.discord_bot import _get_allowed_roles
+
             roles = _get_allowed_roles(MagicMock())
             assert "Moment User" in roles
 
@@ -196,6 +197,7 @@ class TestRoleAuth:
         with patch("moment.core.discord_bot._get_allowed_roles") as mock_fn:
             mock_fn.return_value = {"VIP", "Editor", "Admin"}
             from moment.core.discord_bot import _get_allowed_roles
+
             roles = _get_allowed_roles(MagicMock())
             assert roles == {"VIP", "Editor", "Admin"}
 
@@ -213,6 +215,7 @@ class TestDiscordVisibility:
         mock_get_caller = MagicMock(return_value="123456789")
         with patch("moment.core.discord_bot._get_caller_id", mock_get_caller):
             import moment.core.discord_bot as bot_mod
+
             interaction = MagicMock()
             interaction.user.id = 123456789
             result = bot_mod._get_caller_id(interaction)
@@ -222,14 +225,19 @@ class TestDiscordVisibility:
         """_build_clip_embed should NOT include R2 URL unless include_url=True."""
         mock_embed = MagicMock()
         mock_embed.fields = [
-            MagicMock(), MagicMock(), MagicMock(), MagicMock(),
-            MagicMock(), MagicMock()
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
         ]
         mock_embed.fields[5].name = "URL"
         mock_embed.fields[5].value = "Use `/clip <id> --include-url` for URL"
 
         with patch("moment.core.discord_bot._build_clip_embed", return_value=mock_embed):
             import moment.core.discord_bot as bot_mod
+
             clip = Clip(
                 id="emb",
                 stem="emb",
@@ -242,9 +250,7 @@ class TestDiscordVisibility:
                 r2_url="https://cdn.example.com/test.mp4",
             )
             embed = bot_mod._build_clip_embed(clip, include_url=False)
-            url_field = next(
-                (f for f in embed.fields if f.name == "URL"), None
-            )
+            url_field = next((f for f in embed.fields if f.name == "URL"), None)
             assert url_field is not None
             assert "include-url" in url_field.value
 
@@ -252,14 +258,19 @@ class TestDiscordVisibility:
         """_build_clip_embed should include R2 URL when include_url=True."""
         mock_embed = MagicMock()
         mock_embed.fields = [
-            MagicMock(), MagicMock(), MagicMock(), MagicMock(),
-            MagicMock(), MagicMock()
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
+            MagicMock(),
         ]
         mock_embed.fields[5].name = "URL"
         mock_embed.fields[5].value = "https://cdn.example.com/test2.mp4"
 
         with patch("moment.core.discord_bot._build_clip_embed", return_value=mock_embed):
             import moment.core.discord_bot as bot_mod
+
             clip = Clip(
                 id="emb2",
                 stem="emb2",
@@ -272,9 +283,7 @@ class TestDiscordVisibility:
                 r2_url="https://cdn.example.com/test2.mp4",
             )
             embed = bot_mod._build_clip_embed(clip, include_url=True)
-            url_field = next(
-                (f for f in embed.fields if f.name == "URL"), None
-            )
+            url_field = next((f for f in embed.fields if f.name == "URL"), None)
             assert url_field is not None
             assert "test2.mp4" in url_field.value
 
@@ -286,6 +295,7 @@ class TestDiscordVisibility:
 
         with patch("moment.core.discord_bot._build_clip_embed", return_value=mock_embed):
             import moment.core.discord_bot as bot_mod
+
             clip = Clip(
                 id="emb3",
                 stem="emb3",
@@ -298,7 +308,5 @@ class TestDiscordVisibility:
                 r2_url=None,
             )
             embed = bot_mod._build_clip_embed(clip, include_url=True)
-            url_field = next(
-                (f for f in embed.fields if f.name == "URL"), None
-            )
+            url_field = next((f for f in embed.fields if f.name == "URL"), None)
             assert url_field is None

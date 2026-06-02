@@ -27,11 +27,21 @@ SCAN_INTERVAL = 3.0
 
 # Known game binary names (configurable)
 _DEFAULT_GAME_BINARIES: set[str] = {
-    "cs2", "csgo", "dota2", "valorant", "r5apex.exe",
-    "overwatch.exe", "FortniteClient-Win64-Shipping.exe",
-    "RainbowSix.exe", "RocketLeague.exe", "EFT.exe",
-    "GTA5.exe", "witcher3.exe", "Cyberpunk2077.exe",
-    "bg3.exe", "VALORANT-Win64-Shipping.exe",
+    "cs2",
+    "csgo",
+    "dota2",
+    "valorant",
+    "r5apex.exe",
+    "overwatch.exe",
+    "FortniteClient-Win64-Shipping.exe",
+    "RainbowSix.exe",
+    "RocketLeague.exe",
+    "EFT.exe",
+    "GTA5.exe",
+    "witcher3.exe",
+    "Cyberpunk2077.exe",
+    "bg3.exe",
+    "VALORANT-Win64-Shipping.exe",
     "cs2.sh",  # native Linux
     "hl2_linux",  # Source engine
 }
@@ -57,19 +67,17 @@ class GameMonitor:
         use_nvidia_check: bool = True,
     ) -> None:
         """Args:
-            game_binaries: Known game process names.  Defaults to a
-                built-in list of common games.
-            on_state_changed: Called as ``callback(state, game_name)``
-                where *state* is ``"IDLE"``, ``"GAME_ACTIVE"``, or
-                ``"GAME_EXITING"``.
-            scan_interval: Seconds between /proc scans.
-            use_nvidia_check: Whether to also check GPU utilisation.
+        game_binaries: Known game process names.  Defaults to a
+            built-in list of common games.
+        on_state_changed: Called as ``callback(state, game_name)``
+            where *state* is ``"IDLE"``, ``"GAME_ACTIVE"``, or
+            ``"GAME_EXITING"``.
+        scan_interval: Seconds between /proc scans.
+        use_nvidia_check: Whether to also check GPU utilisation.
         """
         self._binaries = game_binaries or _DEFAULT_GAME_BINARIES
         # Precompute lowercase set for case-insensitive matching
-        self._binaries_lower: set[str] = {
-            b.lower().strip() for b in self._binaries
-        }
+        self._binaries_lower: set[str] = {b.lower().strip() for b in self._binaries}
         self._on_state_changed = on_state_changed
         self._interval = scan_interval
         self._use_nvidia = use_nvidia_check
@@ -154,9 +162,9 @@ class GameMonitor:
             elapsed = time.monotonic() - self._last_tick
             if elapsed > 2 * self._interval:
                 logger.warning(
-                    "GameMonitor timer appears stuck — no tick for %.1fs "
-                    "(expected interval %.1fs)",
-                    elapsed, self._interval,
+                    "GameMonitor timer appears stuck — no tick for %.1fs (expected interval %.1fs)",
+                    elapsed,
+                    self._interval,
                 )
 
     def _on_tick(self) -> None:
