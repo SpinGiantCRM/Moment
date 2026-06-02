@@ -176,6 +176,34 @@ def connect_encrypted(db_path: str) -> sqlite3.Connection:
         logger.info("Opened encrypted database with sqlcipher3")
         return conn
     except Exception as exc:
+        # If the file exists but is neither plaintext SQLite nor valid
+        # encrypted DB, it's corrupted — delete it so we create a fresh one.
+        if os.path.isfile(db_path) and not _is_plaintext_sqlite(db_path):
+            logger.warning(
+                "Database file corrupted (%s) — deleting so a fresh one is created",
+                exc,
+            )
+            try:
+                os.remove(db_path)
+                for suffix in ("-wal", "-shm"):
+                    try:
+                        os.remove(db_path + suffix)
+                    except FileNotFoundError:
+                        pass
+            except OSError as remove_exc:
+                raise RuntimeError(
+                    f"Failed to open encrypted database: {exc}"
+                    f" (and failed to remove corrupted file: {remove_exc})"
+                ) from exc
+
+            # Retry once — a fresh file will be created
+            conn = sqlcipher.connect(db_path, check_same_thread=False)
+            conn.execute(f"PRAGMA key = \"x'{key.decode()}'\"")
+            conn.execute("PRAGMA cipher_compatibility = 4")
+            conn.execute("SELECT count(*) FROM sqlite_master")
+            logger.info("Created fresh encrypted database after removing corrupted file")
+            return conn
+
         raise RuntimeError(f"Failed to open encrypted database: {exc}") from exc
 
 

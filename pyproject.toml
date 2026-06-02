@@ -1,6 +1,6 @@
 [project]
 name = "moment-clips"
-version = "0.3.2"
+version = "0.3.3"
 description = "GPU-accelerated game clip manager for Linux. Capture, edit, and share your gaming moments."
 requires-python = ">=3.11"
 authors = [{ name = "chasem" }]
@@ -34,7 +34,7 @@ dependencies = [
 bot = ["discord.py>=2.4"]
 mcp = ["fastmcp>=1.0"]
 import-export = ["python-magic>=0.4"]
-test = ["pytest-timeout>=2"]
+test = ["pytest-qt>=4", "pytest-timeout>=2"]
 all = ["moment[bot,mcp,import-export]"]
 
 [project.scripts]

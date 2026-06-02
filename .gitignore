@@ -43,7 +43,8 @@ Thumbs.db
 .windsurf/
 .github-copilot*
 .continue/
-.codebuff/*
+.codebuff/
+.opencode/
 
 # Secrets
 .env
@@ -56,6 +57,11 @@ Thumbs.db
 specs/
 SECURITY_AUDIT.md
 ARCHITECTURE_AUDIT.md
+AGENTS.md
+ARCHITECTURE.md
+knowledge.md
+SECURITY.md
+TRUTH.md
 
 # Coverage data (local only)
 .coverage

@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 
 from PyQt6.QtCore import QByteArray, Qt
-from PyQt6.QtGui import QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QWidget
 
@@ -265,7 +265,20 @@ def load_icon(name: str, color: str | None = None, size: int = 24) -> QIcon:
     svg_path = _ICONS / f"{name}.svg"
     if not svg_path.is_file():
         logger.warning("Icon not found: %s", svg_path)
-        return QIcon()
+        # Return a fallback colored-circle pixmap
+        fill_color = color or "#4a9eff"
+        pix = QPixmap(size, size)
+        pix.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pix)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(QColor(fill_color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        margin = max(1, size // 12)
+        painter.drawEllipse(margin, margin, size - 2 * margin, size - 2 * margin)
+        painter.end()
+        icon = QIcon(pix)
+        _icon_cache[key] = icon
+        return icon
 
     if color is not None:
         # Read SVG source and replace every currentColor reference.

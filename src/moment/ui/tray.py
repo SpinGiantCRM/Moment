@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QAction, QIcon
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 from moment.ui.resources import load_icon
@@ -51,6 +51,19 @@ class TrayIcon(QSystemTrayIcon):
         super().__init__(parent)
 
         self._icon = load_icon("moment", size=24)
+        if self._icon.isNull():
+            # Fallback: blue filled-circle pixmap when SVG is missing
+            from PyQt6.QtGui import QBrush, QColor, QPainter, QPixmap
+
+            pix = QPixmap(24, 22)
+            pix.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pix)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setBrush(QBrush(QColor("#4a9eff")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(1, 0, 22, 22)
+            painter.end()
+            self._icon = QIcon(pix)
         self.setIcon(self._icon)
 
         # Tooltip defaults

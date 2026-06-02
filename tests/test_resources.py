@@ -171,9 +171,14 @@ class TestIconLoading:
         assert not icon_small.isNull()
         assert not icon_large.isNull()
 
-    def test_nonexistent_icon_returns_null(self, qapp) -> None:
+    def test_nonexistent_icon_returns_fallback(self, qapp) -> None:
+        """Non-existent icon returns a non-null fallback colored-circle pixmap."""
         icon = load_icon("nonexistent_icon_xyz", size=24)
-        assert icon.isNull()
+        assert not icon.isNull()
+        pixmap = icon.pixmap(24, 24)
+        assert not pixmap.isNull()
+        assert pixmap.width() == 24
+        assert pixmap.height() == 24
 
     def test_icon_pixmap_alias(self, qapp) -> None:
         icon = icon_pixmap("moment")

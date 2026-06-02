@@ -152,7 +152,7 @@ class MainWindow(QMainWindow):
         self.resize(960, 650)
         self.setMinimumSize(720, 420)
         self._drag_pos: QPoint | None = None
-        self._resize_margin = 4
+        self._resize_margin = 8
         self._resize_dir = 0  # 0=none, 1=N, 2=E, 3=S, 4=W, 5=NE, 6=SE, 7=SW, 8=NW
         self._resize_start_geo: QRect | None = None
         self._resize_start_pos: QPoint | None = None
@@ -462,6 +462,12 @@ class MainWindow(QMainWindow):
         self._min_btn.clicked.connect(self.showMinimized)
         layout.addWidget(self._min_btn)
 
+        self._max_btn = QPushButton("□")
+        self._max_btn.setFixedSize(32, 24)
+        self._max_btn.setStyleSheet(btn_style)
+        self._max_btn.clicked.connect(self._toggle_maximize)
+        layout.addWidget(self._max_btn)
+
         self._close_btn = QPushButton("✕")
         self._close_btn.setFixedSize(32, 24)
         self._close_btn.setStyleSheet(
@@ -479,6 +485,11 @@ class MainWindow(QMainWindow):
 
     def _title_bar_mouse_press(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
+            # If the click is on a child widget (button), don't start dragging
+            child = self._title_bar.childAt(event.position().toPoint())
+            if child is not None and child is not self._title_bar:
+                event.ignore()
+                return
             self._drag_pos = event.globalPosition().toPoint()
             event.accept()
 
@@ -493,6 +504,15 @@ class MainWindow(QMainWindow):
         if event.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = None
             event.accept()
+
+    def _toggle_maximize(self) -> None:
+        """Toggle between maximized and normal window state."""
+        if self.isMaximized():
+            self.showNormal()
+            self._max_btn.setText("□")
+        else:
+            self.showMaximized()
+            self._max_btn.setText("❐")
 
     # ── Frameless window resize from edges ─────────────────────────────
 
