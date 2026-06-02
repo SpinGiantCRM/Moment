@@ -1,6 +1,6 @@
 [project]
 name = "moment-clips"
-version = "0.3.6"
+version = "0.3.7"
 description = "GPU-accelerated game clip manager for Linux. Capture, edit, and share your gaming moments."
 requires-python = ">=3.11"
 authors = [{ name = "chasem" }]
