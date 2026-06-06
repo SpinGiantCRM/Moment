@@ -409,7 +409,7 @@ class TestCircuitBreaker:
             with (
                 patch.object(u, "_ensure_rclone"),
                 patch.object(u, "_do_copy", side_effect=subprocess.CalledProcessError(1, "rclone")),
-                patch("time.sleep"),
+                patch("moment.core.uploader.time.sleep"),
             ):
                 try:
                     u.upload(test_path)
@@ -418,7 +418,11 @@ class TestCircuitBreaker:
 
         # Run 3 failures in parallel — should increment correctly
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
-            list(ex.map(lambda _: cause_failure(), range(3)))
+            futures = [ex.submit(cause_failure) for _ in range(3)]
+            done, not_done = concurrent.futures.wait(futures, timeout=10)
+            assert not not_done, "upload threads did not finish"
+            for fut in done:
+                fut.result()
 
         # After exactly 3 failures, circuit breaker should be open
         with up_mod.Uploader._failure_lock:

@@ -354,7 +354,8 @@ class AppManager(QObject):
         self._create_window()
 
         # --- First-run import wizard (deferred so the window is visible) ---
-        QTimer.singleShot(200, self._maybe_show_import_wizard)
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            QTimer.singleShot(200, self._maybe_show_import_wizard)
 
         # --- Post-init ---
         if self._args.settings:
@@ -780,6 +781,8 @@ class AppManager(QObject):
 
     def _maybe_show_import_wizard(self) -> None:
         """Show the import wizard on first run when paths are not configured."""
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return
         if self._config is None or self._store is None:
             return
         if self._config.get("setup_wizard_seen", False):
