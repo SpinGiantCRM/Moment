@@ -1,3 +1,3 @@
 """Moment — GPU-accelerated game clip manager for Linux."""
 
-__version__ = "0.3.12"
+__version__ = "0.3.13"
