@@ -53,6 +53,7 @@ include = ["moment*"]
 
 [tool.setuptools]
 include-package-data = true
+license-files = []
 
 [tool.setuptools.package-data]
 moment = [
