@@ -410,6 +410,7 @@ class TestCircuitBreaker:
                 patch.object(u, "_ensure_rclone"),
                 patch.object(u, "_do_copy", side_effect=subprocess.CalledProcessError(1, "rclone")),
                 patch("moment.core.uploader.time.sleep"),
+                patch("moment.core.uploader._MAX_RETRIES", 0),
             ):
                 try:
                     u.upload(test_path)
