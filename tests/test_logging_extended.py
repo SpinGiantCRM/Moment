@@ -390,7 +390,7 @@ class TestCrashDump:
         """
         caplog.set_level(logging.CRITICAL)
         crash = CrashDump()
-        crash.excepthook(RuntimeError, RuntimeError("critical"), None)
+        crash.excepthook(RuntimeError, RuntimeError("test error"), None)
         # CrashDump.excepthook no longer logs — just saves dump
         criticals = [r for r in caplog.records if r.levelname == "CRITICAL"]
         assert len(criticals) == 0
@@ -441,15 +441,12 @@ class TestDiagnose:
 
     def test_diagnose_log_tail(self, tmp_path: Path) -> None:
         """When tail_lines > 0, log_tail contains log lines."""
-        log_dir = tmp_path / "logs"
-        log_dir.mkdir()
-        log_file = log_dir / "moment.log"
+        log_file = tmp_path / "logs" / "moment.log"
         log_file.write_text("line1\nline2\nline3\n")
 
         info = diagnose(tail_lines=2)
-        # The diagnose function reads from the actual log path, not tmp_path
-        # So this test verifies the function doesn't crash
         assert "log_tail" in info
+        assert "line3" in info["log_tail"]
 
     def test_diagnose_storage_providers(self) -> None:
         """diagnose() includes storage_providers list."""
@@ -517,8 +514,10 @@ class TestTailFile:
 
 
 class TestGetCurrentLogPath:
-    def test_returns_default_path_without_config(self) -> None:
+    def test_returns_default_path_without_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Without a Config, returns ~/.local/share/moment/moment.log."""
+        prod_log_dir = os.path.expanduser("~/.local/share/moment")
+        monkeypatch.setattr("moment.utils.logging._LOG_DIR", prod_log_dir)
         path = _get_current_log_path()
         assert path.endswith("/moment.log")
         assert ".local/share/moment" in path

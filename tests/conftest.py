@@ -40,6 +40,20 @@ def _make_test_conn(db_path: str) -> sqlite3.Connection:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _redirect_log_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Redirect logging and crash dumps away from ~/.local/share/moment."""
+    log_dir = tmp_path / "logs"
+    crash_dir = tmp_path / "crash"
+    log_dir.mkdir(parents=True)
+    crash_dir.mkdir(parents=True)
+
+    import moment.utils.logging as logging_mod
+
+    monkeypatch.setattr(logging_mod, "_LOG_DIR", str(log_dir))
+    monkeypatch.setattr(logging_mod, "_CRASH_DIR", str(crash_dir))
+
+
 @pytest.fixture(scope="session")
 def qapp() -> QApplication:
     """Session-scoped QApplication for UI tests using offscreen platform."""

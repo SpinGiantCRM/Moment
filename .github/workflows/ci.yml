@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - uses: astral-sh/ruff-action@v3
         with:
@@ -39,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -63,10 +63,10 @@ jobs:
           QT_QPA_PLATFORM=offscreen \
             python -m pytest -m "not gui and not integration and not slow and not external" \
             --tb=short -q \
-            ${{ matrix.python-version == '3.13' && '--cov=moment --cov-report=term --cov-report=xml' || '' }}
+            ${{ matrix.python-version == '3.14' && '--cov=moment --cov-report=term --cov-report=xml' || '' }}
 
-      - name: Upload coverage artifact (3.13 only)
-        if: matrix.python-version == '3.13'
+      - name: Upload coverage artifact (3.14 only)
+        if: matrix.python-version == '3.14'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-py${{ matrix.python-version }}
@@ -83,7 +83,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -125,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -167,7 +167,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Build wheel + install via pipx
         run: |
@@ -199,7 +199,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install security tools
         run: pip install bandit pip-audit

@@ -348,6 +348,63 @@ def _get_current_log_path(config: "Config | None" = None) -> str:
 # ===================================================================
 
 
+def _safe_qt_crash_context() -> list[str]:
+    """Gather Qt-sensitive crash context without risking SIGABRT.
+
+    Reads the recent log tail and queries ``QApplication.activeWindow()``
+    defensively — any failure is captured as text rather than propagated.
+    """
+    lines: list[str] = []
+
+    lines.append("Recent log lines:")
+    lines.append("-" * 40)
+    try:
+        tail_path = _get_current_log_path()
+        if os.path.isfile(tail_path):
+            with open(tail_path, "rb") as fh:
+                tail_text = _tail_file(fh, 40).decode("utf-8", errors="replace")
+            for log_line in tail_text.splitlines():
+                lines.append(f"  {log_line}")
+        else:
+            lines.append("  <log file not found>")
+    except Exception as exc:
+        lines.append(f"  <unavailable: {exc}>")
+    lines.append("")
+
+    lines.append("Qt context:")
+    lines.append("-" * 40)
+    try:
+        from PyQt6.QtWidgets import QApplication
+
+        qapp = QApplication.instance()
+        if qapp is None:
+            lines.append("  QApplication: <not running>")
+        else:
+            lines.append("  QApplication: running")
+            active_win = None
+            try:
+                active_win = qapp.activeWindow()
+            except Exception as exc:
+                lines.append(f"  activeWindow: <error: {exc}>")
+            else:
+                if active_win is None:
+                    lines.append("  activeWindow: <none>")
+                else:
+                    title = "<unknown>"
+                    try:
+                        title = active_win.windowTitle()
+                    except Exception:
+                        pass
+                    lines.append(
+                        f"  activeWindow: {active_win.__class__.__name__} — {title!r}"
+                    )
+    except Exception as exc:
+        lines.append(f"  <unavailable: {exc}>")
+    lines.append("")
+
+    return lines
+
+
 class CrashDump:
     """Capture and persist crash dumps with full diagnostic context.
 
@@ -366,8 +423,13 @@ class CrashDump:
         sys.excepthook = crash.excepthook
     """
 
-    def __init__(self, log_path: str | None = None) -> None:
+    def __init__(
+        self,
+        log_path: str | None = None,
+        crash_dir: str | Path | None = None,
+    ) -> None:
         self._log_path = log_path
+        self._crash_dir = Path(crash_dir) if crash_dir is not None else Path(_CRASH_DIR)
 
     def excepthook(
         self,
@@ -399,7 +461,7 @@ class CrashDump:
         ts_str = ts.strftime("%Y%m%dT%H%M%SZ")
         pid = os.getpid()
 
-        crash_dir = Path(_CRASH_DIR)
+        crash_dir = self._crash_dir
         crash_dir.mkdir(parents=True, exist_ok=True)
 
         dump_path = crash_dir / f"crash_{ts_str}_pid{pid}.txt"
@@ -437,11 +499,16 @@ class CrashDump:
             "-" * 40,
             tb_text.rstrip(),
             "",
-            "=" * 72,
-            "END OF CRASH REPORT",
-            "=" * 72,
-            "",
         ]
+        lines.extend(_safe_qt_crash_context())
+        lines.extend(
+            [
+                "=" * 72,
+                "END OF CRASH REPORT",
+                "=" * 72,
+                "",
+            ]
+        )
 
         try:
             dump_path.write_text("\n".join(lines), encoding="utf-8")
@@ -580,6 +647,7 @@ def setup_logging(
     *,
     config: "Config | None" = None,
     enable_json: bool = False,
+    log_dir: Path | None = None,
 ) -> logging.Logger:
     """Configure the root logger and return the application logger.
 
@@ -598,14 +666,20 @@ def setup_logging(
         config: Optional Config for path overrides.
         enable_json: If ``True``, use :class:`JsonFormatter` instead of
             the default text format on both file and stream handlers.
+        log_dir: Optional log directory override (takes precedence over
+            *config*).
 
     Returns:
         The configured root logger.
     """
-    # Resolve log directory — honour Config path override if provided
-    log_dir = config.get_path("log_dir") if config is not None else _LOG_DIR
-    log_file = os.path.join(log_dir, "moment.log")
-    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    if log_dir is not None:
+        resolved_log_dir = str(log_dir)
+    elif config is not None:
+        resolved_log_dir = config.get_path("log_dir")
+    else:
+        resolved_log_dir = _LOG_DIR
+    log_file = os.path.join(resolved_log_dir, "moment.log")
+    Path(resolved_log_dir).mkdir(parents=True, exist_ok=True)
 
     # Restrict umask so RotatingFileHandler creates log files as 0o600
     old_umask = os.umask(0o077)

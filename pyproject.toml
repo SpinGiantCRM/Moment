@@ -16,6 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Multimedia :: Video :: Capture",
     "Topic :: Multimedia :: Video :: Conversion",
     "Topic :: Utilities",
@@ -66,6 +67,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+per-file-ignores = {"tests/*.py" = ["E402", "ANN201"]}
 
 [tool.ruff.format]
 line-ending = "lf"

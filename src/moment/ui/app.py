@@ -229,6 +229,19 @@ class AppManager(QObject):
             sys.exit(0)
 
         # --- Create QApplication ---
+        qpa_platform = os.environ.get("QT_QPA_PLATFORM", "")
+        if qpa_platform:
+            logger.info("Qt platform: QT_QPA_PLATFORM=%s", qpa_platform)
+        elif not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+            os.environ["QT_QPA_PLATFORM"] = "offscreen"
+            logger.warning(
+                "No display detected — defaulting QT_QPA_PLATFORM=offscreen "
+                "to avoid Qt SIGABRT"
+            )
+        else:
+            logger.info("Qt platform: system default (QT_QPA_PLATFORM unset)")
+
+        logger.info("Creating QApplication")
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
