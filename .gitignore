@@ -39,6 +39,7 @@ Thumbs.db
 
 # AI agent / IDE config (local only, not shared)
 .cursorrules
+.cursorignore
 .cursor/
 .windsurf/
 .github-copilot*
