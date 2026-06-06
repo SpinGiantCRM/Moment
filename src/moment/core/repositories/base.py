@@ -491,7 +491,16 @@ CREATE TABLE IF NOT EXISTS settings (
 
 
 def _migration_001_initial(conn: sqlite3.Connection) -> None:
-    """Create the full schema."""
+    """Create the full schema.
+
+    If the ``clips`` table already exists without the ``stem`` column
+    (pre-v0.3.12 database), add it first so that the subsequent
+    ``CREATE INDEX … ON clips(stem)`` does not fail.
+    """
+    rows = conn.execute("PRAGMA table_info(clips)").fetchall()
+    columns = {r["name"] for r in rows}
+    if "stem" not in columns:
+        conn.execute("ALTER TABLE clips ADD COLUMN stem TEXT NOT NULL DEFAULT ''")
     conn.executescript(SCHEMA_SQL)
 
 
