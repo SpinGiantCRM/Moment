@@ -204,12 +204,14 @@ class ImportWizardDialog(QDialog):
 
     def _create_source_dir(self) -> None:
         path = self._source_edit.text().strip() or self._default_recordings_dir()
-        created = ensure_recording_dirs(path, self._encode_edit.text().strip() or path)[0]
+        encode = self._encode_edit.text().strip() or self._default_encode_dir()
+        created = ensure_recording_dirs(path, encode)[0]
         self._source_edit.setText(str(created))
 
     def _create_encode_dir(self) -> None:
+        source = self._source_edit.text().strip() or self._default_recordings_dir()
         path = self._encode_edit.text().strip() or self._default_encode_dir()
-        created = ensure_recording_dirs(path, path)[1]
+        created = ensure_recording_dirs(source, path)[1]
         self._encode_edit.setText(str(created))
 
     def _save_paths(self, source_dir: str, encode_dir: str) -> None:
@@ -252,11 +254,24 @@ class ImportWizardDialog(QDialog):
             return
 
         ensure_recording_dirs(source_dir, encode_dir)
-        self._save_paths(source_dir, encode_dir)
+        try:
+            self._save_paths(source_dir, encode_dir)
+        except Exception as exc:
+            logger.exception("Failed to save import wizard paths: %s", exc)
+            QMessageBox.critical(self, "Save failed", f"Could not save paths:\n{exc}")
+            return
 
         self._imported_count = import_recordings_from_dirs(self._store, [source_dir])
         if self._imported_count:
             self._imported_from = self._short_path(source_dir)
+        else:
+            from moment.ui.widgets.toast import toast_manager
+
+            toast_manager.show_toast(
+                "info",
+                "No clips found",
+                "Paths saved — no video files to import.",
+            )
 
         self._config.set("setup_wizard_seen", True)
         self.accept()

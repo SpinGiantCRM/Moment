@@ -22,7 +22,7 @@ class TestColorTokens:
     """Tests for colour token resolution."""
 
     def test_known_token_returns_hex(self) -> None:
-        assert color("--bg-window") == "#1a1a1a"
+        assert color("--bg-window") == "#2b2b2b"
 
     def test_unknown_token_returns_fallback(self) -> None:
         assert color("--nonexistent") == "#000000"
@@ -63,7 +63,7 @@ class TestQssColors:
 
     def test_contains_hex_values(self) -> None:
         result = qss_colors()
-        assert "#1a1a1a" in result
+        assert "#2b2b2b" in result
         assert "#4a9eff" in result
 
 

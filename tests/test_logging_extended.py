@@ -439,14 +439,21 @@ class TestDiagnose:
         info = diagnose(tail_lines=0)
         assert info["log_tail"] == ""
 
-    def test_diagnose_log_tail(self, tmp_path: Path) -> None:
+    def test_diagnose_log_tail(self, tmp_path: Path, db_path: str) -> None:
         """When tail_lines > 0, log_tail contains log lines."""
-        log_file = tmp_path / "logs" / "moment.log"
+        from moment.core.config import Config
+
+        log_file = tmp_path / "moment.log"
         log_file.write_text("line1\nline2\nline3\n")
 
-        info = diagnose(tail_lines=2)
-        assert "log_tail" in info
-        assert "line3" in info["log_tail"]
+        cfg = Config(db_path)
+        cfg.set_path("log_dir", str(tmp_path))
+        try:
+            info = diagnose(config=cfg, tail_lines=2)
+            assert "log_tail" in info
+            assert "line3" in info["log_tail"]
+        finally:
+            cfg.close()
 
     def test_diagnose_storage_providers(self) -> None:
         """diagnose() includes storage_providers list."""

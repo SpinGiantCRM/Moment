@@ -112,6 +112,9 @@ def _candidate_dirs(config: "Config | None") -> list[tuple[Path, str]]:
     _add(videos / "GPU-Screen-Recorder", "GPU Screen Recorder")
     _add(videos / "Moment", "Moment recordings")
     _add(videos / "OBS", "OBS Studio")
+    _add(videos / "Clips", "Clips")
+    _add(videos / "Recordings", "Recordings")
+    _add(videos / "Screen Recordings", "Screen Recordings")
 
     encoded_default = home / ".local/share/moment/encoded"
     _add(encoded_default, "Encoded output")

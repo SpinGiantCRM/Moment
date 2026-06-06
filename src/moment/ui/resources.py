@@ -38,14 +38,14 @@ _ICONS = _ASSETS / "icons"
 
 _COLOUR_TOKENS: dict[str, str] = {
     # ── Backgrounds ──────────────────────────────────────────────────────
-    "--bg-window": "#1a1a1a",
-    "--bg-surface": "#262626",
-    "--bg-elevated": "#2e2e2e",
-    "--bg-inset": "#1e1e1e",
-    "--bg-hover": "#323232",
-    "--bg-active": "#3a3a3a",
-    "--bg-sidebar": "#141414",
-    "--bg-toolbar": "#1c1c1c",
+    "--bg-window": "#2b2b2b",
+    "--bg-surface": "#333333",
+    "--bg-elevated": "#3c3c3c",
+    "--bg-inset": "#242424",
+    "--bg-hover": "#404040",
+    "--bg-active": "#484848",
+    "--bg-sidebar": "#222222",
+    "--bg-toolbar": "#282828",
     "--bg-overlay": "rgba(0,0,0,0.65)",
     "--bg-skeleton": "#2a2a2a",
     "--bg-skeleton-shimmer": "#333333",

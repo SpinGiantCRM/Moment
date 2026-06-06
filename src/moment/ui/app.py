@@ -116,7 +116,8 @@ def _install_qt_message_handler(crash_dump: object | None) -> None:
     """Capture Qt fatal/warning messages in moment.log before abort."""
 
     def _handler(msg_type: QtMsgType, _context: object, message: str) -> None:
-        if msg_type >= QtMsgType.QtFatalMsg:
+        severity = msg_type.value
+        if severity >= QtMsgType.QtFatalMsg.value:
             logger.critical("Qt FATAL: %s", message)
             if crash_dump is not None:
                 try:
@@ -127,7 +128,7 @@ def _install_qt_message_handler(crash_dump: object | None) -> None:
                     )
                 except Exception:
                     logger.exception("Failed to save crash dump for Qt fatal message")
-        elif msg_type >= QtMsgType.QtWarningMsg:
+        elif severity >= QtMsgType.QtWarningMsg.value:
             logger.warning("Qt: %s", message)
 
     qInstallMessageHandler(_handler)
