@@ -36,7 +36,7 @@ bot = ["discord.py>=2.4"]
 mcp = ["fastmcp>=1.0"]
 import-export = ["python-magic>=0.4"]
 test = ["pytest-qt>=4", "pytest-timeout>=2"]
-all = ["moment[bot,mcp,import-export,test]"]
+all = ["moment-clips[bot,mcp,import-export,test]"]
 
 [project.scripts]
 moment = "moment.main:main"
