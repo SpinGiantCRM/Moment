@@ -37,7 +37,7 @@ optdepends=(
     'python-python-magic: MIME type validation for imports'
 )
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('37c546da6b3190d0114cd7f3f7cea0fc414bf93a496c9e1f511fab28ab37741d')
+sha256sums=('6ca9e6df5dbe2e7de878f53b4f9d4489a8df4c1e90d7ca9da87649977921d2fc')
 
 package() {
     cd "${srcdir}/${pkgname}-${pkgver}"
