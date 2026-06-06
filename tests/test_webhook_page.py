@@ -111,7 +111,7 @@ class TestWebhookPageForm:
         page._url_input.setText("")
         page._on_save()
         # URL should have red border styling
-        assert "accent-red" in page._url_input.styleSheet()
+        assert "#f87171" in page._url_input.styleSheet()
 
     def test_save_non_https_url_shows_validation(self, qapp) -> None:
         """Saving with non-HTTPS URL shows validation error."""
@@ -119,7 +119,7 @@ class TestWebhookPageForm:
         page = WebhookPage(store=store)
         page._url_input.setText("http://example.com/hook")
         page._on_save()
-        assert "accent-red" in page._url_input.styleSheet()
+        assert "#f87171" in page._url_input.styleSheet()
 
     def test_url_text_changed_clears_validation(self, qapp) -> None:
         """Editing URL text clears validation styling."""

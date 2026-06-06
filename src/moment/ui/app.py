@@ -235,8 +235,7 @@ class AppManager(QObject):
         elif not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
             os.environ["QT_QPA_PLATFORM"] = "offscreen"
             logger.warning(
-                "No display detected — defaulting QT_QPA_PLATFORM=offscreen "
-                "to avoid Qt SIGABRT"
+                "No display detected — defaulting QT_QPA_PLATFORM=offscreen to avoid Qt SIGABRT"
             )
         else:
             logger.info("Qt platform: system default (QT_QPA_PLATFORM unset)")

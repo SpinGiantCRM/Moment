@@ -35,6 +35,48 @@ def _make_test_conn(db_path: str) -> sqlite3.Connection:
     return conn
 
 
+@pytest.fixture(autouse=True)
+def _use_plain_sqlite_for_db() -> None:
+    """Bypass SQLCipher + keyring for Config/Store DB access in tests.
+
+    Production uses encrypted connections; CI runners have no keyring backend.
+    Tests that exercise connect_encrypted directly import it before patching.
+    """
+    with (
+        patch(
+            "moment.core.repositories.base.connect_encrypted",
+            side_effect=_make_test_conn,
+        ),
+        patch(
+            "moment.core.store._connect_encrypted",
+            side_effect=_make_test_conn,
+        ),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_mcp_singletons() -> None:
+    """Reset MCP module-level Store/Pipeline singletons between tests."""
+    import moment.mcp.tools as mcp_tools
+
+    mcp_tools._store = None
+    if mcp_tools._pipeline is not None:
+        try:
+            mcp_tools._pipeline.shutdown()
+        except Exception:
+            pass
+    mcp_tools._pipeline = None
+    yield
+    mcp_tools._store = None
+    if mcp_tools._pipeline is not None:
+        try:
+            mcp_tools._pipeline.shutdown()
+        except Exception:
+            pass
+    mcp_tools._pipeline = None
+
+
 # ---------------------------------------------------------------------------
 # QApplication (session-scoped for UI tests)
 # ---------------------------------------------------------------------------

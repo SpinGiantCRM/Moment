@@ -36,7 +36,6 @@ class TrashPage(QWidget):
     Signals:
         clip_restored(str): Emitted with clip ID after restore.
         clips_removed: Emitted after a permanent delete or trash empty.
-        empty_trash_requested: Emitted when user clicks Empty Trash (handled by main window).
     """
 
     clip_restored = pyqtSignal(str)

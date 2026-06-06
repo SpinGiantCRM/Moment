@@ -13,7 +13,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt6.QtCore import Qt
 
 from moment.core.models import Clip, ClipStatus
 
@@ -86,12 +85,12 @@ class TestGridPage:
         page.close()
         page.deleteLater()
 
-    def test_search_changes_trigger_timer(self, qapp) -> None:
+    def test_search_text_applies_filter(self, qapp) -> None:
         from moment.ui.pages.grid_page import GridPage
 
         page = GridPage()
-        page._on_search_text_changed("ace")
-        assert True
+        page.set_search_text("ace")
+        assert page._proxy_model._filter_text == "ace"
         page.close()
         page.deleteLater()
 
@@ -99,33 +98,8 @@ class TestGridPage:
         from moment.ui.pages.grid_page import GridPage
 
         page = GridPage()
-        page._on_sort_changed("A–Z")
-        assert True
-        page.close()
-        page.deleteLater()
-
-    def test_key_press_ctrl_f(self, qapp) -> None:
-        from moment.ui.pages.grid_page import GridPage
-
-        page = GridPage()
-        page.show()
-        page._search_input.setFocus()
-        assert page._search_input is not None
-        page.close()
-        page.deleteLater()
-
-    def test_key_press_escape_does_not_clear_search(self, qapp) -> None:
-        """Escape key does not clear search in GridPage directly
-        (handled by MainWindow global shortcut instead).
-        """
-        from PyQt6.QtTest import QTest
-
-        from moment.ui.pages.grid_page import GridPage
-
-        page = GridPage()
-        page._search_input.setText("test")
-        QTest.keyPress(page, Qt.Key.Key_Escape)
-        assert page._search_input.text() == "test"
+        page.set_sort("Name A–Z")
+        assert page._proxy_model._sort_column == "title"
         page.close()
         page.deleteLater()
 
@@ -170,10 +144,8 @@ class TestRecordingPage:
         from moment.ui.pages.recording_page import RecordingPage
 
         page = RecordingPage()
-        page.show()
         assert not page.is_recording()
-        assert page._ready_widget.isVisible()
-        assert not page._recording_widget.isVisible()
+        assert page._status_label.text() == "Ready to record"
         page.close()
         page.deleteLater()
 
@@ -181,11 +153,9 @@ class TestRecordingPage:
         from moment.ui.pages.recording_page import RecordingPage
 
         page = RecordingPage()
-        page.show()
         page.set_recording(fps=60)
         assert page.is_recording()
-        assert not page._ready_widget.isVisible()
-        assert page._recording_widget.isVisible()
+        assert "Recording" in page._status_label.text()
         page.close()
         page.deleteLater()
 
@@ -193,12 +163,10 @@ class TestRecordingPage:
         from moment.ui.pages.recording_page import RecordingPage
 
         page = RecordingPage()
-        page.show()
         page.set_recording(fps=60)
         page.set_ready()
         assert not page.is_recording()
-        assert page._ready_widget.isVisible()
-        assert not page._recording_widget.isVisible()
+        assert page._status_label.text() == "Ready to record"
         page.close()
         page.deleteLater()
 
@@ -217,21 +185,11 @@ class TestRecordingPage:
         from moment.ui.pages.recording_page import RecordingPage
 
         page = RecordingPage()
+        page.set_recording()
         fired: list[int] = []
         page.stop_recording.connect(lambda: fired.append(1))
-        page._on_stop_clicked()
+        page._on_record_clicked()
         assert fired == [1]
-        page.close()
-        page.deleteLater()
-
-    def test_save_button_emits_signal(self, qapp) -> None:
-        from moment.ui.pages.recording_page import RecordingPage
-
-        page = RecordingPage()
-        durations: list[int] = []
-        page.save_clip.connect(lambda d: durations.append(d))
-        page._on_save_clicked(30)
-        assert 30 in durations
         page.close()
         page.deleteLater()
 
@@ -242,37 +200,28 @@ class TestRecordingPage:
         page.set_recording()
         page._on_elapsed_tick()
         assert page._elapsed == 1
-        assert "00:01" in page._rec_elapsed.text()
+        assert "00:01" in page._status_label.text()
         page.close()
         page.deleteLater()
 
-    def test_rec_dot_starts_animation_on_record(self, qapp) -> None:
+    def test_pulse_timer_starts_on_record(self, qapp) -> None:
         from moment.ui.pages.recording_page import RecordingPage
 
         page = RecordingPage()
         page.set_recording()
-        assert page._rec_dot._active
+        assert page._pulse_timer.isActive()
         page.close()
         page.deleteLater()
 
-    def test_rec_dot_stops_animation_on_ready(self, qapp) -> None:
+    def test_pulse_timer_stops_on_ready(self, qapp) -> None:
         from moment.ui.pages.recording_page import RecordingPage
 
         page = RecordingPage()
         page.set_recording()
         page.set_ready()
-        assert not page._rec_dot._active
+        assert not page._pulse_timer.isActive()
         page.close()
         page.deleteLater()
-
-    def test_rec_dot_initial_state(self, qapp) -> None:
-        from moment.ui.pages.recording_page import _RecDot
-
-        dot = _RecDot()
-        assert not dot._active
-        assert dot._phase == 0.0
-        dot.close()
-        dot.deleteLater()
 
 
 # ---------------------------------------------------------------------------

@@ -395,9 +395,7 @@ def _safe_qt_crash_context() -> list[str]:
                         title = active_win.windowTitle()
                     except Exception:
                         pass
-                    lines.append(
-                        f"  activeWindow: {active_win.__class__.__name__} — {title!r}"
-                    )
+                    lines.append(f"  activeWindow: {active_win.__class__.__name__} — {title!r}")
     except Exception as exc:
         lines.append(f"  <unavailable: {exc}>")
     lines.append("")

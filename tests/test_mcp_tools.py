@@ -290,9 +290,10 @@ class TestListGameProfiles:
 
 
 class TestEnqueueEncode:
+    @patch("moment.mcp.tools._get_pipeline")
     @patch("moment.mcp.tools._get_store")
     @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
-    def test_enqueue_encode_found(self, mock_check, mock_get_store, mock_store):
+    def test_enqueue_encode_found(self, mock_check, mock_get_store, mock_get_pipeline, mock_store):
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="enc-id",
@@ -324,9 +325,10 @@ class TestEnqueueEncode:
 
 
 class TestEnqueueUpload:
+    @patch("moment.mcp.tools._get_pipeline")
     @patch("moment.mcp.tools._get_store")
     @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
-    def test_enqueue_upload_found(self, mock_check, mock_get_store, mock_store):
+    def test_enqueue_upload_found(self, mock_check, mock_get_store, mock_get_pipeline, mock_store):
         mock_get_store.return_value = mock_store
         clip = Clip(
             id="up-id",
@@ -596,9 +598,12 @@ class TestMCPScopedTokens:
         assert "error" in result
         assert "mutation" in result["error"].lower()
 
+    @patch("moment.mcp.tools._get_pipeline")
     @patch("moment.mcp.tools._get_store")
     @patch("moment.mcp.tools._check_mutation_allowed", return_value=None)
-    def test_enqueue_encode_allowed_for_mutation(self, mock_check, mock_get_store, mock_store):
+    def test_enqueue_encode_allowed_for_mutation(
+        self, mock_check, mock_get_store, mock_get_pipeline, mock_store
+    ):
         """enqueue_encode allows mutation-scoped tokens."""
         clip = Clip(
             id="enc-id",

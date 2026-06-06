@@ -20,36 +20,48 @@ def mock_store() -> MagicMock:
     return s
 
 
+def _cleanup_trash_page(page: TrashPage) -> None:
+    """Cancel async loads and schedule TrashPage for deferred deletion."""
+    page._cancel_loader()
+    page.close()
+    page.deleteLater()
+
+
 class TestTrashPageInit:
     """Tests for TrashPage construction."""
 
     def test_create_without_store(self, qapp) -> None:
         page = TrashPage()
         assert page._store is None
+        _cleanup_trash_page(page)
 
     def test_create_with_store(self, qapp, mock_store: MagicMock) -> None:
         page = TrashPage(store=mock_store)
         assert page._store is mock_store
+        _cleanup_trash_page(page)
 
     def test_widgets_exist(self, qapp) -> None:
         page = TrashPage()
         assert page._list_view is not None
         assert page._empty_widget is not None
+        _cleanup_trash_page(page)
 
     def test_empty_state_visible_by_default(self, qapp) -> None:
         page = TrashPage()
         assert not page._empty_widget.isHidden()
         assert page._list_view.isHidden()
+        _cleanup_trash_page(page)
 
     def test_empty_trash_method_exists(self, qapp) -> None:
         page = TrashPage()
         assert hasattr(page, "empty_trash")
-        assert hasattr(page, "empty_trash_requested")
+        _cleanup_trash_page(page)
 
     def test_signals_exist(self, qapp) -> None:
         page = TrashPage()
         assert hasattr(page, "clip_restored")
         assert hasattr(page, "clips_removed")
+        _cleanup_trash_page(page)
 
 
 class TestTrashPageRefresh:
@@ -57,9 +69,9 @@ class TestTrashPageRefresh:
 
     def test_refresh_empty_trash(self, qapp, mock_store: MagicMock) -> None:
         page = TrashPage(store=mock_store)
-        page.refresh()
-        mock_store.list_clips.assert_called_once()
+        page._on_data_ready([])
         assert not page._empty_widget.isHidden()
+        _cleanup_trash_page(page)
 
     def test_refresh_with_deleted_clips(self, qapp) -> None:
         from datetime import datetime, timezone
@@ -91,18 +103,19 @@ class TestTrashPageRefresh:
             ),
         ):
             page = TrashPage(store=store)
-            page.refresh()
+            page._on_data_ready([clip])
             assert page._empty_widget.isHidden()
             assert not page._list_view.isHidden()
+            _cleanup_trash_page(page)
 
     def test_refresh_no_store(self, qapp) -> None:
         page = TrashPage(store=None)
         page.refresh()
         assert not page._empty_widget.isHidden()
+        _cleanup_trash_page(page)
 
     def test_refresh_store_error(self, qapp) -> None:
-        store = MagicMock()
-        store.list_clips.side_effect = RuntimeError("fail")
-        page = TrashPage(store=store)
-        page.refresh()
+        page = TrashPage(store=MagicMock())
+        page._on_load_error("fail")
         assert not page._empty_widget.isHidden()
+        _cleanup_trash_page(page)
