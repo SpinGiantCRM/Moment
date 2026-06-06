@@ -8,7 +8,7 @@
 # Source: https://github.com/SpinGiantCRM/moment
 
 pkgname=moment
-pkgver=0.3.17
+pkgver=0.3.18
 pkgrel=1
 epoch=
 pkgdesc="GPU-accelerated game clip manager for Linux. Capture, edit, and share your gaming moments."
@@ -37,7 +37,7 @@ optdepends=(
     'python-python-magic: MIME type validation for imports'
 )
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('af6877aba2297d6a5640db3607e9fc8978c7c1d049626583b575fa6322e81c10')
+sha256sums=('37c546da6b3190d0114cd7f3f7cea0fc414bf93a496c9e1f511fab28ab37741d')
 
 package() {
     cd "${srcdir}/${pkgname}-${pkgver}"
