@@ -259,8 +259,9 @@ class TestBatch:
         def cb(stem: str, path: Path | None) -> None:
             calls.append((stem, path))
 
-        thumbnailer.generate_batch([clip], callback=cb)
-        assert clip.stem in thumbnailer._callbacks
+        with patch.object(thumbnailer._executor, "submit"):
+            thumbnailer.generate_batch([clip], callback=cb)
+            assert clip.stem in thumbnailer._callbacks
 
 
 # ---------------------------------------------------------------------------
