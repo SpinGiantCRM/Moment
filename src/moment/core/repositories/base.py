@@ -490,17 +490,33 @@ CREATE TABLE IF NOT EXISTS settings (
 # ---------------------------------------------------------------------------
 
 
-def _migration_001_initial(conn: sqlite3.Connection) -> None:
-    """Create the full schema.
+def _ensure_clips_table_columns(conn: sqlite3.Connection) -> None:
+    """Add any columns to the ``clips`` table that exist in
+    :data:`SCHEMA_SQL` but not yet in the live database.  This handles
+    databases created with an older schema that is missing columns
+    referenced by later ``CREATE INDEX`` statements."""
+    import re
 
-    If the ``clips`` table already exists without the ``stem`` column
-    (pre-v0.3.12 database), add it first so that the subsequent
-    ``CREATE INDEX … ON clips(stem)`` does not fail.
-    """
-    rows = conn.execute("PRAGMA table_info(clips)").fetchall()
-    columns = {r["name"] for r in rows}
-    if "stem" not in columns:
-        conn.execute("ALTER TABLE clips ADD COLUMN stem TEXT NOT NULL DEFAULT ''")
+    existing = {r["name"] for r in conn.execute("PRAGMA table_info(clips)").fetchall()}
+    m = re.search(
+        r"CREATE TABLE IF NOT EXISTS clips\s*\((.+?)\)\s*;",
+        SCHEMA_SQL,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not m:
+        return
+    for line in m.group(1).split(","):
+        parts = line.strip().split(None, 1)
+        if len(parts) < 2:
+            continue
+        col_name = parts[0].strip("`\"'[]")
+        if col_name not in existing:
+            conn.execute(f"ALTER TABLE clips ADD COLUMN {line.strip().rstrip(',')}")
+
+
+def _migration_001_initial(conn: sqlite3.Connection) -> None:
+    """Create the full schema."""
+    _ensure_clips_table_columns(conn)
     conn.executescript(SCHEMA_SQL)
 
 
