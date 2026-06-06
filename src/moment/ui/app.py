@@ -19,7 +19,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn
 
-from PyQt6.QtCore import QObject, QSettings, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QObject,
+    QSettings,
+    Qt,
+    QTimer,
+    QtMsgType,
+    pyqtSignal,
+    qInstallMessageHandler,
+)
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import QApplication, QStyleFactory
 
@@ -102,6 +110,27 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 # ===========================================================================
 # Exception handler
 # ===========================================================================
+
+
+def _install_qt_message_handler(crash_dump: object | None) -> None:
+    """Capture Qt fatal/warning messages in moment.log before abort."""
+
+    def _handler(msg_type: QtMsgType, _context: object, message: str) -> None:
+        if msg_type >= QtMsgType.QtFatalMsg:
+            logger.critical("Qt FATAL: %s", message)
+            if crash_dump is not None:
+                try:
+                    crash_dump._save_dump(  # type: ignore[attr-defined]
+                        RuntimeError,
+                        RuntimeError(f"Qt FATAL: {message}"),
+                        None,
+                    )
+                except Exception:
+                    logger.exception("Failed to save crash dump for Qt fatal message")
+        elif msg_type >= QtMsgType.QtWarningMsg:
+            logger.warning("Qt: %s", message)
+
+    qInstallMessageHandler(_handler)
 
 
 def _global_excepthook(exc_type, exc_value, exc_tb) -> None:
@@ -307,6 +336,9 @@ class AppManager(QObject):
         except Exception as exc:
             logger.debug("Crash dump handler install failed: %s", exc)
             self._crash_dump = None
+
+        # Capture Qt fatal messages (bypass Python excepthook) in moment.log
+        _install_qt_message_handler(self._crash_dump)
 
         # --- Tray icon ---
         self._tray = TrayIcon()

@@ -34,7 +34,7 @@ def _get_or_create_db_key() -> bytes | None:
     try:
         key = keyring.get_password("moment", "db_encryption_key")
     except Exception as exc:
-        logger.error("Failed to read DB encryption key from keyring: %s", exc)
+        logger.error("Failed to read DB encryption key from keyring: %s", exc, exc_info=True)
         return None
 
     if key is not None:
@@ -48,7 +48,7 @@ def _get_or_create_db_key() -> bytes | None:
         logger.info("Generated and stored new DB encryption key in keyring")
         return new_key.encode()
     except Exception as exc:
-        logger.error("Could not store DB encryption key in keyring: %s", exc)
+        logger.error("Could not store DB encryption key in keyring: %s", exc, exc_info=True)
         return None
 
 
@@ -497,6 +497,11 @@ def _ensure_clips_table_columns(conn: sqlite3.Connection) -> None:
     referenced by later ``CREATE INDEX`` statements."""
     import re
 
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='clips'"
+    ).fetchone():
+        return
+
     existing = {r["name"] for r in conn.execute("PRAGMA table_info(clips)").fetchall()}
     m = re.search(
         r"CREATE TABLE IF NOT EXISTS clips\s*\((.+?)\)\s*;",
@@ -516,7 +521,6 @@ def _ensure_clips_table_columns(conn: sqlite3.Connection) -> None:
             col_def = f"{parts[0]} {parts[1]}"
             default = None
             # Look for DEFAULT <value> (constant only)
-            rest = line.strip()
             m_default = re.search(
                 r"DEFAULT\s+(\d+|'[^']*'|\"[^\"]*\"|[+-]?\d+\.?\d*(?:[eE][+-]?\d+)?|TRUE|FALSE|NULL)",
                 line,
@@ -735,10 +739,48 @@ def run_migrations(conn: sqlite3.Connection) -> None:
                 )
             logger.info("Migration %d applied successfully", idx)
         except Exception as exc:
-            logger.error("Migration %d (%s) failed: %s", idx, name, exc)
+            logger.error("Migration %d (%s) failed: %s", idx, name, exc, exc_info=True)
             raise
 
     logger.info("Migrations complete: %d → %d", current, total)
+
+
+def run_migrations_with_retry(
+    conn: sqlite3.Connection,
+    *,
+    max_retries: int = 3,
+) -> None:
+    """Apply pending migrations, retrying transient failures."""
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            run_migrations(conn)
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt + 1 >= max_retries:
+                break
+            locked = (
+                isinstance(exc, sqlite3.OperationalError)
+                and "database is locked" in str(exc).lower()
+            )
+            if locked:
+                logger.warning(
+                    "Database locked during migration, retrying (%d/%d): %s",
+                    attempt + 1,
+                    max_retries,
+                    exc,
+                )
+            else:
+                logger.warning(
+                    "Migration failed, retrying (%d/%d): %s",
+                    attempt + 1,
+                    max_retries,
+                    exc,
+                )
+            time.sleep(0.05 * (2**attempt))
+    if last_exc is not None:
+        raise last_exc
 
 
 # ---------------------------------------------------------------------------

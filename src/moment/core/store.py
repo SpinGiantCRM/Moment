@@ -28,7 +28,11 @@ from moment.core.encryption import (
 )
 from moment.core.migrations import OLD_JSON_PATH
 from moment.core.models import Webhook
-from moment.core.repositories.base import BaseRepository, connect_encrypted, run_migrations
+from moment.core.repositories.base import (
+    BaseRepository,
+    connect_encrypted,
+    run_migrations_with_retry,
+)
 from moment.core.repositories.bookmark_repo import BookmarkRepository
 from moment.core.repositories.clip_repo import ClipRepository
 from moment.core.repositories.folder_repo import FolderRepository
@@ -104,7 +108,7 @@ class Store:
         self.bookmarks = BookmarkRepository(self._base)
         self.settings = SettingsRepository(self._base)
         self._run_encryption_health_check()
-        run_migrations(conn)
+        run_migrations_with_retry(conn)
         self._migrate_old_dirs()
         self.migrate_from_json(Path(OLD_JSON_PATH))
 

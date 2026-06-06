@@ -175,9 +175,9 @@ class GSRWatcher:
                 for fp in sorted(new_files, key=lambda p: p.stat().st_mtime):
                     self._handle_new_file(fp)
 
-            except (OSError, FileNotFoundError):
+            except (OSError, FileNotFoundError) as exc:
                 # Directory may have been deleted
-                pass
+                logger.debug("GSR watch dir error: %s", exc)
             except Exception:
                 logger.exception("Polling error")
 

@@ -258,5 +258,5 @@ class CorruptionDetector:
             else:
                 self._last_task_count = 0
         except Exception as exc:
-            logger.debug("Pipeline stuck check failed: %s", exc)
+            logger.warning("Pipeline stuck check failed: %s", exc)
         return issues

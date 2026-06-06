@@ -83,7 +83,6 @@ def _reset_mcp_singletons() -> None:
 
 
 @pytest.fixture(autouse=True)
-@pytest.fixture(autouse=True)
 def _redirect_log_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Redirect logging and crash dumps away from ~/.local/share/moment."""
     log_dir = tmp_path / "logs"
