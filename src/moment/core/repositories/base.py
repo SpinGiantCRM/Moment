@@ -506,12 +506,26 @@ def _ensure_clips_table_columns(conn: sqlite3.Connection) -> None:
     if not m:
         return
     for line in m.group(1).split(","):
-        parts = line.strip().split(None, 1)
+        parts = line.strip().split(None, 2)
         if len(parts) < 2:
             continue
         col_name = parts[0].strip("`\"'[]")
         if col_name not in existing:
-            conn.execute(f"ALTER TABLE clips ADD COLUMN {line.strip().rstrip(',')}")
+            # SQLite ALTER TABLE ADD COLUMN only accepts name + type +
+            # constant DEFAULT. Strip everything else.
+            col_def = f"{parts[0]} {parts[1]}"
+            default = None
+            # Look for DEFAULT <value> (constant only)
+            rest = line.strip()
+            m_default = re.search(
+                r"DEFAULT\s+(\d+|'[^']*'|\"[^\"]*\"|[+-]?\d+\.?\d*(?:[eE][+-]?\d+)?|TRUE|FALSE|NULL)",
+                line,
+                re.IGNORECASE,
+            )
+            if m_default:
+                default = m_default.group(0)
+                col_def += f" {default}"
+            conn.execute(f"ALTER TABLE clips ADD COLUMN {col_def}")
 
 
 def _migration_001_initial(conn: sqlite3.Connection) -> None:
