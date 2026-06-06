@@ -470,8 +470,8 @@ class AppManager(QObject):
             from moment.utils.logging import setup_logging
 
             self._config = Config()
-            self._store = Store(config=self._config)
             setup_logging(config=self._config, verbose=self._args.verbose)
+            self._store = Store(config=self._config)
             self._store_init_error = None
             logger.info("Store + Config initialised")
         except Exception as exc:
@@ -510,8 +510,8 @@ class AppManager(QObject):
             if self._config is None:
                 self._config = Config()
 
-            self._store = Store(config=self._config)
             setup_logging(config=self._config, verbose=self._args.verbose)
+            self._store = Store(config=self._config)
             self._store_init_error = None
             logger.info("Store re-initialised successfully")
         except Exception as exc:
