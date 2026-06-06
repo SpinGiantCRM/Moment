@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +13,23 @@ import pytest
 from moment.core.config import Config
 
 pytestmark = [pytest.mark.integration]
+
+
+def _plain_sqlite_conn(db_path: str) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
+@pytest.fixture(autouse=True)
+def _use_plain_sqlite_for_config() -> None:
+    """Config uses SQLCipher in production; tests use plain SQLite."""
+    with patch(
+        "moment.core.repositories.base.connect_encrypted",
+        side_effect=_plain_sqlite_conn,
+    ):
+        yield
 
 
 @pytest.fixture
@@ -84,6 +102,11 @@ class TestKeyWhitelist:
         with pytest.raises(ValueError, match="Unknown config key"):
             config.set("nonsense_key", "value")
 
+    def test_mcp_api_token_rejected(self, config: Config) -> None:
+        """MCP tokens must live in keyring only — not the settings table."""
+        with pytest.raises(ValueError, match="Unknown config key"):
+            config.set("mcp_api_token", "secret-token")
+
     def test_known_key_succeeds(self, config: Config) -> None:
         config.set("autostart", True)
         assert config.get("autostart") is True
@@ -153,7 +176,6 @@ class TestKeyWhitelist:
             "pause_thumbnail_during_game",
             "minimize_during_game",
             "game_exit_behavior",
-            "mcp_api_token",
             "discord_bot_auto_start",
         ]
         for key in known:

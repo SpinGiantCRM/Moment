@@ -140,8 +140,11 @@ if _DISCORD_AVAILABLE:
             async def wrapper(interaction: discord.Interaction, *args, **kwargs):
                 allowed = _get_allowed_roles(store)
                 if not allowed:
-                    # No roles configured → allow all (backward compat)
-                    return await func(interaction, *args, **kwargs)
+                    await interaction.response.send_message(
+                        "❌ Bot commands are disabled — configure allowed roles in Settings.",
+                        ephemeral=True,
+                    )
+                    return
 
                 user_roles = {r.name for r in getattr(interaction.user, "roles", [])}
                 if not allowed & user_roles:

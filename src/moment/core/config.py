@@ -57,8 +57,6 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
         "pause_thumbnail_during_game",
         "minimize_during_game",
         "game_exit_behavior",
-        # MCP / security
-        "mcp_api_token",
         # Discord bot
         "discord_bot_auto_start",
         "discord_allowed_roles",
@@ -142,6 +140,7 @@ class Config:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.commit()
         self._write_lock = threading.Lock()
+        self._purge_legacy_secrets()
 
     def close(self) -> None:
         """Close the persistent SQLite connection."""
@@ -151,10 +150,22 @@ class Config:
             logger.warning("Failed to close SQLite connection: %s", exc)
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
+        from moment.core.repositories.base import connect_encrypted
+
+        conn = connect_encrypted(self._db_path)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
+
+    def _purge_legacy_secrets(self) -> None:
+        """Remove secrets that must live in the keyring, not the settings table."""
+        legacy_keys = ("mcp_api_token", "discord_bot_token")
+        with self._write_lock:
+            for key in legacy_keys:
+                row = self._conn.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone()
+                if row is not None:
+                    self._conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+                    logger.info("Removed legacy secret %r from settings (keyring-only)", key)
+            self._conn.commit()
 
     # ------------------------------------------------------------------
     # Key-value access

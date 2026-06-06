@@ -71,11 +71,20 @@ def _start_shimmer_timer() -> None:
 
 def _tick_shimmer() -> None:
     """Advance the global shimmer offset by one frame and repaint all views."""
-    global _shimmer_offset
+    global _shimmer_offset, _shimmer_views
     _shimmer_offset = (_shimmer_offset + 16 / 1500) % 1.0
+    alive: list[QWidget] = []
     for view in _shimmer_views:
-        if view is not None and view.isVisible():
-            view.viewport().update()
+        if view is None:
+            continue
+        try:
+            if view.isVisible():
+                view.viewport().update()
+            alive.append(view)
+        except RuntimeError:
+            # View was deleted — drop stale reference so the timer stays safe.
+            continue
+    _shimmer_views = alive
 
 
 # ===========================================================================
@@ -482,6 +491,12 @@ class ClipDelegate(QStyledItemDelegate):
             "created_at": (
                 clip.created_at.isoformat() if isinstance(clip.created_at, datetime) else ""
             ),
+            "recorded_at": (
+                clip.recorded_at.isoformat()
+                if isinstance(getattr(clip, "recorded_at", None), datetime)
+                else ""
+            ),
+            "tags": list(getattr(clip, "tags", []) or []),
         }
 
 

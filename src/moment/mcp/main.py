@@ -68,6 +68,7 @@ def run_mcp(argv: list[str] | None = None) -> int:
         server = create_server(
             allow_mutations=args.allow_mutations,
             api_token=api_token,
+            http_auth=args.http,
         )
     except ImportError:
         return 1

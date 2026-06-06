@@ -90,9 +90,7 @@ class TestCreateServer:
 
     @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
     @patch("moment.mcp.server.FastMCP")
-    @patch("moment.mcp.server._resolve_or_generate_token")
-    def test_creates_server_with_mutations(self, mock_resolve, mock_fastmcp_class):
-        mock_resolve.return_value = ("mut-token", "ro-token")
+    def test_creates_server_with_mutations(self, mock_fastmcp_class):
         mock_server = MagicMock()
         mock_fastmcp_class.return_value = mock_server
 
@@ -110,16 +108,16 @@ class TestCreateServer:
 
     @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
     @patch("moment.mcp.server.FastMCP")
-    @patch("moment.mcp.server._resolve_or_generate_token")
+    @patch("moment.mcp.server._resolve_http_auth_tokens")
     def test_creates_with_explicit_token(self, mock_resolve, mock_fastmcp_class):
-        mock_resolve.return_value = ("my-token", None)
+        mock_resolve.return_value = ("my-token", "ro-token")
         mock_server = MagicMock()
         mock_fastmcp_class.return_value = mock_server
 
         from moment.mcp.server import create_server
 
-        create_server(allow_mutations=True, api_token="my-token")
-        mock_resolve.assert_called_once_with("my-token")
+        create_server(allow_mutations=True, api_token="my-token", http_auth=True)
+        mock_resolve.assert_called_once_with(True, "my-token")
 
 
 class TestAuthAllRoutes:
@@ -153,21 +151,34 @@ class TestAuthMiddleware:
 
         from moment.mcp.server import create_server
 
-        create_server(allow_mutations=True, api_token="secret-token")
+        create_server(allow_mutations=True, api_token="secret-token", http_auth=True)
         mock_server._app.middleware.assert_called_once()
 
     @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
     @patch("moment.mcp.server.FastMCP")
-    def test_no_auth_when_no_mutations(self, mock_fastmcp_class):
+    def test_no_auth_for_stdio_read_only(self, mock_fastmcp_class):
         mock_server = MagicMock()
         mock_server._app = MagicMock()
         mock_fastmcp_class.return_value = mock_server
 
         from moment.mcp.server import create_server
 
-        create_server(allow_mutations=False)
-        # Should not try to add middleware
+        create_server(allow_mutations=False, http_auth=False)
         mock_server._app.middleware.assert_not_called()
+
+    @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
+    @patch("moment.mcp.server.FastMCP")
+    @patch("moment.mcp.server._resolve_http_auth_tokens")
+    def test_http_auth_without_mutations(self, mock_resolve, mock_fastmcp_class):
+        mock_resolve.return_value = (None, "ro-only-token")
+        mock_server = MagicMock()
+        mock_server._app = MagicMock()
+        mock_fastmcp_class.return_value = mock_server
+
+        from moment.mcp.server import create_server
+
+        create_server(allow_mutations=False, http_auth=True)
+        mock_server._app.middleware.assert_called_once()
 
     @patch("moment.mcp.server._FASTMCP_AVAILABLE", True)
     @patch("moment.mcp.server.FastMCP")
@@ -181,7 +192,7 @@ class TestAuthMiddleware:
 
         from moment.mcp.server import create_server
 
-        create_server(allow_mutations=True, api_token="tok")
+        create_server(allow_mutations=True, api_token="tok", http_auth=True)
         mock_server._app.middleware.assert_called_once()
 
 
@@ -218,5 +229,5 @@ class TestScopedTokens:
         from moment.mcp.server import create_server
 
         with patch("moment.mcp.server._add_auth_middleware") as mock_mw:
-            create_server(allow_mutations=True)
+            create_server(allow_mutations=True, http_auth=True)
             mock_mw.assert_called_once_with(mock_server, "mut", "ro")

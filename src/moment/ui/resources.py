@@ -39,13 +39,13 @@ _ICONS = _ASSETS / "icons"
 _COLOUR_TOKENS: dict[str, str] = {
     # ── Backgrounds ──────────────────────────────────────────────────────
     "--bg-window": "#1a1a1a",
-    "--bg-surface": "#242424",
-    "--bg-elevated": "#2a2a2a",
+    "--bg-surface": "#262626",
+    "--bg-elevated": "#2e2e2e",
     "--bg-inset": "#1e1e1e",
     "--bg-hover": "#323232",
     "--bg-active": "#3a3a3a",
-    "--bg-sidebar": "#181818",
-    "--bg-toolbar": "#1e1e1e",
+    "--bg-sidebar": "#141414",
+    "--bg-toolbar": "#1c1c1c",
     "--bg-overlay": "rgba(0,0,0,0.65)",
     "--bg-skeleton": "#2a2a2a",
     "--bg-skeleton-shimmer": "#333333",
@@ -55,6 +55,7 @@ _COLOUR_TOKENS: dict[str, str] = {
     "--border-input": "#444444",
     "--border-focus": "#4a9eff",
     "--border-hover": "#555555",
+    "--border-menu": "#3d3d3d",
     # ── Text ─────────────────────────────────────────────────────────────
     "--text-primary": "#e8e8e8",
     "--text-secondary": "#a0a0a0",
@@ -488,8 +489,12 @@ QComboBox::drop-down {{
 
 QComboBox::down-arrow {{
     image: none;
-    border: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--text-secondary);
     width: 0;
+    height: 0;
+    margin-right: 6px;
 }}
 
 QComboBox QAbstractItemView {{

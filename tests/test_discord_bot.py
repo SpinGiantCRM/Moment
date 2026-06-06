@@ -201,6 +201,15 @@ class TestRoleAuth:
             roles = _get_allowed_roles(MagicMock())
             assert roles == {"VIP", "Editor", "Admin"}
 
+    def test_empty_allowed_roles_denies_access(self):
+        """Empty role list denies all users (no backward-compat bypass)."""
+        with patch("moment.core.discord_bot._get_allowed_roles") as mock_fn:
+            mock_fn.return_value = set()
+            from moment.core.discord_bot import _get_allowed_roles
+
+            roles = _get_allowed_roles(MagicMock())
+            assert roles == set()
+
 
 # ---------------------------------------------------------------------------
 # Visibility enforcement in Discord (Spec 24)

@@ -286,12 +286,13 @@ class TestMainWindowBatchAction:
         _cleanup_window(window)
 
     def test_batch_other_action_noop(self, qapp):
-        """Batch actions that trigger dialogs are skipped when store is None."""
+        """Batch actions that open dialogs are mocked in headless tests."""
         store = MagicMock()
         window = MainWindow(store=store)
-        # Export triggers QFileDialog which crashes in headless; verify guard works
-        window._on_batch_action("Export", ["clip-1"])
-        # store methods not called (batch_export does its own thing)
+        window._grid_page.refresh = MagicMock()
+        with patch.object(MainWindow, "_batch_export"):
+            window._on_batch_action("Export", ["clip-1"])
+            window._batch_export.assert_called_once_with(["clip-1"])
         _cleanup_window(window)
 
 

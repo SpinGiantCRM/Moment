@@ -119,7 +119,10 @@ def _global_excepthook(exc_type, exc_value, exc_tb) -> None:
         exc_info=(exc_type, exc_value, exc_tb),
     )
 
-    # Try to show a non-modal error dialog so the app stays alive
+    # Non-blocking dialog — exec() would freeze headless tests and the event loop.
+    if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or "pytest" in sys.modules:
+        return
+
     try:
         from PyQt6.QtWidgets import QMessageBox
 
@@ -129,7 +132,9 @@ def _global_excepthook(exc_type, exc_value, exc_tb) -> None:
         msg.setText(str(exc_value))
         msg.setDetailedText("".join(traceback.format_exception(exc_type, exc_value, exc_tb)))
         msg.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg.exec()
+        msg.setModal(False)
+        msg.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        msg.open()
     except Exception:
         logger.debug("Error dialog failed in global excepthook")  # nosec B110
         # If even the dialog fails, just log and continue

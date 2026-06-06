@@ -263,11 +263,13 @@ class TrashPage(QWidget):
             return
 
         menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu { background-color: #2a2a2a; border: 1px solid #3d3d3d;
-                    color: var(--text-primary); }
-            QMenu::item { padding: 6px 24px; }
-            QMenu::item:selected { background-color: #323232; }
+        from moment.ui.resources import color as theme_color
+
+        menu.setStyleSheet(f"""
+            QMenu {{ background-color: #2a2a2a; border: 1px solid #3d3d3d;
+                    color: {theme_color("--text-primary")}; }}
+            QMenu::item {{ padding: 6px 24px; }}
+            QMenu::item:selected {{ background-color: #323232; }}
         """)
 
         restore = menu.addAction("Restore")
@@ -305,15 +307,17 @@ class TrashPage(QWidget):
 
         self._empty_label = QLabel("Trash is empty")
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        from moment.ui.resources import color as theme_color
+
         self._empty_label.setStyleSheet(
-            "font-size: 16px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 16px; color: {theme_color('--text-secondary')}; background: transparent;"
         )
         layout.addWidget(self._empty_label)
 
         self._empty_cta = QLabel("")
         self._empty_cta.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_cta.setStyleSheet(
-            "font-size: 13px; color: var(--text-muted); background: transparent;"
+            f"font-size: 13px; color: {theme_color('--text-muted')}; background: transparent;"
         )
         layout.addWidget(self._empty_cta)
 

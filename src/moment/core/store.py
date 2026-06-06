@@ -84,12 +84,10 @@ class Store:
             self._db_path = os.path.join(_DEFAULT_DB_DIR, "clips.db")
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
         conn = _connect_encrypted(self._db_path)
-        conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         lock = threading.Lock()
         read_conn = _connect_encrypted(self._db_path)
-        read_conn.row_factory = sqlite3.Row
         read_conn.execute("PRAGMA query_only = ON")
         if os.path.isfile(self._db_path):
             os.chmod(self._db_path, 0o600)
@@ -171,6 +169,8 @@ class Store:
 
     # -- Webhooks (Store handles Fernet)
     def save_webhook(self, wh):
+        if "[REDACTED]" in wh.url:
+            raise ValueError("Cannot save redacted webhook URL — provide the full HTTPS URL")
         if not wh.url.lower().strip().startswith("https://"):
             raise ValueError(f"Invalid webhook URL: must be HTTPS (got {wh.url[:30]})")
         try:

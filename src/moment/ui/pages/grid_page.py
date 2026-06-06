@@ -67,8 +67,8 @@ class ClipFilterProxyModel(QSortFilterProxyModel):
     """
 
     _SORT_KEY_MAP: dict[str, str] = {
-        "-recorded_at": "created_at",
-        "recorded_at": "created_at",
+        "-recorded_at": "recorded_at",
+        "recorded_at": "recorded_at",
         "-file_size": "file_size",
         "file_size": "file_size",
         "-duration": "duration",
@@ -265,6 +265,10 @@ class GridPage(QWidget):
 
         for action in _BATCH_ACTIONS:
             btn = QPushButton(action)
+            if action == "Delete":
+                btn.setObjectName("danger")
+            elif action in ("Tag", "Favorite", "Re-encode", "Re-upload"):
+                btn.setObjectName("secondary")
             btn.clicked.connect(lambda checked, a=action: self._on_batch_action(a))
             batch_layout.addWidget(btn)
 
@@ -557,7 +561,11 @@ class GridPage(QWidget):
         layout.setSpacing(12)
 
         icon = QLabel("!")
-        icon.setStyleSheet("font-size: 48px; color: var(--accent-red); background: transparent;")
+        from moment.ui.resources import color as theme_color
+
+        icon.setStyleSheet(
+            f"font-size: 48px; color: {theme_color('--accent-red')}; background: transparent;"
+        )
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(icon)
 

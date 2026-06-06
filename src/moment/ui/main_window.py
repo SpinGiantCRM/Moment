@@ -224,6 +224,10 @@ class MainWindow(QMainWindow):
         # Show grid (Library) by default
         self._nav_buttons[_PAGE_GRID].setChecked(True)
         self._stack.setCurrentIndex(_PAGE_GRID)
+        if self._store is not None:
+            self._recording_page.set_store(self._store)
+            QTimer.singleShot(0, self._grid_page.refresh)
+            QTimer.singleShot(0, self._refresh_recording_strip)
 
         # Disable nav if store unavailable
         if self._store is None:
@@ -237,13 +241,15 @@ class MainWindow(QMainWindow):
     # ==================================================================
 
     def _build_unavailable_banner(self, error_message: str) -> QWidget:
+        from moment.ui.resources import color
+
         banner = QFrame()
         banner.setObjectName("unavailableBanner")
-        banner.setStyleSheet("""
-            QFrame#unavailableBanner {
-                background-color: var(--accent-red);
+        banner.setStyleSheet(f"""
+            QFrame#unavailableBanner {{
+                background-color: {color("--accent-red")};
                 border: none;
-            }
+            }}
         """)
         bl = QHBoxLayout(banner)
         bl.setContentsMargins(16, 8, 16, 8)
@@ -602,14 +608,16 @@ class MainWindow(QMainWindow):
     # ==================================================================
 
     def _build_toolbar(self) -> QWidget:
+        from moment.ui.resources import color as theme_color
+
         toolbar = QFrame()
         toolbar.setObjectName("toolbarPanel")
         toolbar.setFixedHeight(36)
-        toolbar.setStyleSheet("""
-            QFrame#toolbarPanel {
-                background-color: var(--bg-toolbar);
-                border-bottom: 1px solid var(--border-default);
-            }
+        toolbar.setStyleSheet(f"""
+            QFrame#toolbarPanel {{
+                background-color: {theme_color("--bg-toolbar")};
+                border-bottom: 1px solid {theme_color("--border-default")};
+            }}
         """)
 
         layout = QHBoxLayout(toolbar)
@@ -647,7 +655,7 @@ class MainWindow(QMainWindow):
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
         sep.setStyleSheet(
-            "background-color: var(--border-subtle);"
+            f"background-color: {theme_color('--border-subtle')};"
             " min-width: 1px; max-width: 1px; margin: 4px 2px;"
         )
         sep.setFixedHeight(20)
@@ -712,14 +720,16 @@ class MainWindow(QMainWindow):
     # ==================================================================
 
     def _build_processing_footer(self) -> QWidget:
+        from moment.ui.resources import color as theme_color
+
         footer = QFrame()
         footer.setObjectName("processingFooter")
         footer.setFixedHeight(32)
-        footer.setStyleSheet("""
-            QFrame#processingFooter {
-                background-color: var(--bg-surface);
-                border-top: 1px solid var(--border-subtle);
-            }
+        footer.setStyleSheet(f"""
+            QFrame#processingFooter {{
+                background-color: {theme_color("--bg-surface")};
+                border-top: 1px solid {theme_color("--border-subtle")};
+            }}
         """)
 
         layout = QHBoxLayout(footer)
@@ -773,14 +783,16 @@ class MainWindow(QMainWindow):
     # ==================================================================
 
     def _build_status_bar(self) -> QWidget:
+        from moment.ui.resources import color as theme_color
+
         bar = QFrame()
         bar.setObjectName("statusBarFrame")
         bar.setFixedHeight(24)
-        bar.setStyleSheet("""
-            QFrame#statusBarFrame {
-                background-color: var(--bg-sidebar);
-                border-top: 1px solid var(--border-default);
-            }
+        bar.setStyleSheet(f"""
+            QFrame#statusBarFrame {{
+                background-color: {theme_color("--bg-sidebar")};
+                border-top: 1px solid {theme_color("--border-default")};
+            }}
         """)
 
         layout = QHBoxLayout(bar)
@@ -791,7 +803,7 @@ class MainWindow(QMainWindow):
         self._recording_indicator = QLabel("● Recording ready")
         self._recording_indicator.setObjectName("statusBarLabel")
         self._recording_indicator.setStyleSheet(
-            "color: var(--accent-green); font-size: 11px; background: transparent;"
+            f"color: {theme_color('--accent-green')}; font-size: 11px; background: transparent;"
         )
         layout.addWidget(self._recording_indicator)
 
@@ -820,7 +832,10 @@ class MainWindow(QMainWindow):
     def _update_storage_display(self) -> None:
         """Update the storage label with disk usage of recordings directory."""
         try:
-            recordings_dir = os.path.expanduser("~/Videos")
+            if self._config is not None:
+                recordings_dir = str(self._config.get_path("recordings_dir"))
+            else:
+                recordings_dir = os.path.expanduser("~/Videos")
             total, used, free = shutil.disk_usage(recordings_dir)
             used_gb = used / (1024**3)
             total_gb = total / (1024**3)
@@ -863,6 +878,9 @@ class MainWindow(QMainWindow):
         # 2 — Player
         self._player_page = PlayerPage(self._store)
         self._player_page.back_requested.connect(lambda: self._switch_page(_PAGE_GRID))
+        self._player_page.share_requested.connect(self._on_player_share)
+        self._player_page.download_requested.connect(self._on_player_download)
+        self._player_page.delete_requested.connect(self._on_player_delete)
         self._stack.addWidget(self._player_page)
 
         # 3 — Stats
@@ -945,6 +963,8 @@ class MainWindow(QMainWindow):
             self._trash_page.refresh()
         elif index == _PAGE_WEBHOOK:
             self._webhook_page.refresh()
+        elif index == _PAGE_RECORD:
+            self._refresh_recording_strip()
 
         # Stop playback when leaving player
         if old_idx == _PAGE_PLAYER:
@@ -1042,6 +1062,18 @@ class MainWindow(QMainWindow):
             self._batch_export(clip_ids)
         elif action == "Move to folder":
             self._batch_move_to_folder(clip_ids)
+        elif action == "Copy URL":
+            self._batch_copy_url(clip_ids)
+        elif action == "Rename":
+            self._batch_rename(clip_ids)
+        elif action == "Open Source":
+            self._batch_open_folder(clip_ids, encoded=False)
+        elif action == "Open Encoded":
+            self._batch_open_folder(clip_ids, encoded=True)
+        elif action == "Set Game":
+            self._batch_set_game(clip_ids)
+        elif action == "Protect":
+            self._batch_protect(clip_ids)
 
     # ── Batch action implementations ────────────────────────────────────
 
@@ -1219,11 +1251,173 @@ class MainWindow(QMainWindow):
         self._grid_page.refresh()
         self._update_status_label(f"Moved {moved} clip(s) to folder")
 
+    def _batch_copy_url(self, clip_ids: list[str]) -> None:
+        from moment.ui.app import _clear_clipboard
+
+        clip = self._store.get_clip(clip_ids[0])
+        if clip is None or not clip.r2_url:
+            from moment.ui.widgets.toast import toast_manager
+
+            toast_manager.show_toast("info", "No URL", "This clip has not been uploaded yet")
+            return
+        url = clip.r2_url
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(url)
+            QTimer.singleShot(60000, lambda: _clear_clipboard(url))
+        from moment.ui.widgets.toast import toast_manager
+
+        display_url = url if len(url) <= 80 else url[:77] + "..."
+        toast_manager.show_toast(
+            "copy_success", "URL copied", f"{display_url} — clipboard clears in 60s"
+        )
+
+    def _batch_rename(self, clip_ids: list[str]) -> None:
+        from PyQt6.QtWidgets import QInputDialog
+
+        clip = self._store.get_clip(clip_ids[0])
+        if clip is None:
+            return
+        new_title, ok = QInputDialog.getText(
+            self,
+            "Rename Clip",
+            "New title:",
+            text=clip.title or clip.stem,
+        )
+        if not ok or not new_title.strip():
+            return
+        clip.title = new_title.strip()
+        self._store.update_clip(clip)
+        self._grid_page.refresh()
+        self._update_status_label("Clip renamed")
+
+    def _batch_open_folder(self, clip_ids: list[str], *, encoded: bool) -> None:
+        clip = self._store.get_clip(clip_ids[0])
+        if clip is None:
+            return
+        path = clip.encoded_path if encoded else clip.source_path
+        if path is None:
+            from moment.ui.widgets.toast import toast_manager
+
+            toast_manager.show_toast(
+                "warning",
+                "No folder",
+                "Encoded file not available" if encoded else "Source file not found",
+            )
+            return
+        folder = path.parent if hasattr(path, "parent") else Path(str(path)).parent
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def _batch_set_game(self, clip_ids: list[str]) -> None:
+        from PyQt6.QtWidgets import QInputDialog
+
+        clip = self._store.get_clip(clip_ids[0])
+        if clip is None:
+            return
+        game, ok = QInputDialog.getText(self, "Set Game", "Game name:", text=clip.game or "")
+        if not ok:
+            return
+        updated = 0
+        for clip_id in clip_ids:
+            try:
+                c = self._store.get_clip(clip_id)
+                if c is not None:
+                    c.game = game.strip()
+                    self._store.update_clip(c)
+                    updated += 1
+            except Exception as exc:
+                logger.warning("Failed to set game for %s: %s", clip_id, exc)
+        self._grid_page.refresh()
+        self._update_status_label(f"Updated game on {updated} clip(s)")
+
+    def _batch_protect(self, clip_ids: list[str]) -> None:
+        toggled = 0
+        for clip_id in clip_ids:
+            try:
+                clip = self._store.get_clip(clip_id)
+                if clip is not None:
+                    clip.protect_from_retention = not clip.protect_from_retention
+                    self._store.update_clip(clip)
+                    toggled += 1
+            except Exception as exc:
+                logger.warning("Failed to toggle protect for %s: %s", clip_id, exc)
+        self._grid_page.refresh()
+        self._update_status_label(f"Updated protection on {toggled} clip(s)")
+
+    def _refresh_recording_strip(self) -> None:
+        if self._store is None:
+            return
+        try:
+            from moment.core.models import ClipStatus
+            from moment.ui.widgets.clip_delegate import ClipDelegate
+
+            clips = self._store.list_clips(status=ClipStatus.DONE, limit=5, sort_by="-recorded_at")
+            strip_data = [ClipDelegate.build_item_data(c) for c in clips]
+            self._recording_page.update_last_strip(strip_data)
+        except Exception as exc:
+            logger.debug("Failed to refresh recording strip: %s", exc)
+
+    def _on_player_share(self) -> None:
+        clip_data = self._player_page._current_clip
+        if clip_data and clip_data.get("id"):
+            self._batch_copy_url([clip_data["id"]])
+
+    def _on_player_download(self) -> None:
+        clip_data = self._player_page._current_clip
+        if clip_data is None or self._store is None:
+            return
+        clip = self._store.get_clip(clip_data.get("id", ""))
+        if clip is None:
+            return
+        src = clip.encoded_path or clip.source_path
+        dest, _ = QFileDialog.getSaveFileName(
+            self,
+            "Download Clip",
+            str(src.name),
+            "Video Files (*.mp4 *.mkv)",
+        )
+        if not dest:
+            return
+        try:
+            shutil.copy2(str(src), dest)
+            self._update_status_label(f"Saved to {os.path.basename(dest)}")
+        except OSError as exc:
+            logger.exception("Download failed: %s", exc)
+            QMessageBox.warning(self, "Download Failed", f"Could not save clip: {exc}")
+
+    def _on_player_delete(self) -> None:
+        clip_data = self._player_page._current_clip
+        if clip_data is None or self._store is None:
+            return
+        clip_id = clip_data.get("id")
+        if not clip_id:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Delete Clip",
+            "Move this clip to Trash?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._store.delete_clip(clip_id, soft=True)
+            self._player_page.stop()
+            self._switch_page(_PAGE_GRID)
+            self._grid_page.refresh()
+            self._update_status_label("Clip moved to Trash")
+        except Exception as exc:
+            logger.exception("Delete failed: %s", exc)
+            QMessageBox.warning(self, "Delete Failed", str(exc))
+
     # ── Empty state handler ─────────────────────────────────────────────
 
     def _on_empty_action(self, action: str) -> None:
         logger.debug("Empty-state action: %s", action)
-        if action == "View Shortcuts":
+        if action == "Start Recording":
+            self._switch_page(_PAGE_RECORD)
+        elif action == "View Shortcuts":
             self._show_shortcuts_dialog()
         elif action == "Capture Settings":
             self._open_capture_settings()
@@ -1396,6 +1590,21 @@ class MainWindow(QMainWindow):
         esc = QShortcut(QKeySequence("Escape"), self)
         esc.activated.connect(self._on_escape)
 
+        ctrl_c = QShortcut(QKeySequence("Ctrl+C"), self)
+        ctrl_c.activated.connect(self._on_ctrl_c)
+        delete_key = QShortcut(QKeySequence("Del"), self)
+        delete_key.activated.connect(self._on_delete_shortcut)
+        f2 = QShortcut(QKeySequence("F2"), self)
+        f2.activated.connect(self._on_rename_shortcut)
+        f5 = QShortcut(QKeySequence("F5"), self)
+        f5.activated.connect(self._on_refresh_shortcut)
+
+        for page_idx, key in enumerate(
+            ("Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6"), start=0
+        ):
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.activated.connect(lambda idx=page_idx: self._switch_page(idx))
+
     # ── Recording page signal handlers ──────────────────────────────────
 
     def _on_start_recording(self) -> None:
@@ -1492,6 +1701,63 @@ class MainWindow(QMainWindow):
     def _on_ctrl_b(self) -> None:
         if self._grid_page is not None and self._store is not None:
             self._grid_page.enter_selection_mode()
+
+    def _on_ctrl_c(self) -> None:
+        if self._stack.currentIndex() != _PAGE_GRID or self._store is None:
+            return
+        sel_model = self._grid_page._list_view.selectionModel()
+        if sel_model is None:
+            return
+        selected_ids: list[str] = []
+        for idx in sel_model.selectedIndexes():
+            source_idx = self._grid_page._proxy_model.mapToSource(idx)
+            data = source_idx.data(Qt.ItemDataRole.UserRole)
+            if data and "id" in data:
+                selected_ids.append(data["id"])
+        if selected_ids:
+            self._batch_copy_url(selected_ids)
+
+    def _on_delete_shortcut(self) -> None:
+        if self._stack.currentIndex() != _PAGE_GRID or self._store is None:
+            return
+        sel_model = self._grid_page._list_view.selectionModel()
+        if sel_model is None:
+            return
+        selected_ids: list[str] = []
+        for idx in sel_model.selectedIndexes():
+            source_idx = self._grid_page._proxy_model.mapToSource(idx)
+            data = source_idx.data(Qt.ItemDataRole.UserRole)
+            if data and "id" in data:
+                selected_ids.append(data["id"])
+        if selected_ids:
+            self._batch_delete(selected_ids)
+
+    def _on_rename_shortcut(self) -> None:
+        if self._stack.currentIndex() != _PAGE_GRID or self._store is None:
+            return
+        sel_model = self._grid_page._list_view.selectionModel()
+        if sel_model is None:
+            return
+        selected = sel_model.selectedIndexes()
+        if not selected:
+            return
+        source_idx = self._grid_page._proxy_model.mapToSource(selected[0])
+        data = source_idx.data(Qt.ItemDataRole.UserRole)
+        if data and "id" in data:
+            self._batch_rename([data["id"]])
+
+    def _on_refresh_shortcut(self) -> None:
+        idx = self._stack.currentIndex()
+        if idx == _PAGE_GRID:
+            self._grid_page.refresh()
+        elif idx == _PAGE_STATS:
+            self._stats_page.refresh()
+        elif idx == _PAGE_TRASH:
+            self._trash_page.refresh()
+        elif idx == _PAGE_WEBHOOK:
+            self._webhook_page.refresh()
+        elif idx == _PAGE_RECORD:
+            self._refresh_recording_strip()
 
     def _on_escape(self) -> None:
         current_idx = self._stack.currentIndex()

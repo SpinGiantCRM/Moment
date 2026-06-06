@@ -166,4 +166,5 @@ class TestRunMcp:
         mock_create.assert_called_once_with(
             allow_mutations=True,
             api_token="token-123",
+            http_auth=False,
         )

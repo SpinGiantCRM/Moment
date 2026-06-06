@@ -27,7 +27,8 @@ def window(qapp, mock_store):
 
     w = EditorWindow(clip_id="test", store=mock_store)
     yield w
-    w.close()
+    with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Discard):
+        w.close()
     w.deleteLater()
 
 

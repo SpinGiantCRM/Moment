@@ -37,6 +37,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.ui.resources import color
+
 if TYPE_CHECKING:
     from moment.core.store import Store
 
@@ -116,7 +118,7 @@ class RecordingPage(QWidget):
         self._status_label = QLabel("Ready to record")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setStyleSheet(
-            "font-size: 13px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 13px; color: {color('--text-secondary')}; background: transparent;"
         )
         content_layout.addWidget(self._status_label)
 
@@ -145,23 +147,23 @@ class RecordingPage(QWidget):
             btn.setCheckable(True)
             btn.setFixedHeight(28)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet("""
-                QToolButton {
+            btn.setStyleSheet(f"""
+                QToolButton {{
                     border: 1px solid #3d3d3d;
                     border-radius: 14px;
                     padding: 4px 16px;
                     font-size: 12px;
-                    color: var(--text-secondary);
+                    color: {color("--text-secondary")};
                     background: transparent;
-                }
-                QToolButton:checked {
+                }}
+                QToolButton:checked {{
                     background-color: #4a9eff;
                     border-color: #4a9eff;
                     color: #ffffff;
-                }
-                QToolButton:hover:!checked {
+                }}
+                QToolButton:hover:!checked {{
                     border-color: #555555;
-                }
+                }}
             """)
             btn.setProperty("_mode", mode_key)
             btn.clicked.connect(lambda checked, m=mode_key: self._set_mode(m))
@@ -176,7 +178,7 @@ class RecordingPage(QWidget):
         hotkey_lbl = QLabel("Press Ctrl+F12 to start/stop")
         hotkey_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hotkey_lbl.setStyleSheet(
-            "font-size: 11px; color: var(--text-muted); background: transparent;"
+            f"font-size: 11px; color: {color('--text-muted')}; background: transparent;"
         )
         content_layout.addWidget(hotkey_lbl)
 
@@ -184,7 +186,7 @@ class RecordingPage(QWidget):
         self._last_strip_title = QLabel("Recent Recordings")
         self._last_strip_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._last_strip_title.setStyleSheet(
-            "font-size: 12px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 12px; color: {color('--text-secondary')}; background: transparent;"
         )
         self._last_strip_title.setVisible(False)
         content_layout.addWidget(self._last_strip_title)
@@ -239,7 +241,7 @@ class RecordingPage(QWidget):
         """)
         self._status_label.setText("Ready to record")
         self._status_label.setStyleSheet(
-            "font-size: 13px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 13px; color: {color('--text-secondary')}; background: transparent;"
         )
 
     def set_recording(self, fps: int = 60) -> None:
@@ -251,7 +253,7 @@ class RecordingPage(QWidget):
         self._elapsed_timer.start()
         self._status_label.setText("Recording… 00:00")
         self._status_label.setStyleSheet(
-            "font-size: 13px; color: var(--accent-red); background: transparent;"
+            f"font-size: 13px; color: {color('--accent-red')}; background: transparent;"
         )
 
     def update_last_strip(self, clips: list[dict]) -> None:
@@ -301,7 +303,7 @@ class RecordingPage(QWidget):
             name_label = QLabel(clip.get("stem", "")[:16])
             name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             name_label.setStyleSheet(
-                "font-size: 9px; color: var(--text-secondary);"
+                f"font-size: 9px; color: {color('--text-secondary')};"
                 " background: transparent; border: none;"
             )
             card_layout.addWidget(name_label)
@@ -367,13 +369,15 @@ class RecordingPage(QWidget):
         heading = QLabel("No recordings yet")
         heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
         heading.setStyleSheet(
-            "font-size: 16px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 16px; color: {color('--text-secondary')}; background: transparent;"
         )
         layout.addWidget(heading)
 
         sub = QLabel("Press Ctrl+F12 or click the button above")
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sub.setStyleSheet("font-size: 13px; color: var(--text-muted); background: transparent;")
+        sub.setStyleSheet(
+            f"font-size: 13px; color: {color('--text-muted')}; background: transparent;"
+        )
         layout.addWidget(sub)
 
         return widget

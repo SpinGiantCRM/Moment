@@ -36,6 +36,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.ui.resources import color as theme_color
+
 if TYPE_CHECKING:
     from moment.core.store import Store
 
@@ -84,7 +86,7 @@ class WebhookPage(QWidget):
 
         subtitle = QLabel("Send clip events to external services")
         subtitle.setStyleSheet(
-            "font-size: 13px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 13px; color: {theme_color('--text-secondary')}; background: transparent;"
         )
         title_col.addWidget(subtitle)
         title_row.addLayout(title_col)
@@ -117,21 +119,21 @@ class WebhookPage(QWidget):
         self._table.verticalHeader().setVisible(False)
         self._table.setShowGrid(False)
         self._table.setAlternatingRowColors(True)
-        self._table.setStyleSheet("""
-            QTableWidget {
+        self._table.setStyleSheet(f"""
+            QTableWidget {{
                 background-color: transparent; border: none;
-                color: var(--text-secondary); font-size: 12px;
-            }
-            QTableWidget::item { padding: 6px 8px; }
-            QTableWidget::item:selected {
-                background-color: #323232; color: var(--text-primary);
-            }
-            QHeaderView::section {
+                color: {theme_color("--text-secondary")}; font-size: 12px;
+            }}
+            QTableWidget::item {{ padding: 6px 8px; }}
+            QTableWidget::item:selected {{
+                background-color: #323232; color: {theme_color("--text-primary")};
+            }}
+            QHeaderView::section {{
                 background-color: #1e1e1e; color: #a0a0a0;
                 border: none; border-bottom: 1px solid #3d3d3d;
                 padding: 6px 8px; font-weight: 600; font-size: 12px;
-            }
-            QTableWidget { alternate-background-color: #1e1e1e; }
+            }}
+            QTableWidget {{ alternate-background-color: #1e1e1e; }}
         """)
         layout.addWidget(self._table, stretch=1)
 
@@ -151,18 +153,18 @@ class WebhookPage(QWidget):
         self._log_table.verticalHeader().setVisible(False)
         self._log_table.setShowGrid(False)
         self._log_table.setAlternatingRowColors(True)
-        self._log_table.setStyleSheet("""
-            QTableWidget {
+        self._log_table.setStyleSheet(f"""
+            QTableWidget {{
                 background-color: transparent; border: none;
-                color: var(--text-secondary); font-size: 12px;
-            }
-            QTableWidget::item { padding: 6px 8px; }
-            QHeaderView::section {
+                color: {theme_color("--text-secondary")}; font-size: 12px;
+            }}
+            QTableWidget::item {{ padding: 6px 8px; }}
+            QHeaderView::section {{
                 background-color: #1e1e1e; color: #a0a0a0;
                 border: none; border-bottom: 1px solid #3d3d3d;
                 padding: 6px 8px; font-weight: 600; font-size: 12px;
-            }
-            QTableWidget { alternate-background-color: #1e1e1e; }
+            }}
+            QTableWidget {{ alternate-background-color: #1e1e1e; }}
         """)
         layout.addWidget(self._log_table)
 
@@ -170,12 +172,12 @@ class WebhookPage(QWidget):
 
     def _build_form(self) -> QGroupBox:
         card = QGroupBox("Add Webhook")
-        card.setStyleSheet("""
-            QGroupBox {
+        card.setStyleSheet(f"""
+            QGroupBox {{
                 background-color: #242424; border: 1px solid #3d3d3d;
                 border-radius: 6px; margin-top: 8px; padding-top: 16px;
-                font-weight: 600; color: var(--text-primary);
-            }
+                font-weight: 600; color: {theme_color("--text-primary")};
+            }}
         """)
         form_layout = QGridLayout(card)
         form_layout.setSpacing(8)
@@ -308,7 +310,9 @@ class WebhookPage(QWidget):
             return
         wh = self._webhooks[idx]
         self._edit_webhook_id = wh["id"]
-        self._url_input.setText(wh["url"])
+        # Never load redacted URLs — they would overwrite the real secret on save.
+        self._url_input.clear()
+        self._url_input.setPlaceholderText("Leave blank to keep existing URL")
         self._name_input.setText(wh["name"])
         self._enabled_check.setChecked(wh["enabled"])
         for opt, cb in self._notify_checks.items():
@@ -332,11 +336,20 @@ class WebhookPage(QWidget):
         if self._store is None:
             return
         url = self._url_input.text().strip()
+        if self._edit_webhook_id and not url:
+            existing = self._store.get_webhook_url(self._edit_webhook_id)
+            if not existing:
+                self._url_input.setStyleSheet(f"border: 1px solid {theme_color('--accent-red')};")
+                return
+            url = existing
         if not url:
-            self._url_input.setStyleSheet("border: 1px solid var(--accent-red);")
+            self._url_input.setStyleSheet(f"border: 1px solid {theme_color('--accent-red')};")
+            return
+        if "[REDACTED]" in url:
+            self._url_input.setStyleSheet(f"border: 1px solid {theme_color('--accent-red')};")
             return
         if not url.startswith("https://"):
-            self._url_input.setStyleSheet("border: 1px solid var(--accent-red);")
+            self._url_input.setStyleSheet(f"border: 1px solid {theme_color('--accent-red')};")
             return
         self._url_input.setStyleSheet("")
 
@@ -360,6 +373,7 @@ class WebhookPage(QWidget):
     def _reset_form(self) -> None:
         self._edit_webhook_id = None
         self._url_input.clear()
+        self._url_input.setPlaceholderText("https://discord.com/api/webhooks/...")
         self._url_input.setStyleSheet("")
         self._name_input.clear()
         self._enabled_check.setChecked(True)

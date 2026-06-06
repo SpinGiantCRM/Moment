@@ -32,8 +32,10 @@ def _reset_fernet() -> None:
 class TestGetOrCreateFernet:
     def test_get_or_create_succeeds(self) -> None:
         """Happy path: generates a Fernet key and returns a Fernet instance."""
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None
 
-        with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
+        with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
             f = get_or_create_fernet()
             from cryptography.fernet import Fernet
 
@@ -41,7 +43,10 @@ class TestGetOrCreateFernet:
 
     def test_get_or_create_returns_cached(self) -> None:
         """Second call returns the cached instance."""
-        with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None
+
+        with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
             f = get_or_create_fernet()
             f2 = get_or_create_fernet()
             assert f is f2
@@ -62,23 +67,25 @@ class TestGetOrCreateFernet:
 
     def test_reads_existing_key(self) -> None:
         """If a key already exists in keyring, reuses it."""
+        from cryptography.fernet import Fernet
+
+        existing_key = Fernet.generate_key().decode()
         mock_keyring = MagicMock()
-        mock_keyring.get_password.return_value = (
-            "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
-        )
+        mock_keyring.get_password.return_value = existing_key
         with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
             f = get_or_create_fernet()
             assert f is not None
             mock_keyring.get_password.assert_called_once_with("moment", "webhook_encryption_key")
+            mock_keyring.set_password.assert_not_called()
 
     def test_keyring_get_fails_raises_runtime_error(self) -> None:
-        """If keyring.get_password AND set_password both fail, raises RuntimeError."""
+        """If keyring.get_password fails, raises RuntimeError without rotating keys."""
         mock_keyring = MagicMock()
         mock_keyring.get_password.side_effect = Exception("keyring error")
-        mock_keyring.set_password.side_effect = Exception("set failed")
         with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
-            with pytest.raises(RuntimeError, match="System keyring"):
+            with pytest.raises(RuntimeError, match="Cannot read webhook encryption key"):
                 get_or_create_fernet()
+            mock_keyring.set_password.assert_not_called()
 
     def test_keyring_set_fails_raises_runtime_error(self) -> None:
         """If keyring.set_password fails, raises RuntimeError (no ephemeral fallback)."""
@@ -90,7 +97,10 @@ class TestGetOrCreateFernet:
                 get_or_create_fernet()
 
     def test_reset_clears_cache(self) -> None:
-        with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None
+
+        with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
             f1 = get_or_create_fernet()
             reset_fernet_cache()
             f2 = get_or_create_fernet()
@@ -195,9 +205,12 @@ class TestFernetConcurrency:
         results: list[object] = []
         errors: list[Exception] = []
 
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None
+
         def get_fernet() -> None:
             try:
-                with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
+                with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
                     f = get_or_create_fernet()
                     results.append(f)
             except Exception as e:
@@ -225,7 +238,10 @@ class TestFernetConcurrency:
         call_times: list[float] = []
         lock = threading.Lock()
 
-        with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None
+
+        with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
             # Prime the cache
             get_or_create_fernet()
 
@@ -250,9 +266,12 @@ class TestFernetConcurrency:
         results: list[object] = []
         errors: list[Exception] = []
 
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None
+
         def get_fernet() -> None:
             try:
-                with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
+                with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
                     f = get_or_create_fernet()
                     results.append(f)
             except Exception as e:
@@ -275,7 +294,10 @@ class TestFernetConcurrency:
         """Existing Fernet instances remain valid after cache reset."""
         from cryptography.fernet import Fernet
 
-        with patch.dict(sys.modules, {"keyring": MagicMock()}, clear=False):
+        mock_keyring = MagicMock()
+        mock_keyring.get_password.return_value = None
+
+        with patch.dict(sys.modules, {"keyring": mock_keyring}, clear=False):
             f1 = get_or_create_fernet()
             reset_fernet_cache()
             f2 = get_or_create_fernet()

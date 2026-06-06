@@ -30,15 +30,25 @@ def get_or_create_fernet() -> "Fernet":
 
         try:
             import keyring
-
-            key_b64 = keyring.get_password("moment", "webhook_encryption_key")
-            if key_b64:
-                _fernet_cache = Fernet(key_b64.encode())
-                return _fernet_cache
         except ImportError:
             raise RuntimeError("System keyring is required for webhook encryption.")
+
+        try:
+            key_b64 = keyring.get_password("moment", "webhook_encryption_key")
         except Exception as exc:
-            logger.warning("Failed to read webhook key from keyring: %s", exc)
+            raise RuntimeError(
+                "Cannot read webhook encryption key from keyring. "
+                "Refusing to generate a new key that would invalidate stored secrets."
+            ) from exc
+
+        if key_b64:
+            if not isinstance(key_b64, str):
+                raise RuntimeError("Invalid webhook encryption key type in keyring")
+            try:
+                _fernet_cache = Fernet(key_b64.encode())
+            except Exception as exc:
+                raise RuntimeError("Invalid webhook encryption key in keyring") from exc
+            return _fernet_cache
 
         key = Fernet.generate_key()
         _fernet_cache = Fernet(key)

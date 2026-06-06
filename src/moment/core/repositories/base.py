@@ -33,10 +33,12 @@ def _get_or_create_db_key() -> bytes | None:
 
     try:
         key = keyring.get_password("moment", "db_encryption_key")
-        if key is not None:
-            return key.encode()
     except Exception as exc:
-        logger.warning("Failed to read DB encryption key from keyring: %s", exc)
+        logger.error("Failed to read DB encryption key from keyring: %s", exc)
+        return None
+
+    if key is not None:
+        return key.encode()
 
     import secrets
 
@@ -140,6 +142,16 @@ def _migrate_plaintext_to_encrypted(db_path: str, key: bytes, sqlcipher_module: 
         raise RuntimeError(f"Failed to migrate plaintext DB to encrypted: {exc}") from exc
 
 
+def _set_row_factory(conn: sqlite3.Connection) -> None:
+    """Attach the correct Row factory for plain sqlite3 or sqlcipher3 connections."""
+    if type(conn).__module__.startswith("sqlcipher3"):
+        import sqlcipher3.dbapi2 as sqlcipher  # type: ignore[import-untyped]
+
+        conn.row_factory = sqlcipher.Row
+    else:
+        conn.row_factory = sqlite3.Row
+
+
 def connect_encrypted(db_path: str) -> sqlite3.Connection:
     """Open an encrypted SQLite connection via sqlcipher3.
 
@@ -173,6 +185,7 @@ def connect_encrypted(db_path: str) -> sqlite3.Connection:
         conn.execute(f"PRAGMA key = \"x'{key.decode()}'\"")
         conn.execute("PRAGMA cipher_compatibility = 4")
         conn.execute("SELECT count(*) FROM sqlite_master")
+        _set_row_factory(conn)
         logger.info("Opened encrypted database with sqlcipher3")
         return conn
     except Exception as exc:
@@ -201,6 +214,7 @@ def connect_encrypted(db_path: str) -> sqlite3.Connection:
             conn.execute(f"PRAGMA key = \"x'{key.decode()}'\"")
             conn.execute("PRAGMA cipher_compatibility = 4")
             conn.execute("SELECT count(*) FROM sqlite_master")
+            _set_row_factory(conn)
             logger.info("Created fresh encrypted database after removing corrupted file")
             return conn
 
@@ -210,7 +224,6 @@ def connect_encrypted(db_path: str) -> sqlite3.Connection:
 def connect_encrypted_readonly(db_path: str) -> sqlite3.Connection:
     """Open a second read-only connection for SELECT queries."""
     conn = connect_encrypted(db_path)
-    conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only = ON")
     return conn
 

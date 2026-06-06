@@ -49,6 +49,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.ui.resources import color as theme_color
 from moment.ui.services.async_loader import AsyncDataLoader
 
 if TYPE_CHECKING:
@@ -180,7 +181,7 @@ class _MetricCard(QFrame):
 
         self._label = QLabel(label)
         self._label.setStyleSheet(
-            "font-size: 12px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 12px; color: {theme_color('--text-secondary')}; background: transparent;"
         )
         top.addWidget(self._label)
         top.addStretch()
@@ -189,7 +190,8 @@ class _MetricCard(QFrame):
         # Value
         self._value = QLabel("—")
         self._value.setStyleSheet(
-            "font-size: 22px; font-weight: 700; color: var(--text-primary);background: transparent;"
+            f"font-size: 22px; font-weight: 700; color: {theme_color('--text-primary')};"
+            "background: transparent;"
         )
         layout.addWidget(self._value)
 
@@ -710,7 +712,8 @@ class StatsPage(QWidget):
         donut_layout.setSpacing(6)
         donut_title = QLabel("Top Games by Storage")
         donut_title.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: var(--text-primary);background: transparent;"
+            f"font-size: 13px; font-weight: 600; color: {theme_color('--text-primary')};"
+            "background: transparent;"
         )
         donut_layout.addWidget(donut_title)
         self._donut_chart = _DonutChart()
@@ -732,7 +735,8 @@ class StatsPage(QWidget):
         bar_layout.setSpacing(6)
         bar_title = QLabel("Clips per Game")
         bar_title.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: var(--text-primary);background: transparent;"
+            f"font-size: 13px; font-weight: 600; color: {theme_color('--text-primary')};"
+            "background: transparent;"
         )
         bar_layout.addWidget(bar_title)
         self._bar_chart = _BarChart()
@@ -756,7 +760,8 @@ class StatsPage(QWidget):
         table_layout.setSpacing(6)
         tbl_title = QLabel("Game Breakdown")
         tbl_title.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: var(--text-primary);background: transparent;"
+            f"font-size: 13px; font-weight: 600; color: {theme_color('--text-primary')};"
+            "background: transparent;"
         )
         table_layout.addWidget(tbl_title)
 
@@ -778,21 +783,21 @@ class StatsPage(QWidget):
         self._table.verticalHeader().setVisible(False)
         self._table.setShowGrid(False)
         self._table.setAlternatingRowColors(True)
-        self._table.setStyleSheet("""
-            QTableWidget {
+        self._table.setStyleSheet(f"""
+            QTableWidget {{
                 background-color: transparent;
                 border: none;
-                color: var(--text-secondary);
+                color: {theme_color("--text-secondary")};
                 font-size: 12px;
-            }
-            QTableWidget::item {
+            }}
+            QTableWidget::item {{
                 padding: 6px 8px;
-            }
-            QTableWidget::item:selected {
+            }}
+            QTableWidget::item:selected {{
                 background-color: #323232;
-                color: var(--text-primary);
-            }
-            QHeaderView::section {
+                color: {theme_color("--text-primary")};
+            }}
+            QHeaderView::section {{
                 background-color: #1e1e1e;
                 color: #a0a0a0;
                 border: none;
@@ -800,10 +805,10 @@ class StatsPage(QWidget):
                 padding: 6px 8px;
                 font-weight: 600;
                 font-size: 12px;
-            }
-            QTableWidget {
+            }}
+            QTableWidget {{
                 alternate-background-color: #1e1e1e;
-            }
+            }}
         """)
         self._table.cellClicked.connect(self._on_table_cell_clicked)
         table_layout.addWidget(self._table)

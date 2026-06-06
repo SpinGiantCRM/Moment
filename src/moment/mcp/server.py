@@ -130,9 +130,50 @@ def _resolve_or_generate_token(api_token: str | None) -> tuple[str, str] | None:
     return (mutation_token, ro_token)
 
 
+def _get_or_create_ro_token() -> str:
+    """Return the read-only HTTP token, generating and storing one if needed."""
+    try:
+        import keyring
+
+        ro_token = keyring.get_password("moment", "mcp_token_ro")
+        if ro_token:
+            return ro_token
+    except Exception as exc:
+        logger.debug("read-only keyring lookup skipped: %s", exc)
+
+    ro_token = secrets.token_urlsafe(32)
+    try:
+        import keyring
+
+        keyring.set_password("moment", "mcp_token_ro", ro_token)
+        logger.info("MCP read-only token stored in system keyring")
+    except Exception as exc:
+        logger.warning("Could not store MCP read-only token in keyring — HTTP auth is session-only")
+        logger.debug("keyring store error: %s", exc)
+    return ro_token
+
+
+def _resolve_http_auth_tokens(
+    allow_mutations: bool,
+    api_token: str | None,
+) -> tuple[str | None, str]:
+    """Return ``(mutation_token, read_only_token)`` for HTTP transport auth."""
+    if allow_mutations:
+        pair = _resolve_or_generate_token(api_token)
+        if pair is None:
+            raise RuntimeError("Failed to resolve MCP mutation token")
+        mutation_token, ro_token = pair
+        if not ro_token:
+            ro_token = _get_or_create_ro_token()
+        return mutation_token, ro_token
+    return None, _get_or_create_ro_token()
+
+
 def create_server(
     allow_mutations: bool = False,
     api_token: str | None = None,
+    *,
+    http_auth: bool = False,
 ) -> "FastMCP":
     """Create and return a fully-configured FastMCP server instance.
 
@@ -143,6 +184,8 @@ def create_server(
         api_token: API token for mutation tools.  If ``None`` and
             *allow_mutations* is ``True``, a random token is
             auto-generated and persisted in keyring.
+        http_auth: If ``True``, require Bearer auth on all HTTP routes
+            (read-only or mutation token).  stdio transport is unaffected.
 
     Returns:
         A FastMCP server with all tools registered.
@@ -164,15 +207,12 @@ def create_server(
         description="Clip management pipeline MCP server",
     )
 
-    tokens = None
-    if allow_mutations:
-        tokens = _resolve_or_generate_token(api_token)
-
     register_all_tools(server, allow_mutations=allow_mutations)
 
-    # Attach auth middleware if mutations are enabled with a token
-    if allow_mutations and tokens:
-        _add_auth_middleware(server, tokens[0], tokens[1])
+    # HTTP transport always requires Bearer auth (read-only or mutation scope).
+    if http_auth:
+        mutation_token, ro_token = _resolve_http_auth_tokens(allow_mutations, api_token)
+        _add_auth_middleware(server, mutation_token, ro_token)
 
     return server
 
@@ -205,8 +245,7 @@ def _add_auth_middleware(
 
         # Determine token scope
         scope = "none"
-        expected_mutation = f"Bearer {mutation_token}"
-        if hmac.compare_digest(auth_header, expected_mutation):
+        if mutation_token and hmac.compare_digest(auth_header, f"Bearer {mutation_token}"):
             scope = "mutation"
         elif ro_token and hmac.compare_digest(auth_header, f"Bearer {ro_token}"):
             scope = "read-only"

@@ -61,6 +61,7 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.ui.editor.editor_window import EditorWindow
+from moment.ui.resources import color as theme_color
 from moment.ui.services.async_loader import AsyncDataLoader
 
 if TYPE_CHECKING:
@@ -379,7 +380,7 @@ class PlayerPage(QWidget):
         self._spinner_label.setObjectName("pageTitle")
         self._spinner_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._spinner_label.setStyleSheet(
-            "font-size: 20px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 20px; color: {theme_color('--text-secondary')}; background: transparent;"
         )
         self._spinner_label.setVisible(False)
         layout.addWidget(self._spinner_label)
@@ -552,7 +553,7 @@ class PlayerPage(QWidget):
         heading.setObjectName("emptyStateHeading")
         heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
         heading.setStyleSheet(
-            "color: var(--text-secondary); font-size: 16px; background: transparent;"
+            f"color: {theme_color('--text-secondary')}; font-size: 16px; background: transparent;"
         )
         layout.addWidget(heading)
 
@@ -561,11 +562,11 @@ class PlayerPage(QWidget):
     def _build_meta_section(self) -> QWidget:
         """Build the metadata row + action buttons below the video."""
         section = QWidget()
-        section.setStyleSheet("""
-            QWidget {
-                background-color: var(--bg-window);
-                border-top: 1px solid var(--border-subtle);
-            }
+        section.setStyleSheet(f"""
+            QWidget {{
+                background-color: {theme_color("--bg-window")};
+                border-top: 1px solid {theme_color("--border-subtle")};
+            }}
         """)
 
         layout = QHBoxLayout(section)
@@ -579,7 +580,7 @@ class PlayerPage(QWidget):
         self._title_label = QLabel()
         self._title_label.setObjectName("playerTitle")
         self._title_label.setStyleSheet(
-            "font-size: 18px; font-weight: bold; color: var(--text-primary);"
+            f"font-size: 18px; font-weight: bold; color: {theme_color('--text-primary')};"
             "background: transparent;"
         )
         meta_layout.addWidget(self._title_label)
@@ -587,7 +588,7 @@ class PlayerPage(QWidget):
         self._info_label = QLabel()
         self._info_label.setObjectName("playerInfo")
         self._info_label.setStyleSheet(
-            "font-size: 13px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 13px; color: {theme_color('--text-secondary')}; background: transparent;"
         )
         meta_layout.addWidget(self._info_label)
 

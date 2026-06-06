@@ -430,7 +430,8 @@ def _check_mutation_allowed() -> str | None:
         if get_auth_scope() != "mutation":
             return "Forbidden: mutation-scoped token required for this operation"
     except Exception:
-        logger.debug("Failed to get auth scope — defaulting to mutation forbidden")
+        logger.debug("Failed to get auth scope — denying mutation")
+        return "Forbidden: mutation-scoped token required for this operation"
     return None
 
 
@@ -461,8 +462,12 @@ def test_webhook(webhook_id: str) -> dict[str, str]:
     if wh is None:
         return {"error": f"Webhook {webhook_id} not found"}
 
-    # Rate limit check — compute hash internally (not caller-controlled)
-    url_hash = hashlib.sha256(wh.url.encode()).hexdigest()[:12]
+    real_url = store.get_webhook_url(webhook_id)
+    if real_url is None:
+        return {"error": f"Webhook {webhook_id} URL unavailable"}
+
+    # Rate limit check — hash the real URL, not the redacted list value
+    url_hash = hashlib.sha256(real_url.encode()).hexdigest()[:12]
     rate_error = _check_webhook_rate_limit(url_hash)
     if rate_error is not None:
         return {"error": rate_error}
@@ -482,7 +487,20 @@ def test_webhook(webhook_id: str) -> dict[str, str]:
             status=ClipStatus.DONE,
         )
         bot = DiscordBot(store, Config())
-        success = bot.send_webhook(test_clip, wh)
+        test_wh = wh
+        if real_url != wh.url:
+            from moment.core.models import Webhook
+
+            test_wh = Webhook(
+                id=wh.id,
+                url=real_url,
+                name=wh.name,
+                enabled=wh.enabled,
+                notify_on=wh.notify_on,
+                per_game_filter=wh.per_game_filter,
+                include_clip_url=wh.include_clip_url,
+            )
+        success = bot.send_webhook(test_clip, test_wh)
         if success:
             return {"status": "sent", "webhook_id": webhook_id}
         else:
@@ -614,7 +632,11 @@ def export_clip(clip_id: str, output_path: str | None = None) -> dict[str, str]:
     if src is None or not src.is_file():
         return {"error": f"Clip {clip_id} has no exportable file"}
 
-    result: dict[str, str] = {"status": "ok", "file_path": str(src)}
+    result: dict[str, str] = {
+        "status": "ok",
+        "clip_id": clip_id,
+        "file_path": _redact_path(str(src)),
+    }
 
     if output_path is not None:
         # Writing to disk requires mutation scope
