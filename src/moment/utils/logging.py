@@ -510,13 +510,31 @@ class CrashDump:
 
         try:
             dump_path.write_text("\n".join(lines), encoding="utf-8")
-            # Restrict permissions
             dump_path.chmod(0o600)
             logging.getLogger("moment.crash").warning("Crash dump saved to %s", dump_path)
         except OSError as exc:
             logging.getLogger("moment.crash").error(
                 "Failed to write crash dump to %s: %s", dump_path, exc
             )
+
+        self._prune_old_crashes(keep=20)
+
+    @staticmethod
+    def _prune_old_crashes(keep: int = 20) -> None:
+        """Keep only the ``keep`` most recent crash dumps, delete the rest."""
+        crash_dir = Path(_CRASH_DIR)
+        if not crash_dir.is_dir():
+            return
+        dumps = sorted(
+            [p for p in crash_dir.iterdir() if p.suffix == ".txt"],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for stale in dumps[keep:]:
+            try:
+                stale.unlink()
+            except OSError:
+                pass
 
 
 # ===================================================================
