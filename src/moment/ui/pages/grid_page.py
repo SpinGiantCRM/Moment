@@ -32,6 +32,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListView,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -233,6 +234,7 @@ class GridPage(QWidget):
     selection_changed = pyqtSignal(int)
     empty_action_requested = pyqtSignal(str)
     files_dropped = pyqtSignal(list)
+    import_wizard_requested = pyqtSignal()
 
     def __init__(self, store: "Store | None" = None, parent=None) -> None:
         super().__init__(parent)
@@ -333,6 +335,17 @@ class GridPage(QWidget):
         self._invert_shortcut = QShortcut(QKeySequence("Ctrl+Shift+I"), self)
         self._invert_shortcut.activated.connect(self._invert_selection)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    # ==================================================================
+    # Tools menu
+    # ==================================================================
+
+    def create_tools_menu(self) -> QMenu:
+        """Build the Tools menu (Import recordings…)."""
+        menu = QMenu(self)
+        import_action = menu.addAction("Import recordings…")
+        import_action.triggered.connect(self.import_wizard_requested.emit)
+        return menu
 
     # ==================================================================
     # Public API — called from main window toolbar signals

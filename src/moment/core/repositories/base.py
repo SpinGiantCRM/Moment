@@ -607,6 +607,29 @@ def _migration_007_migrate_json(conn: sqlite3.Connection) -> None:
     pass
 
 
+def _migration_008_add_stem_column(conn: sqlite3.Connection) -> None:
+    """Add stem column to clips and backfill from source_path (pre-stem DBs)."""
+    from pathlib import Path
+
+    from moment.utils.system import sanitize_stem
+
+    rows = conn.execute("PRAGMA table_info(clips)").fetchall()
+    columns = {r["name"] for r in rows}
+    if "stem" not in columns:
+        conn.execute("ALTER TABLE clips ADD COLUMN stem TEXT NOT NULL DEFAULT ''")
+        logger.info("Migration 008: Added stem column")
+
+    pending = conn.execute(
+        "SELECT id, source_path FROM clips WHERE stem = '' OR stem IS NULL"
+    ).fetchall()
+    for row in pending:
+        source = row["source_path"] or ""
+        stem = sanitize_stem(Path(source).stem) if source else ""
+        conn.execute("UPDATE clips SET stem = ? WHERE id = ?", (stem, row["id"]))
+    if pending:
+        logger.info("Migration 008: Backfilled stem for %d clip(s)", len(pending))
+
+
 _MIGRATIONS: list[tuple[str, Callable[[sqlite3.Connection], None]]] = [
     ("001_initial", _migration_001_initial),
     ("002_add_discord_user_id", _migration_002_add_discord_user_id),
@@ -615,6 +638,7 @@ _MIGRATIONS: list[tuple[str, Callable[[sqlite3.Connection], None]]] = [
     ("005_migrate_webhook_key", _migration_005_migrate_webhook_key),
     ("006_migrate_old_dirs", _migration_006_migrate_old_dirs),
     ("007_migrate_json", _migration_007_migrate_json),
+    ("008_add_stem_column", _migration_008_add_stem_column),
 ]
 
 # ---------------------------------------------------------------------------

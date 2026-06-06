@@ -65,6 +65,8 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
         "retention_remove_corrupt",
         # Thumbnail
         "thumbnail_cache_size",
+        # First-run setup
+        "setup_wizard_seen",
     }
 )
 

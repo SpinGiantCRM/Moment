@@ -320,6 +320,9 @@ class AppManager(QObject):
         # --- Main window ---
         self._create_window()
 
+        # --- First-run import wizard (deferred so the window is visible) ---
+        QTimer.singleShot(200, self._maybe_show_import_wizard)
+
         # --- Post-init ---
         if self._args.settings:
             self._on_settings()
@@ -708,6 +711,49 @@ class AppManager(QObject):
     # ------------------------------------------------------------------
     # Action handlers
     # ------------------------------------------------------------------
+
+    def show_import_wizard(self, *, manual: bool = False) -> None:
+        """Show the import wizard dialog.
+
+        Args:
+            manual: When ``True``, always show (Tools menu).  When ``False``,
+                only show if first-run conditions are met.
+        """
+        if self._config is None or self._store is None:
+            logger.warning("Import wizard skipped — store or config unavailable")
+            return
+
+        try:
+            from PyQt6.QtWidgets import QDialog
+
+            from moment.ui.dialogs.import_wizard import ImportWizardDialog
+            from moment.ui.widgets.toast import toast_manager
+
+            parent = self._window if self._window is not None else None
+            dlg = ImportWizardDialog(self._config, self._store, parent=parent)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+
+            if dlg.imported_count > 0:
+                detail = f"Imported {dlg.imported_count} clip(s)"
+                if dlg.imported_from:
+                    detail += f" from {dlg.imported_from}"
+                toast_manager.show_toast("success", "Import complete", detail)
+
+            if self._window is not None:
+                self._window._grid_page.refresh()
+        except Exception as exc:
+            logger.exception("Import wizard failed: %s", exc)
+
+    def _maybe_show_import_wizard(self) -> None:
+        """Show the import wizard on first run when paths are not configured."""
+        if self._config is None or self._store is None:
+            return
+        if self._config.get("setup_wizard_seen", False):
+            return
+        if self._config.get("path_recordings_dir") is not None:
+            return
+        self.show_import_wizard(manual=False)
 
     def _on_settings(self) -> None:
         """Open the settings dialog."""

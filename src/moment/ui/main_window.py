@@ -667,6 +667,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(self._toolbar_actions_layout)
 
         self._toolbar_action_buttons: list[QPushButton] = []
+        self._tools_btn: QToolButton | None = None
 
         # 5. Stretch spacer
         layout.addStretch()
@@ -700,6 +701,20 @@ class MainWindow(QMainWindow):
             self._toolbar_actions_layout.removeWidget(btn)
             btn.deleteLater()
         self._toolbar_action_buttons.clear()
+        if self._tools_btn is not None:
+            self._toolbar_actions_layout.removeWidget(self._tools_btn)
+            self._tools_btn.deleteLater()
+            self._tools_btn = None
+
+    def _add_tools_menu_button(self) -> None:
+        """Add the Tools dropdown (Import recordings…) to the grid toolbar."""
+        self._tools_btn = QToolButton()
+        self._tools_btn.setText("Tools")
+        self._tools_btn.setObjectName("toolbarAction")
+        self._tools_btn.setFixedHeight(28)
+        self._tools_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._tools_btn.setMenu(self._grid_page.create_tools_menu())
+        self._toolbar_actions_layout.addWidget(self._tools_btn)
 
     def populate_toolbar(self, actions: list[ToolbarAction]) -> None:
         """Replace page-specific toolbar action buttons.
@@ -862,6 +877,7 @@ class MainWindow(QMainWindow):
         self._grid_page.selection_changed.connect(self._on_grid_selection_changed)
         self._grid_page.empty_action_requested.connect(self._on_empty_action)
         self._grid_page.files_dropped.connect(self._on_files_dropped)
+        self._grid_page.import_wizard_requested.connect(self._on_import_wizard_requested)
         # Connect toolbar signals → grid page
         self.search_text_changed.connect(self._grid_page.set_search_text)
         self.sort_changed.connect(self._grid_page.set_sort)
@@ -989,8 +1005,8 @@ class MainWindow(QMainWindow):
         if index == _PAGE_GRID:
             self._toolbar_search.setVisible(True)
             self._toolbar_sort.setVisible(True)
-            # Grid page manages its own actions
             self.populate_toolbar([])
+            self._add_tools_menu_button()
         elif index == _PAGE_RECORD:
             self._toolbar_search.setVisible(False)
             self._toolbar_sort.setVisible(False)
@@ -1039,6 +1055,11 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # Signal handlers
     # ==================================================================
+
+    def _on_import_wizard_requested(self) -> None:
+        """Open the first-run import wizard (manual trigger from Tools menu)."""
+        if self._app_manager is not None:
+            self._app_manager.show_import_wizard(manual=True)
 
     def _on_clip_activated(self, clip_id: str) -> None:
         self.show_player(clip_id)
