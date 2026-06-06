@@ -183,7 +183,7 @@ def discover_recording_paths(
 def import_recordings_from_dirs(
     store: "Store",
     source_dirs: list[Path | str],
-) -> int:
+) -> tuple[int, int]:
     """Import video files from *source_dirs* into the clip database.
 
     Files are referenced in-place (not copied).  Already-imported paths
@@ -194,10 +194,12 @@ def import_recordings_from_dirs(
         source_dirs: One or more directories to walk recursively.
 
     Returns:
-        Number of clips newly inserted.
+        ``(imported, failed)`` — counts of newly inserted clips and files
+        that could not be imported.
     """
     existing = _existing_source_paths(store)
     imported = 0
+    failed = 0
 
     for raw_dir in source_dirs:
         directory = Path(raw_dir)
@@ -213,6 +215,7 @@ def import_recordings_from_dirs(
                 stat = path.stat()
             except OSError as exc:
                 logger.warning("Skipping unreadable file %s: %s", path, exc)
+                failed += 1
                 continue
 
             if stat.st_size == 0:
@@ -233,11 +236,16 @@ def import_recordings_from_dirs(
                 source_app="import_wizard",
                 original_filename=path.name,
             )
-            store.insert_clip(clip)
+            try:
+                store.insert_clip(clip)
+            except Exception as exc:
+                logger.warning("Failed to import %s: %s", path, exc)
+                failed += 1
+                continue
             existing.add(resolved)
             imported += 1
 
-    return imported
+    return imported, failed
 
 
 def ensure_recording_dirs(source_dir: Path | str, encode_dir: Path | str) -> tuple[Path, Path]:

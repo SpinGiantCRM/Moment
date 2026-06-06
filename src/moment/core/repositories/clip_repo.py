@@ -78,7 +78,7 @@ def _clip_to_row(clip: Clip) -> dict[str, Any]:
         "updated_at": clip.updated_at.isoformat(),
         "watched_at": clip.watched_at.isoformat() if clip.watched_at else None,
         "watch_count": clip.watch_count,
-        "discord_user_id": clip.discord_user_id,
+        "discord_user_id": clip.discord_user_id or "",
     }
 
 

@@ -37,64 +37,64 @@ _ICONS = _ASSETS / "icons"
 # changes, every QSS rule and every ``color()`` call-site picks it up.
 
 _COLOUR_TOKENS: dict[str, str] = {
-    # ── Backgrounds ──────────────────────────────────────────────────────
-    "--bg-window": "#2b2b2b",
-    "--bg-surface": "#333333",
-    "--bg-elevated": "#3c3c3c",
-    "--bg-inset": "#242424",
-    "--bg-hover": "#404040",
-    "--bg-active": "#484848",
-    "--bg-sidebar": "#222222",
-    "--bg-toolbar": "#282828",
+    # ── Backgrounds (warm OnlyOffice greys — no harsh black) ─────────────
+    "--bg-window": "#404040",
+    "--bg-surface": "#454545",
+    "--bg-elevated": "#4a4a4a",
+    "--bg-inset": "#262626",
+    "--bg-hover": "#4d4d4d",
+    "--bg-active": "#555555",
+    "--bg-sidebar": "#363636",
+    "--bg-toolbar": "#3a3a3a",
     "--bg-overlay": "rgba(0,0,0,0.65)",
-    "--bg-skeleton": "#2a2a2a",
-    "--bg-skeleton-shimmer": "#333333",
+    "--bg-skeleton": "#3a3a3a",
+    "--bg-skeleton-shimmer": "#454545",
     # ── Borders ──────────────────────────────────────────────────────────
-    "--border-default": "#2a2a2a",
-    "--border-subtle": "#3d3d3d",
-    "--border-input": "#444444",
-    "--border-focus": "#4a9eff",
-    "--border-hover": "#555555",
-    "--border-menu": "#3d3d3d",
-    # ── Text ─────────────────────────────────────────────────────────────
-    "--text-primary": "#e8e8e8",
-    "--text-secondary": "#a0a0a0",
-    "--text-muted": "#6b6b6b",
-    "--text-link": "#4a9eff",
+    "--border-default": "#505050",
+    "--border-subtle": "#555555",
+    "--border-input": "#505050",
+    "--border-focus": "#5b9cf5",
+    "--border-hover": "#606060",
+    "--border-menu": "#555555",
+    # ── Text (WCAG AA 4.5:1 on warm grey backgrounds) ────────────────────
+    "--text-primary": "#f0f0f0",
+    "--text-secondary": "#b8b8b8",
+    "--text-muted": "#9a9a9a",
+    "--text-link": "#5b9cf5",
     "--text-on-accent": "#ffffff",
     # ── Buttons ──────────────────────────────────────────────────────────
-    "--btn-primary-bg": "#4a9eff",
-    "--btn-primary-hover": "#3a8ae8",
-    "--btn-primary-pressed": "#2a7ad8",
+    "--btn-primary-bg": "#5b9cf5",
+    "--btn-primary-hover": "#4a8de6",
+    "--btn-primary-pressed": "#3a7ed6",
     "--btn-primary-text": "#ffffff",
     "--btn-secondary-bg": "transparent",
-    "--btn-secondary-border": "#555555",
-    "--btn-secondary-hover-bg": "#323232",
-    "--btn-secondary-hover-border": "#666666",
-    "--btn-secondary-text": "#e8e8e8",
+    "--btn-secondary-border": "#606060",
+    "--btn-secondary-hover-bg": "#4a4a4a",
+    "--btn-secondary-hover-border": "#707070",
+    "--btn-secondary-text": "#f0f0f0",
     "--btn-danger-border": "#f87171",
     "--btn-danger-text": "#f87171",
-    "--btn-danger-hover-bg": "rgba(248,113,113,0.1)",
-    "--btn-disabled-bg": "#2a2a2a",
-    "--btn-disabled-text": "#555555",
+    "--btn-danger-hover-bg": "rgba(248,113,113,0.12)",
+    "--btn-disabled-bg": "#3a3a3a",
+    "--btn-disabled-text": "#707070",
     # ── Toggle switch ────────────────────────────────────────────────────
-    "--toggle-active": "#4a9eff",
-    "--toggle-inactive": "#444444",
+    "--toggle-active": "#5b9cf5",
+    "--toggle-inactive": "#505050",
     "--toggle-knob": "#ffffff",
     "--toggle-knob-shadow": "rgba(0,0,0,0.3)",
-    "--toggle-hover": "#555555",
+    "--toggle-hover": "#606060",
     # ── Slider ───────────────────────────────────────────────────────────
-    "--slider-track": "#444444",
-    "--slider-fill": "#4a9eff",
+    "--slider-track": "#505050",
+    "--slider-fill": "#5b9cf5",
     "--slider-thumb": "#ffffff",
     # ── Accents ──────────────────────────────────────────────────────────
-    "--accent-blue": "#4a9eff",
+    "--accent-blue": "#5b9cf5",
     "--accent-green": "#34d399",
     "--accent-orange": "#fbbf24",
     "--accent-red": "#f87171",
     "--accent-gold": "#f59e0b",
     # ── Heart (favourite) ────────────────────────────────────────────────
-    "--heart-inactive": "#555555",
+    "--heart-inactive": "#606060",
     "--heart-active": "#f87171",
 }
 
@@ -267,7 +267,7 @@ def load_icon(name: str, color: str | None = None, size: int = 24) -> QIcon:
     if not svg_path.is_file():
         logger.warning("Icon not found: %s", svg_path)
         # Return a fallback colored-circle pixmap
-        fill_color = color or "#4a9eff"
+        fill_color = color or "#5b9cf5"
         pix = QPixmap(size, size)
         pix.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pix)
@@ -343,7 +343,7 @@ QPushButton {{
     background-color: transparent;
     color: var(--text-primary);
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
     padding: 5px 12px;
     font-size: 13px;
     min-height: 24px;
@@ -367,7 +367,7 @@ QPushButton#primary {{
     background: var(--btn-primary-bg);
     color: var(--btn-primary-text);
     border: 1px solid var(--btn-primary-bg);
-    border-radius: 3px;
+    border-radius: 4px;
     padding: 6px 16px;
     font-size: 13px;
     font-weight: 600;
@@ -394,7 +394,7 @@ QPushButton#secondary {{
     background: var(--btn-secondary-bg);
     border: 1px solid var(--btn-secondary-border);
     color: var(--btn-secondary-text);
-    border-radius: 3px;
+    border-radius: 4px;
     padding: 5px 15px;
     font-size: 13px;
 }}
@@ -415,7 +415,7 @@ QPushButton#danger {{
     border: 1px solid var(--btn-danger-border);
     color: var(--btn-danger-text);
     background: transparent;
-    border-radius: 3px;
+    border-radius: 4px;
     padding: 5px 15px;
     font-size: 13px;
 }}
@@ -465,7 +465,7 @@ QTabBar::tab:!selected {{
 QComboBox {{
     background: var(--bg-inset);
     border: 1px solid var(--border-input);
-    border-radius: 3px;
+    border-radius: 4px;
     color: var(--text-primary);
     font-size: 13px;
     padding: 0 8px;
@@ -500,8 +500,8 @@ QComboBox::down-arrow {{
 QComboBox QAbstractItemView {{
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
-    border-radius: 3px;
-    selection-background-color: var(--bg-hover);
+    border-radius: 4px;
+    selection-background-color: var(--bg-active);
     selection-color: var(--text-primary);
     color: var(--text-primary);
     padding: 4px;
@@ -513,12 +513,12 @@ QComboBox QAbstractItemView {{
 QLineEdit, QTextEdit {{
     background: var(--bg-inset);
     border: 1px solid var(--border-input);
-    border-radius: 3px;
+    border-radius: 4px;
     color: var(--text-primary);
     font-size: 13px;
     padding: 0 8px;
     min-height: 28px;
-    selection-background-color: var(--border-focus);
+    selection-background-color: var(--accent-blue);
     selection-color: var(--text-on-accent);
 }}
 
@@ -577,14 +577,14 @@ QCheckBox:disabled, QRadioButton:disabled {{
 /* ---- Scroll bar ----------------------------------------------------------- */
 
 QScrollBar:vertical {{
-    width: 6px;
+    width: 8px;
     background: transparent;
     margin: 0;
 }}
 
 QScrollBar::handle:vertical {{
-    background: var(--border-input);
-    border-radius: 3px;
+    background: var(--border-subtle);
+    border-radius: 4px;
     min-height: 30px;
 }}
 
@@ -604,14 +604,14 @@ QScrollBar::sub-page:vertical {{
 }}
 
 QScrollBar:horizontal {{
-    height: 6px;
+    height: 8px;
     background: transparent;
     margin: 0;
 }}
 
 QScrollBar::handle:horizontal {{
-    background: var(--border-input);
-    border-radius: 3px;
+    background: var(--border-subtle);
+    border-radius: 4px;
     min-width: 30px;
 }}
 
@@ -879,17 +879,18 @@ QListView {{
 
 QListView::item {{
     background-color: var(--bg-surface);
-    border: none;
+    border: 1px solid transparent;
     border-radius: 6px;
     padding: 0;
 }}
 
 QListView::item:hover {{
-    background-color: var(--bg-elevated);
+    background-color: var(--bg-hover);
+    border-color: var(--border-subtle);
 }}
 
 QListView::item:selected {{
-    background-color: var(--bg-elevated);
+    background-color: var(--bg-active);
     border: 1px solid var(--accent-blue);
 }}
 
@@ -937,7 +938,7 @@ QSpinBox, QDoubleSpinBox {{
     background-color: var(--bg-inset);
     color: var(--text-primary);
     border: 1px solid var(--border-input);
-    border-radius: 3px;
+    border-radius: 4px;
     padding: 0 8px;
     min-height: 28px;
     font-size: 13px;

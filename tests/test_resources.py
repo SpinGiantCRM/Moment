@@ -22,7 +22,7 @@ class TestColorTokens:
     """Tests for colour token resolution."""
 
     def test_known_token_returns_hex(self) -> None:
-        assert color("--bg-window") == "#2b2b2b"
+        assert color("--bg-window") == "#404040"
 
     def test_unknown_token_returns_fallback(self) -> None:
         assert color("--nonexistent") == "#000000"
@@ -38,13 +38,14 @@ class TestColorTokens:
 
     def test_new_palette_tokens(self) -> None:
         """Verify key new palette tokens exist with correct values."""
-        assert color("--accent-blue") == "#4a9eff"
+        assert color("--accent-blue") == "#5b9cf5"
         assert color("--accent-green") == "#34d399"
         assert color("--accent-red") == "#f87171"
-        assert color("--btn-primary-bg") == "#4a9eff"
+        assert color("--btn-primary-bg") == "#5b9cf5"
         assert color("--heart-active") == "#f87171"
-        assert color("--border-input") == "#444444"
-        assert color("--toggle-active") == "#4a9eff"
+        assert color("--border-input") == "#505050"
+        assert color("--bg-inset") == "#262626"
+        assert color("--toggle-active") == "#5b9cf5"
 
 
 class TestQssColors:
@@ -63,8 +64,8 @@ class TestQssColors:
 
     def test_contains_hex_values(self) -> None:
         result = qss_colors()
-        assert "#2b2b2b" in result
-        assert "#4a9eff" in result
+        assert "#404040" in result
+        assert "#5b9cf5" in result
 
 
 class TestStylesheet:

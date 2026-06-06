@@ -85,12 +85,34 @@ class TestImportRecordingsFromDirs:
         f1.write_bytes(b"x" * 200)
         f2.write_bytes(b"x" * 300)
 
-        count = import_recordings_from_dirs(store, [src])
-        assert count == 2
+        imported, failed = import_recordings_from_dirs(store, [src])
+        assert imported == 2
+        assert failed == 0
 
         clips = store.list_clips(limit=10)
         stems = {c.stem for c in clips}
         assert stems == {"game1", "game2"}
+
+    def test_continues_after_insert_failure(self, store, tmp_path: Path, monkeypatch) -> None:
+        src = tmp_path / "recordings"
+        src.mkdir()
+        (src / "good.mkv").write_bytes(b"x" * 100)
+        (src / "bad.mkv").write_bytes(b"x" * 100)
+
+        original_insert = store.insert_clip
+        fail_path = str((src / "bad.mkv").resolve())
+
+        def flaky_insert(clip):
+            if str(clip.source_path.resolve()) == fail_path:
+                raise RuntimeError("simulated insert failure")
+            return original_insert(clip)
+
+        monkeypatch.setattr(store, "insert_clip", flaky_insert)
+
+        imported, failed = import_recordings_from_dirs(store, [src])
+        assert imported == 1
+        assert failed == 1
+        assert store.count_clips() == 1
 
     def test_skips_already_imported(self, store, tmp_path: Path) -> None:
         src = tmp_path / "recordings"
@@ -107,8 +129,9 @@ class TestImportRecordingsFromDirs:
             )
         )
 
-        count = import_recordings_from_dirs(store, [src])
-        assert count == 0
+        imported, failed = import_recordings_from_dirs(store, [src])
+        assert imported == 0
+        assert failed == 0
         assert store.count_clips() == 1
 
 

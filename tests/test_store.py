@@ -853,6 +853,15 @@ class TestVisibilityFiltering:
         assert clip is not None
         assert clip.discord_user_id == "user456"
 
+    def test_discord_user_id_none_stored_as_empty_string(self, store) -> None:
+        """sqlcipher3 rejects NULL for TEXT NOT NULL — None must coerce to ''."""
+        _make_clip(store, id="null-owner", discord_user_id=None)
+        row = store._read_conn.execute(
+            "SELECT discord_user_id FROM clips WHERE id = ?",
+            ("null-owner",),
+        ).fetchone()
+        assert row["discord_user_id"] == ""
+
     def test_count_clips_respects_visibility(self, store) -> None:
         """count_clips with no owner excludes PRIVATE."""
         from moment.core.models import ClipVisibility

@@ -237,7 +237,8 @@ class ImportWizardDialog(QDialog):
         self._save_paths(source_dir, encode_dir)
 
         source_dirs = [c["source_dir"] for c in selected]
-        self._imported_count = import_recordings_from_dirs(self._store, source_dirs)
+        imported, _failed = import_recordings_from_dirs(self._store, source_dirs)
+        self._imported_count = imported
         self._imported_from = ", ".join(self._short_path(s) for s in source_dirs)
 
         self._config.set("setup_wizard_seen", True)
@@ -261,7 +262,8 @@ class ImportWizardDialog(QDialog):
             QMessageBox.critical(self, "Save failed", f"Could not save paths:\n{exc}")
             return
 
-        self._imported_count = import_recordings_from_dirs(self._store, [source_dir])
+        imported, _failed = import_recordings_from_dirs(self._store, [source_dir])
+        self._imported_count = imported
         if self._imported_count:
             self._imported_from = self._short_path(source_dir)
         else:
