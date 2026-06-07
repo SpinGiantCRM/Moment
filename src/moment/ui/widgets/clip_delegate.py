@@ -21,6 +21,8 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import QStyle, QStyledItemDelegate, QStyleOptionViewItem, QWidget
 
+from moment.ui.resources import color as theme_color
+
 # ---------------------------------------------------------------------------
 # Layout constants — 3 card sizes
 # ---------------------------------------------------------------------------
@@ -40,7 +42,7 @@ BG_NORMAL = QColor("#363636")
 BG_ELEVATED = QColor("#333333")
 BORDER_SUBTLE = QColor("#454545")
 BORDER_HOVER = QColor("#505050")
-BORDER_FOCUS = QColor("#4a9eff")
+BORDER_FOCUS = QColor(theme_color("--accent-blue"))
 TEXT_PRIMARY = QColor("#f0f0f0")
 TEXT_SECONDARY = QColor("#b8b8b8")
 OVERLAY_BADGE = QColor(0, 0, 0, 200)

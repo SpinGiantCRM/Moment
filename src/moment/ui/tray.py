@@ -59,7 +59,9 @@ class TrayIcon(QSystemTrayIcon):
             pix.fill(Qt.GlobalColor.transparent)
             painter = QPainter(pix)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setBrush(QBrush(QColor("#4a9eff")))
+            from moment.ui.resources import color as theme_color
+
+            painter.setBrush(QBrush(QColor(theme_color("--accent-blue"))))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(1, 0, 22, 22)
             painter.end()

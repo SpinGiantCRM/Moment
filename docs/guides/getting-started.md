@@ -53,13 +53,13 @@ Click **Apply**.
 ### Method 1: Hotkey (GSR Replay Enabled)
 
 1. Launch your game
-2. When something cool happens, press **F8** to save a 30-second replay
-3. Moment encodes the clip (NVENC hardware acceleration) and shows a toast notification
+2. When something cool happens, press **Alt+Z** to open the save overlay
+3. Click **Save 30s**, **Save 60s**, or **Save 120s** to dump the replay buffer
+4. Moment encodes the clip (NVENC hardware acceleration) and shows a toast notification
 
 | Hotkey | Action |
 |--------|--------|
-| F8 | Save a 30-second replay |
-| F9 | Save a 60-second replay |
+| Alt+Z | Show / hide the save overlay (configurable in Settings → Hotkeys) |
 
 ### Method 2: Manual Recording
 

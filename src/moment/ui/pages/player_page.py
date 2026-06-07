@@ -205,7 +205,7 @@ class SeekBar(QWidget):
                     float(track_h),
                 )
                 p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor("#4a9eff"))
+                p.setBrush(QColor(theme_color("--accent-blue")))
                 p.drawRoundedRect(fill_rect, float(track_h) / 2, float(track_h) / 2)
 
         # ── Thumb (visible on hover or drag) ─────────────────────────
@@ -215,7 +215,7 @@ class SeekBar(QWidget):
             thumb_y = h // 2
 
             # Outer ring (blue)
-            p.setPen(QPen(QColor("#4a9eff"), self.THRUMB_BORDER))
+            p.setPen(QPen(QColor(theme_color("--accent-blue")), self.THRUMB_BORDER))
             p.setBrush(QColor("#ffffff"))
             p.drawEllipse(QPoint(thumb_x, thumb_y), thumb_r, thumb_r)
 

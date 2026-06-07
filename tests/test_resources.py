@@ -10,7 +10,9 @@ from moment.ui.resources import (
     color,
     icon_pixmap,
     load_icon,
+    qss_color,
     qss_colors,
+    radius,
     set_font,
     stylesheet,
 )
@@ -22,7 +24,7 @@ class TestColorTokens:
     """Tests for colour token resolution."""
 
     def test_known_token_returns_hex(self) -> None:
-        assert color("--bg-window") == "#404040"
+        assert color("--bg-window") == "#2b2b2b"
 
     def test_unknown_token_returns_fallback(self) -> None:
         assert color("--nonexistent") == "#000000"
@@ -43,9 +45,23 @@ class TestColorTokens:
         assert color("--accent-red") == "#f87171"
         assert color("--btn-primary-bg") == "#5b9cf5"
         assert color("--heart-active") == "#f87171"
-        assert color("--border-input") == "#505050"
-        assert color("--bg-inset") == "#262626"
+        assert color("--border-input") == "#454545"
+        assert color("--bg-inset") == "#252525"
         assert color("--toggle-active") == "#5b9cf5"
+        assert color("--bg-nav") == "#262626"
+        assert color("--bg-dialog") == "#2b2b2b"
+        assert color("--bg-table") == "#333333"
+
+
+class TestRadiusHelper:
+    def test_radius_md_default(self) -> None:
+        assert radius("md") == 6
+
+    def test_radius_unknown_falls_back_to_md(self) -> None:
+        assert radius("unknown") == 6
+
+    def test_qss_color_alias(self) -> None:
+        assert qss_color("--accent-blue") == color("--accent-blue")
 
 
 class TestQssColors:

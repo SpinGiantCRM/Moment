@@ -399,9 +399,7 @@ class GridPage(QWidget):
         self._loader = None
         self._remove_skeletons()
         if not clips:
-            self._show_empty(
-                "Press F8 in-game to capture clips, or use Import recordings below."
-            )
+            self._show_empty("Press F8 in-game to capture clips, or use Import recordings below.")
             return
         self._hide_states()
         self._list_view.setVisible(True)
@@ -568,9 +566,7 @@ class GridPage(QWidget):
         cta_layout.addWidget(record_btn)
         import_btn = QPushButton("Import recordings")
         import_btn.setObjectName("secondary")
-        import_btn.clicked.connect(
-            lambda: self.empty_action_requested.emit("Import Recordings")
-        )
+        import_btn.clicked.connect(lambda: self.empty_action_requested.emit("Import Recordings"))
         cta_layout.addWidget(import_btn)
         layout.addLayout(cta_layout)
 

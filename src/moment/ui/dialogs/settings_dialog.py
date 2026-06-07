@@ -56,6 +56,7 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.ui.base_dialog import ThemedDialog
+from moment.ui.resources import color as theme_color
 
 if TYPE_CHECKING:
     from moment.core.config import Config
@@ -84,12 +85,8 @@ _VIDEO_ENCODER_OPTIONS: list[tuple[str, str]] = [
 
 _PRESETS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"]
 
-# Hotkey action → config key mapping
-_HOTKEY_KEY_MAP: dict[str, str] = {
-    "Save clip": "hotkey_save_clip",
-    "Save with replay": "hotkey_save_with_replay",
-    "Toggle recording": "hotkey_toggle_recording",
-}
+# Overlay hotkey row label (stored via set_gsr_setting)
+_OVERLAY_HOTKEY_LABEL = "Show overlay"
 
 
 # ======================================================================
@@ -165,7 +162,9 @@ class ToggleSwitch(QWidget):
         w, h = self.width(), self.height()
 
         # Track
-        track_color = QColor("#4a9eff") if self._checked else QColor("#444444")
+        active = theme_color("--toggle-active")
+        inactive = theme_color("--toggle-inactive")
+        track_color = QColor(active) if self._checked else QColor(inactive)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(track_color)
         p.drawRoundedRect(QRectF(0, 0, w, h), h / 2, h / 2)
@@ -224,7 +223,9 @@ class SettingsDialog(ThemedDialog):
         # Separator
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet("background-color: #2a2a2a; min-width: 1px; max-width: 1px;")
+        sep.setStyleSheet(
+            f"background-color: {theme_color('--border-subtle')}; min-width: 1px; max-width: 1px;"
+        )
         outer.addWidget(sep)
 
         # Right panel — content stack + bottom bar
@@ -234,7 +235,7 @@ class SettingsDialog(ThemedDialog):
 
         # Content stack
         self._stack = QStackedWidget()
-        self._stack.setStyleSheet("background-color: #1a1a1a;")
+        self._stack.setStyleSheet(f"background-color: {theme_color('--bg-dialog')};")
         self._stack.addWidget(self._build_general_page())
         self._stack.addWidget(self._build_recording_page())
         self._stack.addWidget(self._build_video_page())
@@ -265,26 +266,27 @@ class SettingsDialog(ThemedDialog):
 
     def _build_nav(self) -> QListWidget:
         nav = QListWidget()
+        nav.setObjectName("settingsNav")
         nav.setFixedWidth(180)
-        nav.setStyleSheet("""
-            QListWidget {
-                background-color: #181818;
+        nav.setStyleSheet(f"""
+            QListWidget#settingsNav {{
+                background-color: {theme_color("--bg-nav")};
                 border: none;
                 outline: none;
                 padding: 8px 0;
-            }
-            QListWidget::item {
+            }}
+            QListWidget#settingsNav::item {{
                 padding: 12px 16px;
-                color: #a0a0a0;
+                color: {theme_color("--text-secondary")};
                 font-size: 13px;
-            }
-            QListWidget::item:selected {
-                background-color: #323232;
-                color: #ffffff;
-            }
-            QListWidget::item:hover:!selected {
-                background-color: #2a2a2a;
-            }
+            }}
+            QListWidget#settingsNav::item:selected {{
+                background-color: {theme_color("--bg-active")};
+                color: {theme_color("--text-primary")};
+            }}
+            QListWidget#settingsNav::item:hover:!selected {{
+                background-color: {theme_color("--bg-hover")};
+            }}
         """)
         nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -330,14 +332,18 @@ class SettingsDialog(ThemedDialog):
     def _make_section_title(self, text: str) -> QLabel:
         lbl = QLabel(text)
         lbl.setStyleSheet(
-            "font-size: 15px; font-weight: 600; color: var(--text-primary);background: transparent;"
+            f"font-size: 15px; font-weight: 600; color: {theme_color('--text-primary')};"
+            " background: transparent;"
         )
         return lbl
 
     def _make_separator(self) -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.Shape.HLine)
-        f.setStyleSheet("background-color: #3d3d3d; max-height: 1px; margin: 0 0 16px 0;")
+        f.setStyleSheet(
+            f"background-color: {theme_color('--border-subtle')};"
+            " max-height: 1px; margin: 0 0 16px 0;"
+        )
         return f
 
     def _set_elided_path(self, edit: QLineEdit, path: str) -> None:
@@ -349,7 +355,7 @@ class SettingsDialog(ThemedDialog):
 
     def _configure_form(self, form: QFormLayout) -> None:
         """Apply shared form layout constraints to prevent value-column clipping."""
-        form.setColumnMinimumWidth(1, 220)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
     def _make_form_row(
         self,
@@ -358,7 +364,9 @@ class SettingsDialog(ThemedDialog):
         parent_layout: QFormLayout,
     ) -> None:
         lbl = QLabel(label)
-        lbl.setStyleSheet("font-size: 13px; color: var(--text-secondary); background: transparent;")
+        lbl.setStyleSheet(
+            f"font-size: 13px; color: {theme_color('--text-secondary')}; background: transparent;"
+        )
         lbl.setMinimumWidth(120)
         lbl.setWordWrap(True)
         lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -376,26 +384,6 @@ class SettingsDialog(ThemedDialog):
         form.setVerticalSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         self._configure_form(form)
-
-        self._theme_cb = QComboBox()
-        self._theme_cb.addItems(["Dark", "Light", "System"])
-        self._theme_cb.setFixedHeight(28)
-        self._make_form_row("Theme:", self._theme_cb, form)
-
-        self._density_cb = QComboBox()
-        self._density_cb.addItems(["Normal", "Compact", "Comfortable"])
-        self._density_cb.setFixedHeight(28)
-        self._make_form_row("Density:", self._density_cb, form)
-
-        self._font_cb = QComboBox()
-        self._font_cb.addItems(["Default", "Small", "Large"])
-        self._font_cb.setFixedHeight(28)
-        self._make_form_row("Font size:", self._font_cb, form)
-
-        self._language_cb = QComboBox()
-        self._language_cb.addItems(["English", "System"])
-        self._language_cb.setFixedHeight(28)
-        self._make_form_row("Language:", self._language_cb, form)
 
         # Toggle rows
         row_ls = QHBoxLayout()
@@ -436,6 +424,15 @@ class SettingsDialog(ThemedDialog):
         form = QFormLayout()
         form.setVerticalSpacing(10)
         self._configure_form(form)
+
+        # Instant replay toggle
+        row_replay = QHBoxLayout()
+        row_replay.setSpacing(8)
+        self._replay_enabled_ts = ToggleSwitch()
+        row_replay.addWidget(self._replay_enabled_ts)
+        row_replay.addWidget(QLabel("Enable instant replay (GSR background buffer)"))
+        row_replay.addStretch()
+        form.addRow(QLabel(""), row_replay)
 
         # Output directory
         row_dir = QHBoxLayout()
@@ -492,6 +489,14 @@ class SettingsDialog(ThemedDialog):
         self._buffer_duration_sb.setSuffix(" s")
         self._buffer_duration_sb.setFixedHeight(28)
         self._make_form_row("Buffer:", self._buffer_duration_sb, form)
+
+        # Overlay auto-hide
+        self._overlay_auto_hide_sb = QSpinBox()
+        self._overlay_auto_hide_sb.setRange(4, 15)
+        self._overlay_auto_hide_sb.setValue(8)
+        self._overlay_auto_hide_sb.setSuffix(" s")
+        self._overlay_auto_hide_sb.setFixedHeight(28)
+        self._make_form_row("Overlay auto-hide:", self._overlay_auto_hide_sb, form)
 
         layout.addLayout(form)
         layout.addStretch()
@@ -572,12 +577,12 @@ class SettingsDialog(ThemedDialog):
             "Double-click a shortcut to edit it. Press Esc to cancel, Backspace to clear."
         )
         desc.setStyleSheet(
-            "font-size: 12px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 12px; color: {theme_color('--text-secondary')}; background: transparent;"
         )
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
-        self._hotkeys_table = QTableWidget(3, 2)
+        self._hotkeys_table = QTableWidget(1, 2)
         self._hotkeys_table.setHorizontalHeaderLabels(["Action", "Shortcut"])
         self._hotkeys_table.horizontalHeader().setStretchLastSection(True)
         self._hotkeys_table.horizontalHeader().setSectionResizeMode(
@@ -586,49 +591,42 @@ class SettingsDialog(ThemedDialog):
         self._hotkeys_table.verticalHeader().setVisible(False)
         self._hotkeys_table.setShowGrid(False)
         self._hotkeys_table.setAlternatingRowColors(True)
-        self._hotkeys_table.setStyleSheet("""
-            QTableWidget {
+        self._hotkeys_table.setStyleSheet(f"""
+            QTableWidget {{
                 background-color: transparent;
                 border: none;
-                color: var(--text-secondary);
+                color: {theme_color("--text-secondary")};
                 font-size: 12px;
-            }
-            QTableWidget::item {
+            }}
+            QTableWidget::item {{
                 padding: 6px 8px;
-            }
-            QTableWidget::item:selected {
-                background-color: #323232;
-            }
-            QHeaderView::section {
-                background-color: #1e1e1e;
-                color: #a0a0a0;
+            }}
+            QTableWidget::item:selected {{
+                background-color: {theme_color("--bg-active")};
+            }}
+            QHeaderView::section {{
+                background-color: {theme_color("--bg-table")};
+                color: {theme_color("--text-secondary")};
                 border: none;
-                border-bottom: 1px solid #3d3d3d;
+                border-bottom: 1px solid {theme_color("--border-subtle")};
                 padding: 6px 8px;
                 font-weight: 600;
                 font-size: 12px;
-            }
-            QTableWidget {
-                alternate-background-color: #1e1e1e;
-            }
+            }}
+            QTableWidget {{
+                alternate-background-color: {theme_color("--bg-table")};
+            }}
         """)
 
-        # Populate rows
-        actions = [
-            ("Save clip", "save_clip"),
-            ("Save with replay", "save_with_replay"),
-            ("Toggle recording", "toggle_recording"),
-        ]
-        for row, (label, key) in enumerate(actions):
-            self._hotkeys_table.setItem(row, 0, QTableWidgetItem(label))
-            edit = QKeySequenceEdit()
-            edit.setClearButtonEnabled(True)
-            edit.setProperty("_config_key", key)
-            edit.setStyleSheet(
-                "QKeySequenceEdit { background-color: transparent; border: 1px solid"
-                " #3d3d3d; border-radius: 3px; padding: 4px 8px; color: var(--text-primary); }"
-            )
-            self._hotkeys_table.setCellWidget(row, 1, edit)
+        self._hotkeys_table.setItem(0, 0, QTableWidgetItem(_OVERLAY_HOTKEY_LABEL))
+        self._overlay_hotkey_edit = QKeySequenceEdit()
+        self._overlay_hotkey_edit.setClearButtonEnabled(True)
+        self._overlay_hotkey_edit.setStyleSheet(
+            f"QKeySequenceEdit {{ background-color: transparent; border: 1px solid"
+            f" {theme_color('--border-subtle')}; border-radius: 6px; padding: 4px 8px;"
+            f" color: {theme_color('--text-primary')}; }}"
+        )
+        self._hotkeys_table.setCellWidget(0, 1, self._overlay_hotkey_edit)
 
         layout.addWidget(self._hotkeys_table)
         layout.addStretch()
@@ -703,15 +701,17 @@ class SettingsDialog(ThemedDialog):
         # Connected accounts
         accts_label = QLabel("Connected accounts")
         accts_label.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: var(--text-primary);background: transparent;"
+            f"font-size: 13px; font-weight: 600; color: {theme_color('--text-primary')};"
+            " background: transparent;"
         )
         layout.addWidget(accts_label)
 
         self._cloud_accounts_list = QListWidget()
         self._cloud_accounts_list.setMaximumHeight(60)
         self._cloud_accounts_list.setStyleSheet(
-            "QListWidget { background-color: #242424; border: 1px solid #3d3d3d;"
-            "border-radius: 4px; color: var(--text-secondary); }"
+            f"QListWidget {{ background-color: {theme_color('--bg-inset')};"
+            f" border: 1px solid {theme_color('--border-subtle')};"
+            f" border-radius: 6px; color: {theme_color('--text-secondary')}; }}"
         )
         layout.addWidget(self._cloud_accounts_list)
 
@@ -725,7 +725,8 @@ class SettingsDialog(ThemedDialog):
         # Storage bar
         storage_label = QLabel("Storage usage")
         storage_label.setStyleSheet(
-            "font-size: 13px; font-weight: 600; color: var(--text-primary);background: transparent;"
+            f"font-size: 13px; font-weight: 600; color: {theme_color('--text-primary')};"
+            " background: transparent;"
         )
         layout.addWidget(storage_label)
 
@@ -734,16 +735,16 @@ class SettingsDialog(ThemedDialog):
         self._storage_bar.setValue(0)
         self._storage_bar.setTextVisible(False)
         self._storage_bar.setFixedHeight(8)
-        self._storage_bar.setStyleSheet("""
-            QProgressBar {
-                background-color: #3d3d3d;
+        self._storage_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {theme_color("--slider-track")};
                 border: none;
-                border-radius: 4px;
-            }
-            QProgressBar::chunk {
-                background-color: #4a9eff;
-                border-radius: 4px;
-            }
+                border-radius: 6px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {theme_color("--accent-blue")};
+                border-radius: 6px;
+            }}
         """)
         self._storage_label = QLabel("0 / 0 GB")
         self._storage_label.setObjectName("cardMeta")
@@ -790,7 +791,8 @@ class SettingsDialog(ThemedDialog):
         # Version
         ver_label = QLabel("Moment v0.2.1")
         ver_label.setStyleSheet(
-            "font-size: 18px; font-weight: 700; color: var(--text-primary);background: transparent;"
+            f"font-size: 18px; font-weight: 700; color: {theme_color('--text-primary')};"
+            " background: transparent;"
         )
         layout.addWidget(ver_label)
 
@@ -799,7 +801,7 @@ class SettingsDialog(ThemedDialog):
             "Built with PyQt6 · GSR · NVENC · sqlcipher3."
         )
         desc.setStyleSheet(
-            "font-size: 12px; color: var(--text-secondary); background: transparent;"
+            f"font-size: 12px; color: {theme_color('--text-secondary')}; background: transparent;"
         )
         desc.setWordWrap(True)
         layout.addWidget(desc)
@@ -808,7 +810,9 @@ class SettingsDialog(ThemedDialog):
 
         # License
         lic = QLabel("License: MIT")
-        lic.setStyleSheet("font-size: 12px; color: var(--text-secondary); background: transparent;")
+        lic.setStyleSheet(
+            f"font-size: 12px; color: {theme_color('--text-secondary')}; background: transparent;"
+        )
         layout.addWidget(lic)
 
         # Update button
@@ -867,7 +871,9 @@ class SettingsDialog(ThemedDialog):
         # General
         self._autostart_ts.setChecked(self._config.get("autostart", False))
         self._minimize_tray_ts.setChecked(self._config.get("minimize_to_tray", True))
+
         # Recording
+        self._replay_enabled_ts.setChecked(self._config.replay_enabled)
         recordings = self._config.get_path("recordings_dir")
         if recordings and recordings != _PATH_DEFAULTS.get("recordings_dir", ""):
             self._set_elided_path(self._recordings_path_edit, recordings)
@@ -889,9 +895,18 @@ class SettingsDialog(ThemedDialog):
         replay_duration = self._config.get_gsr_setting("replay_duration")
         if isinstance(replay_duration, int):
             self._buffer_duration_sb.setValue(replay_duration)
+        overlay_auto_hide = self._config.get_gsr_setting("overlay_auto_hide")
+        if isinstance(overlay_auto_hide, int):
+            self._overlay_auto_hide_sb.setValue(overlay_auto_hide)
         self._capture_audio_ts.setChecked(
             self._config.get_gsr_setting("replay_audio_device") is not None
         )
+        replay_container = self._config.get_gsr_setting("replay_container")
+        if isinstance(replay_container, str):
+            fmt = replay_container.upper()
+            idx = self._format_cb.findText(fmt)
+            if idx >= 0:
+                self._format_cb.setCurrentIndex(idx)
 
         # Video
         preferred_codec = self._config.get_preferred_codec()
@@ -911,22 +926,12 @@ class SettingsDialog(ThemedDialog):
         self._bitrate_sb.setValue(self._config.get("bitrate_mbps", 12))
 
         # Hotkeys
-        for row in range(self._hotkeys_table.rowCount()):
-            item = self._hotkeys_table.item(row, 0)
-            if item is None:
-                continue
-            label = item.text()
-            key = _HOTKEY_KEY_MAP.get(label, "")
-            if not key:
-                continue
-            val = self._config.get(key, None)
-            if val and isinstance(val, str) and val.strip():
-                widget = self._hotkeys_table.cellWidget(row, 1)
-                if isinstance(widget, QKeySequenceEdit):
-                    try:
-                        widget.setKeySequence(QKeySequence.fromString(val))
-                    except Exception:
-                        pass
+        hotkey = self._config.get_hotkey()
+        if hotkey:
+            try:
+                self._overlay_hotkey_edit.setKeySequence(QKeySequence.fromString(hotkey))
+            except Exception:
+                pass
 
     def _save_settings(self) -> None:
         """Persist all settings to config."""
@@ -938,6 +943,7 @@ class SettingsDialog(ThemedDialog):
         self._config.set("minimize_to_tray", self._minimize_tray_ts.isChecked())
 
         # Recording
+        self._config.set_gsr_setting("replay_enabled", self._replay_enabled_ts.isChecked())
         recordings = (
             self._recordings_path_edit.toolTip().strip()
             or self._recordings_path_edit.text().strip()
@@ -954,6 +960,10 @@ class SettingsDialog(ThemedDialog):
             pass
 
         self._config.set_gsr_setting("replay_duration", self._buffer_duration_sb.value())
+        self._config.set_gsr_setting("overlay_auto_hide", self._overlay_auto_hide_sb.value())
+        fmt = self._format_cb.currentText().lower()
+        if fmt in ("mp4", "mkv", "mov"):
+            self._config.set_gsr_setting("replay_container", fmt)
         if not self._capture_audio_ts.isChecked():
             self._config.set_gsr_setting("replay_audio_device", None)
         else:
@@ -972,17 +982,9 @@ class SettingsDialog(ThemedDialog):
         self._config.set("bitrate_mbps", self._bitrate_sb.value())
 
         # Hotkeys
-        for row in range(self._hotkeys_table.rowCount()):
-            item = self._hotkeys_table.item(row, 0)
-            if item is None:
-                continue
-            label = item.text()
-            key = _HOTKEY_KEY_MAP.get(label, "")
-            widget = self._hotkeys_table.cellWidget(row, 1)
-            if isinstance(widget, QKeySequenceEdit):
-                seq = widget.keySequence().toString()
-                if key and seq:
-                    self._config.set(key, seq)
+        seq = self._overlay_hotkey_edit.keySequence().toString()
+        if seq:
+            self._config.set_gsr_setting("hotkey_show_overlay", seq)
 
     # ==================================================================
     # Handlers

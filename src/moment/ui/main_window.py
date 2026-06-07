@@ -375,17 +375,21 @@ class MainWindow(QMainWindow):
             layout.addWidget(btn)
             self._nav_buttons[idx] = btn
 
+        from moment.ui.resources import color as theme_color
+
         # Swap icon colors when nav button changes (also called from _switch_page)
         def _update_nav_icons():
+            inactive = theme_color("--text-secondary")
+            active = theme_color("--accent-blue")
             for b in self._nav_buttons.values():
                 icon_name = b.property("_icon_name")
                 if b.isChecked():
-                    b.setIcon(load_icon(icon_name, "#4a9eff"))
+                    b.setIcon(load_icon(icon_name, active))
                 else:
-                    b.setIcon(load_icon(icon_name, "#a0a0a0"))
+                    b.setIcon(load_icon(icon_name, inactive))
             # Ensure settings button never stays checked
             self._settings_btn.setChecked(False)
-            self._settings_btn.setIcon(load_icon("settings", "#a0a0a0"))
+            self._settings_btn.setIcon(load_icon("settings", inactive))
 
         self._nav_group.buttonClicked.connect(lambda btn: _update_nav_icons())
         # Store for use in _switch_page (programmatic page changes)
@@ -397,7 +401,9 @@ class MainWindow(QMainWindow):
         # Thin divider before Settings
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.HLine)
-        divider.setStyleSheet("background-color: #2a2a2a; max-height: 1px; margin: 0 12px;")
+        divider.setStyleSheet(
+            f"background-color: {theme_color('--border-subtle')}; max-height: 1px; margin: 0 12px;"
+        )
         layout.addWidget(divider)
 
         # Settings button (bottom, opens dialog — not a nav button)
@@ -427,58 +433,38 @@ class MainWindow(QMainWindow):
         bar = QFrame()
         bar.setObjectName("titleBar")
         bar.setFixedHeight(32)
-        bar.setStyleSheet("""
-            QFrame#titleBar {
-                background-color: #181818;
-                border: none;
-            }
-        """)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(10, 0, 10, 0)
         layout.setSpacing(6)
 
         icon_lbl = QLabel()
+        from moment.ui.resources import color as theme_color
         from moment.ui.resources import load_icon
 
-        pix = load_icon("moment", color="#a0a0a0", size=16).pixmap(16, 16)
+        pix = load_icon("moment", color=theme_color("--text-secondary"), size=16).pixmap(16, 16)
         icon_lbl.setPixmap(pix)
         icon_lbl.setStyleSheet("background: transparent; border: none;")
         layout.addWidget(icon_lbl)
 
         title_lbl = QLabel("moment")
-        title_lbl.setStyleSheet(
-            "color: #a0a0a0; font-size: 12px; font-weight: 600;"
-            " background: transparent; border: none;"
-        )
+        title_lbl.setStyleSheet("font-size: 12px; font-weight: 600; background: transparent;")
         layout.addWidget(title_lbl)
 
         layout.addStretch()
 
-        btn_style = (
-            "QPushButton {"
-            "  background: transparent; border: none; color: #a0a0a0;"
-            "  font-size: 16px; padding: 0 10px; min-height: 24px;"
-            "}"
-            "QPushButton:hover { background: #323232; color: #e8e8e8; }"
-        )
-
         self._min_btn = QPushButton("─")
         self._min_btn.setFixedSize(32, 24)
-        self._min_btn.setStyleSheet(btn_style)
         self._min_btn.clicked.connect(self.showMinimized)
         layout.addWidget(self._min_btn)
 
         self._max_btn = QPushButton("□")
         self._max_btn.setFixedSize(32, 24)
-        self._max_btn.setStyleSheet(btn_style)
         self._max_btn.clicked.connect(self._toggle_maximize)
         layout.addWidget(self._max_btn)
 
         self._close_btn = QPushButton("✕")
+        self._close_btn.setObjectName("titleBarClose")
         self._close_btn.setFixedSize(32, 24)
-        self._close_btn.setStyleSheet(
-            btn_style + "QPushButton:hover { background: #f87171; color: white; }"
-        )
         self._close_btn.clicked.connect(self.close)
         layout.addWidget(self._close_btn)
 
@@ -1461,8 +1447,8 @@ class MainWindow(QMainWindow):
             "Esc      — Back / clear selection / exit fullscreen\n"
             "F5       — Refresh current page\n"
             "Del      — Delete selected clips\n\n"
-            "Global Hotkeys (when configured):\n"
-            "F8       — Save replay / open overlay",
+            "Global Hotkeys (when instant replay is enabled):\n"
+            "Alt+Z    — Show / hide save overlay",
         )
 
     def _open_capture_settings(self) -> None:

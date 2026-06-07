@@ -309,6 +309,8 @@ class GSRController:
             self._record_area,
             "-f",
             str(self._fps),
+            "-r",
+            str(self._replay_duration),
             "-c",
             self._container,
             "-q",
@@ -340,9 +342,8 @@ class GSRController:
         try:
             self._proc = Popen_sandboxed(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 start_new_session=True,  # os.setsid in child
             )
         except (OSError, FileNotFoundError) as exc:

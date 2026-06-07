@@ -312,16 +312,77 @@ class TestAppManagerExec:
         assert result == 1
 
 
+class TestAppManagerGsr:
+    def test_maybe_auto_enable_replay_when_gsr_on_path(self) -> None:
+        from moment.ui.app import AppManager, _parse_args
+
+        mgr = AppManager(_parse_args([]))
+        config = MagicMock()
+        config.replay_enabled = False
+        config.has_key.return_value = False
+        mgr._config = config
+
+        with patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"):
+            mgr._maybe_auto_enable_replay()
+
+        config.set_gsr_setting.assert_called_once_with("replay_enabled", True)
+
+    def test_maybe_auto_enable_skips_when_user_disabled(self) -> None:
+        from moment.ui.app import AppManager, _parse_args
+
+        mgr = AppManager(_parse_args([]))
+        config = MagicMock()
+        config.replay_enabled = False
+        config.has_key.return_value = True
+        mgr._config = config
+
+        with patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"):
+            mgr._maybe_auto_enable_replay()
+
+        config.set_gsr_setting.assert_not_called()
+
+    def test_register_overlay_hotkey_uses_window_parent(self) -> None:
+        from moment.ui.app import AppManager, _parse_args
+
+        mgr = AppManager(_parse_args([]))
+        mgr._config = MagicMock()
+        mgr._config.get_hotkey.return_value = "Alt+Z"
+        mgr._overlay = MagicMock()
+        mgr._window = MagicMock()
+
+        hotkey_mgr = MagicMock()
+        hotkey_mgr.register.return_value = "shortcut"
+
+        with patch(
+            "moment.ui.services.global_hotkey.GlobalHotkeyManager",
+            return_value=hotkey_mgr,
+        ):
+            mgr._register_overlay_hotkey()
+
+        hotkey_mgr.register.assert_called_once_with(parent_widget=mgr._window)
+
+    def test_overlay_save_sets_pending_duration(self) -> None:
+        from moment.ui.app import AppManager, _parse_args
+
+        mgr = AppManager(_parse_args([]))
+        mgr._gsr_controller = MagicMock()
+        mgr._on_overlay_save(60)
+        assert mgr._pending_save_duration == 60
+        mgr._gsr_controller.save_replay.assert_called_once()
+
+
 class TestAppManagerInitServices:
     @patch("moment.core.config.Config")
     @patch("moment.core.store.Store")
     @patch("moment.utils.logging.setup_logging")
+    @patch("moment.ui.app.AppManager._maybe_auto_enable_replay")
     @patch("moment.ui.app.AppManager._init_gsr")
     @patch("moment.ui.app.AppManager._init_pipeline")
     def test_init_services_success(
         self,
         mock_pipeline,
         mock_gsr,
+        mock_auto,
         mock_log,
         mock_store_cls,
         mock_config_cls,

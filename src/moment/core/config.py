@@ -104,7 +104,7 @@ _GSR_DEFAULTS: dict[str, object] = {
     "replay_enabled": False,
     "replay_fps": 60,
     "replay_quality": "very_high",
-    "replay_container": "mp4",
+    "replay_container": "mkv",
     "replay_duration": 120,
     "replay_audio_device": "",
     "replay_codec": "",  # empty = auto-detect
@@ -191,6 +191,12 @@ class Config:
             return json.loads(row["value"])
         except (json.JSONDecodeError, TypeError):
             return row["value"]
+
+    def has_key(self, key: str) -> bool:
+        """Return ``True`` when *key* has been persisted in the settings table."""
+        with self._write_lock:
+            row = self._conn.execute("SELECT 1 FROM settings WHERE key = ?", (key,)).fetchone()
+        return row is not None
 
     def set(self, key: str, value: Any) -> None:
         """Persist *value* as a JSON-encoded string under *key*.

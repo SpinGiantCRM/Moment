@@ -45,6 +45,9 @@ _COLOUR_TOKENS: dict[str, str] = {
     "--bg-hover": "#3a3a3a",
     "--bg-active": "#404040",
     "--bg-sidebar": "#262626",
+    "--bg-nav": "#262626",
+    "--bg-dialog": "#2b2b2b",
+    "--bg-table": "#333333",
     "--bg-toolbar": "#2e2e2e",
     "--bg-overlay": "rgba(0,0,0,0.65)",
     "--bg-skeleton": "#2e2e2e",
@@ -251,6 +254,23 @@ _RADIUS: dict[str, int] = {
     "lg": 8,
     "full": 9999,  # pill / fully rounded
 }
+
+
+def radius(name: str) -> int:
+    """Return a border-radius token in pixels.
+
+    Args:
+        name: One of ``sm``, ``md``, ``lg``, or ``full``.
+
+    Returns:
+        Pixel radius, defaulting to ``md`` (6) when unknown.
+    """
+    return _RADIUS.get(name, _RADIUS["md"])
+
+
+def qss_color(name: str) -> str:
+    """Alias for :func:`color` — use in f-string QSS builders."""
+    return color(name)
 
 
 # ===========================================================================
@@ -973,6 +993,44 @@ QSpinBox:focus, QDoubleSpinBox:focus {{
 QWidget#sidebarWidget {{
     background-color: var(--bg-sidebar);
     border-right: 1px solid var(--border-default);
+}}
+
+/* ---- Custom title bar (frameless main window) ----------------------------- */
+
+QFrame#titleBar {{
+    background-color: var(--bg-inset);
+    border: none;
+    border-bottom: 1px solid var(--border-subtle);
+}}
+
+QFrame#titleBar QLabel {{
+    color: var(--text-secondary);
+    background: transparent;
+}}
+
+QFrame#titleBar QPushButton {{
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+}}
+
+QFrame#titleBar QPushButton:hover {{
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+}}
+
+QFrame#titleBar QPushButton#titleBarClose:hover {{
+    background-color: var(--accent-red);
+    color: var(--text-on-accent);
+}}
+
+/* ---- Settings dialog nav -------------------------------------------------- */
+
+QListWidget#settingsNav {{
+    background-color: var(--bg-nav);
+    border: none;
 }}
 """
 

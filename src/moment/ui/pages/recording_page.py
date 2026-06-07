@@ -92,21 +92,21 @@ class RecordingPage(QWidget):
         self._record_btn = QPushButton("●  Start Recording")
         self._record_btn.setFixedSize(120, 48)
         self._record_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._record_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4a9eff;
-                color: #ffffff;
+        self._record_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color("--btn-primary-bg")};
+                color: {color("--btn-primary-text")};
                 border: none;
                 border-radius: 24px;
                 font-size: 15px;
                 font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #5ab0ff;
-            }
-            QPushButton:pressed {
-                background-color: #3a8eef;
-            }
+            }}
+            QPushButton:hover {{
+                background-color: {color("--btn-primary-hover")};
+            }}
+            QPushButton:pressed {{
+                background-color: {color("--btn-primary-pressed")};
+            }}
         """)
         self._record_btn.clicked.connect(self._on_record_clicked)
         btn_row = QHBoxLayout()
@@ -157,9 +157,9 @@ class RecordingPage(QWidget):
                     background: transparent;
                 }}
                 QToolButton:checked {{
-                    background-color: #4a9eff;
-                    border-color: #4a9eff;
-                    color: #ffffff;
+                    background-color: {color("--accent-blue")};
+                    border-color: {color("--accent-blue")};
+                    color: {color("--text-on-accent")};
                 }}
                 QToolButton:hover:!checked {{
                     border-color: #555555;
@@ -230,14 +230,14 @@ class RecordingPage(QWidget):
         self._pulse_timer.stop()
         self._elapsed_timer.stop()
         self._record_btn.setText("●  Start Recording")
-        self._record_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4a9eff; color: #ffffff;
+        self._record_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color("--btn-primary-bg")}; color: {color("--btn-primary-text")};
                 border: none; border-radius: 24px;
                 font-size: 15px; font-weight: 600;
-            }
-            QPushButton:hover { background-color: #5ab0ff; }
-            QPushButton:pressed { background-color: #3a8eef; }
+            }}
+            QPushButton:hover {{ background-color: {color("--btn-primary-hover")}; }}
+            QPushButton:pressed {{ background-color: {color("--btn-primary-pressed")}; }}
         """)
         self._status_label.setText("Ready to record")
         self._status_label.setStyleSheet(

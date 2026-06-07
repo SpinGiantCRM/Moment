@@ -125,13 +125,17 @@ _GAME_COLORS: list[QColor] = [
     QColor("#2dd4bf"),  # teal
 ]
 
-# Metric card icon colour mapping
-_METRIC_ICON_COLORS: dict[str, str] = {
-    "clips": "#34d399",  # green
-    "time": "#4a9eff",  # blue
-    "storage": "#fbbf24",  # orange
-    "avg": "#14b8a6",  # teal
-}
+
+def _metric_icon_colors() -> dict[str, str]:
+    """Return metric card icon colours from theme tokens."""
+    from moment.ui.resources import color as theme_color
+
+    return {
+        "clips": theme_color("--accent-green"),
+        "time": theme_color("--accent-blue"),
+        "storage": theme_color("--accent-orange"),
+        "avg": "#14b8a6",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -666,25 +670,26 @@ class StatsPage(QWidget):
         metrics_row = QHBoxLayout()
         metrics_row.setSpacing(12)
 
+        metric_colors = _metric_icon_colors()
         self._card_clips = _MetricCard(
             "library",
             "Total Clips",
-            _METRIC_ICON_COLORS["clips"],
+            metric_colors["clips"],
         )
         self._card_time = _MetricCard(
             "player",
             "Total Time",
-            _METRIC_ICON_COLORS["time"],
+            metric_colors["time"],
         )
         self._card_storage = _MetricCard(
             "stats",
             "Storage Used",
-            _METRIC_ICON_COLORS["storage"],
+            metric_colors["storage"],
         )
         self._card_avg = _MetricCard(
             "record",
             "Avg Duration",
-            _METRIC_ICON_COLORS["avg"],
+            metric_colors["avg"],
         )
 
         metrics_row.addWidget(self._card_clips)

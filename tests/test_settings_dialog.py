@@ -25,6 +25,7 @@ def _make_config(**overrides: object) -> MagicMock:
     config.get_gsr_setting.return_value = overrides.get("gsr_setting", None)
     config.get_hotkey.return_value = overrides.get("hotkey", "Alt+Z")
     config.get_path.return_value = overrides.get("path", "")
+    config.replay_enabled = overrides.get("replay_enabled", False)
     return config
 
 
@@ -202,24 +203,42 @@ class TestSettingsSave:
         dlg._save_settings()
         config.set.assert_any_call("bitrate_mbps", 24)
 
+    def test_save_replay_enabled_toggle(self, qapp) -> None:
+        config = _make_config(replay_enabled=False)
+        dlg = SettingsDialog(config=config)
+        dlg._replay_enabled_ts.setChecked(True)
+        dlg._save_settings()
+        config.set_gsr_setting.assert_any_call("replay_enabled", True)
+
+    def test_save_overlay_hotkey(self, qapp) -> None:
+        config = _make_config()
+        dlg = SettingsDialog(config=config)
+        from PyQt6.QtGui import QKeySequence
+
+        dlg._overlay_hotkey_edit.setKeySequence(QKeySequence("Ctrl+Shift+Z"))
+        dlg._save_settings()
+        config.set_gsr_setting.assert_any_call("hotkey_show_overlay", "Ctrl+Shift+Z")
+
+    def test_save_overlay_auto_hide(self, qapp) -> None:
+        config = _make_config()
+        dlg = SettingsDialog(config=config)
+        dlg._overlay_auto_hide_sb.setValue(12)
+        dlg._save_settings()
+        config.set_gsr_setting.assert_any_call("overlay_auto_hide", 12)
+
 
 class TestSettingsWidgets:
     """Tests that key widgets exist across all pages."""
 
-    def test_general_widgets(self, qapp) -> None:
-        dlg = SettingsDialog()
-        assert dlg._theme_cb is not None
-        assert dlg._density_cb is not None
-        assert dlg._font_cb is not None
-        assert dlg._language_cb is not None
-
     def test_recording_widgets(self, qapp) -> None:
         dlg = SettingsDialog()
+        assert dlg._replay_enabled_ts is not None
         assert dlg._recordings_path_edit is not None
         assert dlg._record_mode_cb is not None
         assert dlg._fps_cb is not None
         assert dlg._resolution_cb is not None
         assert dlg._buffer_duration_sb is not None
+        assert dlg._overlay_auto_hide_sb is not None
 
     def test_video_widgets(self, qapp) -> None:
         config = _make_config()
@@ -233,7 +252,8 @@ class TestSettingsWidgets:
     def test_hotkeys_widgets(self, qapp) -> None:
         dlg = SettingsDialog()
         assert dlg._hotkeys_table is not None
-        assert dlg._hotkeys_table.rowCount() == 4
+        assert dlg._hotkeys_table.rowCount() == 1
+        assert dlg._overlay_hotkey_edit is not None
 
     def test_output_widgets(self, qapp) -> None:
         dlg = SettingsDialog()

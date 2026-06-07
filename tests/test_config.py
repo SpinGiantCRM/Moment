@@ -243,6 +243,16 @@ class TestGSRSettings:
         config.set_gsr_setting("replay_enabled", True)
         assert config.replay_enabled is True
 
+    def test_has_key(self, config: Config) -> None:
+        """has_key reports whether a setting was persisted."""
+        assert config.has_key("gsr_replay_enabled") is False
+        config.set_gsr_setting("replay_enabled", True)
+        assert config.has_key("gsr_replay_enabled") is True
+
+    def test_replay_container_defaults_to_mkv(self, config: Config) -> None:
+        """Default GSR container matches watcher expectations."""
+        assert config.get_gsr_setting("replay_container") == "mkv"
+
 
 class TestCodecPreferences:
     def test_get_preferred_codec_default(self, config: Config) -> None:

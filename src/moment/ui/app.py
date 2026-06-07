@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import logging
 import os
+import shutil
 import sys
 import traceback
 import uuid
@@ -227,6 +228,7 @@ class AppManager(QObject):
         self._game_monitor = None
         self._bookmarker = None
         self._update_timer: QTimer | None = None
+        self._pending_save_duration: int | None = None
 
     @property
     def app(self) -> QApplication | None:
@@ -515,6 +517,8 @@ class AppManager(QObject):
             logger.warning("Core services not available: %s", exc)
             return
 
+        self._maybe_auto_enable_replay()
+
         # Init GSR (instant replay) if enabled
         self._init_gsr()
 
@@ -603,10 +607,25 @@ class AppManager(QObject):
         except Exception as exc:
             logger.warning("Pipeline not started: %s", exc)
 
-    def _init_gsr(self) -> None:
-        """Start GSR instant replay and register the global hotkey.
+    def _maybe_auto_enable_replay(self) -> None:
+        """Enable instant replay on first launch when GSR is installed."""
+        if self._config is None:
+            return
+        if self._config.replay_enabled:
+            return
+        if self._config.has_key("gsr_replay_enabled"):
+            return
+        if shutil.which("gpu-screen-recorder") is None:
+            return
+        self._config.set_gsr_setting("replay_enabled", True)
+        logger.info(
+            "Auto-enabled GSR instant replay (gpu-screen-recorder found on PATH)",
+        )
 
-        Only runs if ``replay_enabled`` is True in config.
+    def _init_gsr(self) -> None:
+        """Start GSR instant replay stack when enabled in config.
+
+        Hotkey registration is deferred until the main window exists.
         GSR not found or startup failure → logged as warning, not fatal.
         """
         if self._config is None:
@@ -614,26 +633,35 @@ class AppManager(QObject):
 
         if not self._config.replay_enabled:
             logger.info("GSR replay mode disabled — skipping")
+            self._update_replay_status(active=False)
             return
+
+        self._start_gsr_stack()
+
+    def _start_gsr_stack(self) -> bool:
+        """Start GSR controller, watcher, and overlay. Returns success."""
+        if self._config is None:
+            return False
 
         try:
             from moment.core.gsr_controller import GSRController
             from moment.core.gsr_watcher import GSRWatcher
-            from moment.ui.services.global_hotkey import GlobalHotkeyManager
             from moment.ui.widgets.overlay import Overlay
         except ImportError as exc:
             logger.warning("GSR integration unavailable: %s", exc)
-            return
+            return False
 
-        # --- GSR Controller ---
+        self._stop_gsr_stack()
+
         codec = self._config.get_gsr_setting("replay_codec")
         audio = self._config.get_gsr_setting("replay_audio_device")
+        container = str(self._config.get_gsr_setting("replay_container") or "mkv")
 
         self._gsr_controller = GSRController(
             output_dir=self._config.get_path("recordings_dir"),
             fps=int(self._config.get_gsr_setting("replay_fps") or 60),
             quality=str(self._config.get_gsr_setting("replay_quality") or "very_high"),
-            container=str(self._config.get_gsr_setting("replay_container") or "mp4"),
+            container=container,
             replay_duration=int(self._config.get_gsr_setting("replay_duration") or 120),
             audio_device=str(audio) if audio else None,
             record_area=str(self._config.get_gsr_setting("replay_record_area") or "screen"),
@@ -647,16 +675,16 @@ class AppManager(QObject):
         except Exception as exc:
             logger.warning("GSR failed to start: %s", exc)
             self._gsr_controller = None
-            return
+            self._update_replay_status(active=False)
+            return False
 
-        # --- GSR Watcher ---
         self._gsr_watcher = GSRWatcher(
             output_dir=self._gsr_controller.output_dir,
             on_new_clip=self._on_gsr_replay_ready,
+            container=container,
         )
         self._gsr_watcher.start()
 
-        # --- Overlay ---
         self._overlay = Overlay(
             auto_hide_seconds=int(self._config.get_gsr_setting("overlay_auto_hide") or 8),
         )
@@ -665,13 +693,105 @@ class AppManager(QObject):
         self._overlay.open_settings.connect(self._on_settings)
         self._overlay.close_overlay.connect(self._overlay.hide_overlay)
 
-        # --- Global hotkey ---
+        if self._window is not None:
+            self._window._gsr_controller = self._gsr_controller
+
+        self._update_replay_status(active=True)
+        self._register_overlay_hotkey()
+        return True
+
+    def _stop_gsr_stack(self) -> None:
+        """Stop GSR, watcher, overlay, and unregister the global hotkey."""
+        if self._hotkey_manager is not None:
+            try:
+                self._hotkey_manager.unregister()
+            except Exception as exc:
+                logger.warning("Hotkey unregister error: %s", exc)
+            self._hotkey_manager = None
+
+        if self._overlay is not None:
+            try:
+                self._overlay.hide_overlay()
+            except Exception as exc:
+                logger.warning("Overlay hide error: %s", exc)
+            self._overlay = None
+
+        if self._gsr_watcher is not None:
+            try:
+                self._gsr_watcher.stop()
+            except Exception as exc:
+                logger.warning("GSR watcher stop error: %s", exc)
+            self._gsr_watcher = None
+
+        if self._gsr_controller is not None:
+            try:
+                self._gsr_controller.stop()
+            except Exception as exc:
+                logger.warning("GSR stop error: %s", exc)
+            self._gsr_controller = None
+
+        if self._window is not None:
+            self._window._gsr_controller = None
+
+        self._update_replay_status(active=False)
+
+    def _register_overlay_hotkey(self) -> None:
+        """Register the overlay hotkey after the main window exists."""
+        if self._config is None or self._overlay is None:
+            return
+
+        try:
+            from moment.ui.services.global_hotkey import GlobalHotkeyManager
+        except ImportError as exc:
+            logger.warning("Global hotkey unavailable: %s", exc)
+            return
+
+        if self._hotkey_manager is not None:
+            try:
+                self._hotkey_manager.unregister()
+            except Exception as exc:
+                logger.warning("Hotkey unregister error: %s", exc)
+
         self._hotkey_manager = GlobalHotkeyManager(
             key=self._config.get_hotkey(),
         )
         self._hotkey_manager.triggered.connect(self._overlay.toggle)
         backend = self._hotkey_manager.register(parent_widget=self._window)
         logger.info("Global hotkey registered (backend: %s)", backend)
+
+    def _reload_gsr_settings(self) -> None:
+        """Apply recording/overlay settings after the settings dialog closes."""
+        if self._config is None:
+            return
+
+        if not self._config.replay_enabled:
+            self._stop_gsr_stack()
+            return
+
+        if self._gsr_controller is None:
+            self._start_gsr_stack()
+            return
+
+        if self._overlay is not None:
+            auto_hide = int(self._config.get_gsr_setting("overlay_auto_hide") or 8)
+            self._overlay.set_auto_hide_seconds(auto_hide)
+
+        hotkey = self._config.get_hotkey()
+        if self._hotkey_manager is not None and self._hotkey_manager.key_string != hotkey:
+            self._hotkey_manager.update_key(hotkey, self._window)
+        elif self._hotkey_manager is None:
+            self._register_overlay_hotkey()
+
+        self._start_gsr_stack()
+
+    def _update_replay_status(self, *, active: bool) -> None:
+        """Update tray/menu state for instant replay availability."""
+        if self._tray is not None:
+            self._tray.set_recording(active)
+            if active:
+                self._tray.update_status("Instant replay active")
+            else:
+                self._tray.update_status("Instant replay off")
 
     # ------------------------------------------------------------------
     # Window management
@@ -706,6 +826,9 @@ class AppManager(QObject):
             window.destroyed.connect(self._on_window_destroyed)
 
             self._window = window
+
+            if self._overlay is not None and self._hotkey_manager is None:
+                self._register_overlay_hotkey()
 
             # Show window unless --minimized
             if not self._args.minimized:
@@ -804,6 +927,7 @@ class AppManager(QObject):
                 if self._config is not None and self._window is not None:
                     minimize_tray = self._config.get("minimize_to_tray", True)
                     self._window.set_minimize_to_tray(minimize_tray)
+                self._reload_gsr_settings()
         except Exception as exc:
             logger.exception("Could not open settings dialog: %s", exc)
 
@@ -1077,6 +1201,24 @@ class AppManager(QObject):
             self._store.insert_clip(clip)
             logger.debug("Clip %s inserted into store", clip_id)
 
+            requested = self._pending_save_duration
+            self._pending_save_duration = None
+            if requested is not None and duration > 0:
+                from moment.core.models import EditProfile
+
+                trim_start = max(0.0, duration - float(requested))
+                profile = EditProfile(
+                    clip_id=clip_id,
+                    trim_start=trim_start,
+                    trim_end=duration,
+                )
+                self._store.save_edit_profile(profile)
+                logger.info(
+                    "Applied overlay trim: last %.0fs of %.1fs clip",
+                    requested,
+                    duration,
+                )
+
             # Enqueue encode task (priority 10)
             encode_task = Task(
                 id=str(uuid.uuid4()),
@@ -1115,6 +1257,7 @@ class AppManager(QObject):
     def _on_overlay_save(self, duration: int) -> None:
         """Called when the user clicks a quick-save button in the overlay."""
         logger.info("Overlay save %ds requested", duration)
+        self._pending_save_duration = duration
         if self._gsr_controller is not None:
             self._gsr_controller.save_replay()
 

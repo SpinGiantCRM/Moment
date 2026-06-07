@@ -3,7 +3,8 @@
 Uses inotify (via pyinotify) for low-latency detection. Falls back to
 polling every 2 seconds when inotify is unavailable.
 
-Only fires for ``.mkv`` files created *after* watching starts.
+Only fires for replay container files (``.mkv`` / ``.mp4``) created *after*
+watching starts.
 """
 
 from __future__ import annotations
@@ -16,19 +17,20 @@ from typing import Callable
 logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL = 2.0  # seconds
+_SUPPORTED_EXTENSIONS = frozenset({".mkv", ".mp4"})
 
-# Try to import inotify; fall back gracefully
-try:
-    import inotify.adapters as _ia  # type: ignore[import-untyped]
 
-    _INOTIFY_AVAILABLE = True
-except ImportError:
-    _INOTIFY_AVAILABLE = False
-    logger.debug("inotify not available; using polling fallback")
+def _extensions_for_container(container: str | None) -> frozenset[str]:
+    """Return file extensions to watch for a GSR container setting."""
+    if container:
+        ext = f".{container.lstrip('.').lower()}"
+        if ext in _SUPPORTED_EXTENSIONS:
+            return frozenset({ext})
+    return _SUPPORTED_EXTENSIONS
 
 
 class GSRWatcher:
-    """Watches a directory for new ``.mkv`` files created by GSR.
+    """Watches a directory for new replay files created by GSR.
 
     Thread-safe. Runs a background daemon thread that fires a callback
     when a new replay file appears.
@@ -54,16 +56,20 @@ class GSRWatcher:
         output_dir: str | Path,
         on_new_clip: Callable[[Path], None] | None = None,
         poll_interval: float = _POLL_INTERVAL,
+        container: str | None = None,
     ) -> None:
         """Args:
         output_dir: Directory where GSR writes buffer-dump files.
-        on_new_clip: Called as ``callback(path)`` when a new ``.mkv``
-            file is detected. Runs on a background thread.
+        on_new_clip: Called as ``callback(path)`` when a new replay file
+            is detected. Runs on a background thread.
         poll_interval: Seconds between polls in polling mode.
+        container: GSR container setting (``mkv`` or ``mp4``). When set,
+            only that extension is watched; otherwise both are watched.
         """
         self._dir = Path(output_dir).expanduser().resolve()
         self._on_new_clip = on_new_clip
         self._poll_interval = poll_interval
+        self._extensions = _extensions_for_container(container)
 
         self._known_files: set[Path] = set()
         self._running = False
@@ -89,7 +95,7 @@ class GSRWatcher:
 
         # Seed known files
         with self._lock:
-            self._known_files = set(self._dir.glob("*.mkv"))
+            self._known_files = self._list_replay_files()
 
         self._running = True
         self._stop_event.clear()
@@ -100,10 +106,19 @@ class GSRWatcher:
         )
         self._thread.start()
 
-        if _INOTIFY_AVAILABLE:
-            logger.info("GSR watcher started (inotify) on %s", self._dir)
-        else:
-            logger.info("GSR watcher started (poll) on %s", self._dir)
+        try:
+            import inotify.adapters as _ia  # type: ignore[import-untyped]  # noqa: F401
+
+            backend = "inotify"
+        except ImportError:
+            backend = "poll"
+
+        logger.info(
+            "GSR watcher started (%s) on %s [%s]",
+            backend,
+            self._dir,
+            ", ".join(sorted(self._extensions)),
+        )
 
     def stop(self) -> None:
         """Stop watching."""
@@ -118,15 +133,33 @@ class GSRWatcher:
     # Internal — watch loop
     # ------------------------------------------------------------------
 
+    def _list_replay_files(self) -> set[Path]:
+        """Return all replay files currently in the watch directory."""
+        files: set[Path] = set()
+        for ext in self._extensions:
+            files.update(self._dir.glob(f"*{ext}"))
+        return files
+
+    def _is_replay_file(self, path: Path) -> bool:
+        """Return ``True`` if *path* is a replay file we should track."""
+        return path.suffix.lower() in self._extensions and path.is_file()
+
     def _watch_loop(self) -> None:
         """Main watch loop — uses inotify if available, else polls."""
-        if _INOTIFY_AVAILABLE:
-            self._watch_inotify()
-        else:
+        try:
+            import importlib.util
+
+            if importlib.util.find_spec("inotify.adapters") is not None:
+                self._watch_inotify()
+            else:
+                self._watch_poll()
+        except Exception:
             self._watch_poll()
 
     def _watch_inotify(self) -> None:
         """inotify-based watch loop."""
+        import inotify.adapters as _ia  # type: ignore[import-untyped]
+
         try:
             adapter = _ia.Inotify()
 
@@ -155,7 +188,7 @@ class GSRWatcher:
                 else:
                     continue
 
-                if filepath.suffix == ".mkv" and filepath.is_file():
+                if self._is_replay_file(filepath):
                     self._handle_new_file(filepath)
 
         except Exception:
@@ -167,7 +200,7 @@ class GSRWatcher:
         """Polling-based watch loop (fallback)."""
         while self._running:
             try:
-                current_files = set(self._dir.glob("*.mkv"))
+                current_files = self._list_replay_files()
                 with self._lock:
                     new_files = current_files - self._known_files
                     self._known_files = current_files

@@ -219,6 +219,12 @@ class TestBuildCommand:
         assert "-f" in cmd
         assert "60" in cmd
 
+    def test_includes_replay_duration(self) -> None:
+        ctrl = GSRController(output_dir="/tmp", replay_duration=90)
+        cmd = ctrl._build_command()
+        r_idx = cmd.index("-r")
+        assert cmd[r_idx + 1] == "90"
+
     def test_with_video_codec(self) -> None:
         ctrl = GSRController(output_dir="/tmp", video_codec="h264_nvenc")
         cmd = ctrl._build_command()

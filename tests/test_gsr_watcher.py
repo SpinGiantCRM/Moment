@@ -98,6 +98,22 @@ class TestPollingLoop:
         w.stop()
         assert len(detected) >= 1
 
+    def test_detects_mp4_when_container_mp4(self, tmp_path: Path) -> None:
+        detected: list[Path] = []
+        d = tmp_path / "mp4_out"
+        d.mkdir()
+        w = GSRWatcher(
+            output_dir=str(d),
+            on_new_clip=lambda p: detected.append(p),
+            poll_interval=0.1,
+            container="mp4",
+        )
+        w.start()
+        (d / "replay.mp4").touch()
+        wait_until(lambda: len(detected) >= 1, timeout=2.0)
+        w.stop()
+        assert detected[0].suffix == ".mp4"
+
     def test_non_mkv_files_ignored(self, tmp_path: Path) -> None:
         detected: list[Path] = []
         d = tmp_path / "nonmkv"
@@ -160,7 +176,7 @@ class TestFileTracking:
 
 class TestInotifyFallback:
     def test_poll_fallback_when_inotify_unavailable(self, tmp_path: Path) -> None:
-        with patch("moment.core.gsr_watcher._INOTIFY_AVAILABLE", False):
+        with patch("importlib.util.find_spec", return_value=None):
             d = tmp_path / "fallback"
             d.mkdir()
             detected: list[Path] = []
