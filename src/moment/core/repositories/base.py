@@ -142,6 +142,38 @@ def _migrate_plaintext_to_encrypted(db_path: str, key: bytes, sqlcipher_module: 
         raise RuntimeError(f"Failed to migrate plaintext DB to encrypted: {exc}") from exc
 
 
+def _delete_db_files(db_path: str) -> None:
+    """Remove the database file and any WAL/SHM sidecars."""
+    try:
+        os.remove(db_path)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        raise RuntimeError(f"Failed to remove database file: {exc}") from exc
+    for suffix in ("-wal", "-shm"):
+        try:
+            os.remove(db_path + suffix)
+        except FileNotFoundError:
+            pass
+
+
+def _has_incompatible_integer_id_schema(conn: sqlite3.Connection) -> bool:
+    """Return True when ``clips.id`` is INTEGER (legacy schema).
+
+    The current schema uses TEXT UUID primary keys.  An old INTEGER ``id``
+    column causes sqlcipher3 to reject INSERTs; the only reliable fix is
+    to delete the DB and let migrations recreate it.
+    """
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='clips'"
+    ).fetchone():
+        return False
+    for col in conn.execute("PRAGMA table_info(clips)").fetchall():
+        if col["name"] == "id":
+            return str(col["type"]).upper() == "INTEGER"
+    return False
+
+
 def _set_row_factory(conn: sqlite3.Connection) -> None:
     """Attach the correct Row factory for plain sqlite3 or sqlcipher3 connections."""
     if type(conn).__module__.startswith("sqlcipher3"):
@@ -186,6 +218,22 @@ def connect_encrypted(db_path: str) -> sqlite3.Connection:
         conn.execute("PRAGMA cipher_compatibility = 4")
         conn.execute("SELECT count(*) FROM sqlite_master")
         _set_row_factory(conn)
+
+        if _has_incompatible_integer_id_schema(conn):
+            logger.warning(
+                "Incompatible legacy schema (clips.id INTEGER) at %s — "
+                "deleting so migrations can recreate a fresh database",
+                db_path,
+            )
+            conn.close()
+            _delete_db_files(db_path)
+            conn = sqlcipher.connect(db_path, check_same_thread=False)
+            conn.execute(f"PRAGMA key = \"x'{key.decode()}'\"")
+            conn.execute("PRAGMA cipher_compatibility = 4")
+            conn.execute("SELECT count(*) FROM sqlite_master")
+            _set_row_factory(conn)
+            logger.info("Created fresh encrypted database after removing incompatible schema")
+
         logger.info("Opened encrypted database with sqlcipher3")
         return conn
     except Exception as exc:
@@ -197,12 +245,7 @@ def connect_encrypted(db_path: str) -> sqlite3.Connection:
                 exc,
             )
             try:
-                os.remove(db_path)
-                for suffix in ("-wal", "-shm"):
-                    try:
-                        os.remove(db_path + suffix)
-                    except FileNotFoundError:
-                        pass
+                _delete_db_files(db_path)
             except OSError as remove_exc:
                 raise RuntimeError(
                     f"Failed to open encrypted database: {exc}"

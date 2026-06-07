@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import QStringListModel, Qt
 from PyQt6.QtWidgets import (
     QCompleter,
-    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -23,13 +22,15 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from moment.ui.base_dialog import ThemedDialog
+
 if TYPE_CHECKING:
     from moment.core.store import Store
 
 logger = logging.getLogger(__name__)
 
 
-class TagDialog(QDialog):
+class TagDialog(ThemedDialog):
     """Tag management dialog with autocomplete.
 
     Args:

@@ -14,7 +14,6 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -28,6 +27,7 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.core.models import GameProfile, ReviewCardConfig
+from moment.ui.base_dialog import ThemedDialog
 
 if TYPE_CHECKING:
     from moment.core.store import Store
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 _REVIEW_SIZES = ["small", "medium", "large"]
 
 
-class GameProfileDialog(QDialog):
+class GameProfileDialog(ThemedDialog):
     """Per-game capture settings editor."""
 
     def __init__(self, store: "Store | None" = None, parent=None) -> None:

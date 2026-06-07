@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 
 from PyQt6.QtCore import QByteArray, Qt
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap
 from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QWidget
 
@@ -37,25 +37,25 @@ _ICONS = _ASSETS / "icons"
 # changes, every QSS rule and every ``color()`` call-site picks it up.
 
 _COLOUR_TOKENS: dict[str, str] = {
-    # ── Backgrounds (warm OnlyOffice greys — no harsh black) ─────────────
-    "--bg-window": "#404040",
-    "--bg-surface": "#454545",
-    "--bg-elevated": "#4a4a4a",
-    "--bg-inset": "#262626",
-    "--bg-hover": "#4d4d4d",
-    "--bg-active": "#555555",
-    "--bg-sidebar": "#363636",
-    "--bg-toolbar": "#3a3a3a",
+    # ── Backgrounds (OnlyOffice warm greys — darker base) ────────────────
+    "--bg-window": "#2b2b2b",
+    "--bg-surface": "#333333",
+    "--bg-elevated": "#363636",
+    "--bg-inset": "#252525",
+    "--bg-hover": "#3a3a3a",
+    "--bg-active": "#404040",
+    "--bg-sidebar": "#262626",
+    "--bg-toolbar": "#2e2e2e",
     "--bg-overlay": "rgba(0,0,0,0.65)",
-    "--bg-skeleton": "#3a3a3a",
-    "--bg-skeleton-shimmer": "#454545",
+    "--bg-skeleton": "#2e2e2e",
+    "--bg-skeleton-shimmer": "#363636",
     # ── Borders ──────────────────────────────────────────────────────────
-    "--border-default": "#505050",
-    "--border-subtle": "#555555",
-    "--border-input": "#505050",
+    "--border-default": "#404040",
+    "--border-subtle": "#454545",
+    "--border-input": "#454545",
     "--border-focus": "#5b9cf5",
-    "--border-hover": "#606060",
-    "--border-menu": "#555555",
+    "--border-hover": "#505050",
+    "--border-menu": "#454545",
     # ── Text (WCAG AA 4.5:1 on warm grey backgrounds) ────────────────────
     "--text-primary": "#f0f0f0",
     "--text-secondary": "#b8b8b8",
@@ -68,23 +68,23 @@ _COLOUR_TOKENS: dict[str, str] = {
     "--btn-primary-pressed": "#3a7ed6",
     "--btn-primary-text": "#ffffff",
     "--btn-secondary-bg": "transparent",
-    "--btn-secondary-border": "#606060",
-    "--btn-secondary-hover-bg": "#4a4a4a",
-    "--btn-secondary-hover-border": "#707070",
+    "--btn-secondary-border": "#505050",
+    "--btn-secondary-hover-bg": "#3a3a3a",
+    "--btn-secondary-hover-border": "#606060",
     "--btn-secondary-text": "#f0f0f0",
     "--btn-danger-border": "#f87171",
     "--btn-danger-text": "#f87171",
     "--btn-danger-hover-bg": "rgba(248,113,113,0.12)",
-    "--btn-disabled-bg": "#3a3a3a",
-    "--btn-disabled-text": "#707070",
+    "--btn-disabled-bg": "#2e2e2e",
+    "--btn-disabled-text": "#606060",
     # ── Toggle switch ────────────────────────────────────────────────────
     "--toggle-active": "#5b9cf5",
-    "--toggle-inactive": "#505050",
+    "--toggle-inactive": "#454545",
     "--toggle-knob": "#ffffff",
     "--toggle-knob-shadow": "rgba(0,0,0,0.3)",
-    "--toggle-hover": "#606060",
+    "--toggle-hover": "#505050",
     # ── Slider ───────────────────────────────────────────────────────────
-    "--slider-track": "#505050",
+    "--slider-track": "#454545",
     "--slider-fill": "#5b9cf5",
     "--slider-thumb": "#ffffff",
     # ── Accents ──────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ _COLOUR_TOKENS: dict[str, str] = {
     "--accent-red": "#f87171",
     "--accent-gold": "#f59e0b",
     # ── Heart (favourite) ────────────────────────────────────────────────
-    "--heart-inactive": "#606060",
+    "--heart-inactive": "#505050",
     "--heart-active": "#f87171",
 }
 
@@ -116,6 +116,24 @@ def color(name: str) -> str:
         The colour string or ``"#000000"`` if the token is unknown.
     """
     return _COLOUR_TOKENS.get(name, "#000000")
+
+def dark_palette() -> QPalette:
+    """Return a :class:`QPalette` matching the dark theme colour tokens."""
+    palette = QPalette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(color("--bg-window")))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(color("--text-primary")))
+    palette.setColor(QPalette.ColorRole.Base, QColor(color("--bg-inset")))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(color("--bg-surface")))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(color("--bg-elevated")))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(color("--text-primary")))
+    palette.setColor(QPalette.ColorRole.Text, QColor(color("--text-primary")))
+    palette.setColor(QPalette.ColorRole.Button, QColor(color("--bg-surface")))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(color("--text-primary")))
+    palette.setColor(QPalette.ColorRole.BrightText, QColor(color("--accent-red")))
+    palette.setColor(QPalette.ColorRole.Link, QColor(color("--text-link")))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(color("--accent-blue")))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(color("--text-on-accent")))
+    return palette
 
 
 def qss_colors() -> str:
@@ -227,9 +245,9 @@ def apply_spacing(token: str, density: str = "normal") -> int:
 # ===========================================================================
 
 _RADIUS: dict[str, int] = {
-    "sm": 2,
-    "md": 3,
-    "lg": 6,
+    "sm": 4,
+    "md": 6,
+    "lg": 8,
     "full": 9999,  # pill / fully rounded
 }
 
@@ -343,7 +361,7 @@ QPushButton {{
     background-color: transparent;
     color: var(--text-primary);
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 5px 12px;
     font-size: 13px;
     min-height: 24px;
@@ -367,7 +385,7 @@ QPushButton#primary {{
     background: var(--btn-primary-bg);
     color: var(--btn-primary-text);
     border: 1px solid var(--btn-primary-bg);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 6px 16px;
     font-size: 13px;
     font-weight: 600;
@@ -394,7 +412,7 @@ QPushButton#secondary {{
     background: var(--btn-secondary-bg);
     border: 1px solid var(--btn-secondary-border);
     color: var(--btn-secondary-text);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 5px 15px;
     font-size: 13px;
 }}
@@ -415,7 +433,7 @@ QPushButton#danger {{
     border: 1px solid var(--btn-danger-border);
     color: var(--btn-danger-text);
     background: transparent;
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 5px 15px;
     font-size: 13px;
 }}
@@ -650,7 +668,7 @@ QSplitter::handle:vertical {{
 QMenu {{
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 4px;
 }}
 
@@ -908,6 +926,7 @@ QStatusBar {{
 
 QDialog {{
     background-color: var(--bg-window);
+    border-radius: 8px;
 }}
 
 QDialog QLabel {{

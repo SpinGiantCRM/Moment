@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -22,6 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from moment.core.game_profiles import GameProfileManager
+from moment.ui.base_dialog import ThemedDialog
 
 if TYPE_CHECKING:
     from moment.core.store import Store
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ManualGameDialog(QDialog):
+class ManualGameDialog(ThemedDialog):
     """Simple dialog for manually adding game process names.
 
     The user types a process name (e.g. ``"eldenring.exe"`` via Proton)

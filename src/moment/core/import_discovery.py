@@ -248,8 +248,15 @@ def import_recordings_from_dirs(
     return imported, failed
 
 
-def ensure_recording_dirs(source_dir: Path | str, encode_dir: Path | str) -> tuple[Path, Path]:
+def ensure_source_and_encode_dirs(
+    source_dir: Path | str,
+    encode_dir: Path | str,
+) -> tuple[Path, Path]:
     """Create source and encode directories if missing.
+
+    Args:
+        source_dir: Recordings / source folder path.
+        encode_dir: Encoded output folder path.
 
     Returns:
         Resolved paths for both directories.
