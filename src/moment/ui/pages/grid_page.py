@@ -399,7 +399,9 @@ class GridPage(QWidget):
         self._loader = None
         self._remove_skeletons()
         if not clips:
-            self._show_empty("No clips yet\n\nPress F8 in-game to capture your first clip.")
+            self._show_empty(
+                "Press F8 in-game to capture clips, or use Import recordings below."
+            )
             return
         self._hide_states()
         self._list_view.setVisible(True)
@@ -549,19 +551,27 @@ class GridPage(QWidget):
         layout.addWidget(self._empty_heading)
 
         # Description
-        self._empty_desc = QLabel("Start recording to build your clip library")
+        self._empty_desc = QLabel(
+            "Press F8 in-game to capture clips, or import existing recordings"
+        )
         self._empty_desc.setObjectName("emptyStateDesc")
         self._empty_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_desc.setWordWrap(True)
         layout.addWidget(self._empty_desc)
 
-        # CTA button
+        # CTA buttons
         cta_layout = QHBoxLayout()
         cta_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         record_btn = QPushButton("Record a clip")
         record_btn.setObjectName("primary")
         record_btn.clicked.connect(lambda: self.empty_action_requested.emit("Start Recording"))
         cta_layout.addWidget(record_btn)
+        import_btn = QPushButton("Import recordings")
+        import_btn.setObjectName("secondary")
+        import_btn.clicked.connect(
+            lambda: self.empty_action_requested.emit("Import Recordings")
+        )
+        cta_layout.addWidget(import_btn)
         layout.addLayout(cta_layout)
 
         widget.setVisible(False)

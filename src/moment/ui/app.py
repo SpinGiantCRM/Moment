@@ -33,7 +33,7 @@ from PyQt6.QtWidgets import QApplication, QStyleFactory
 
 from moment import __version__
 from moment.core.updater import check_for_updates
-from moment.ui.resources import app_font, load_icon, stylesheet
+from moment.ui.resources import app_font, dark_palette, load_icon, stylesheet
 from moment.ui.tray import TrayIcon
 from moment.utils.subprocess import ExternalCommandRunner
 
@@ -281,11 +281,13 @@ class AppManager(QObject):
         self._qapp.setApplicationVersion(__version__)
         self._qapp.setQuitOnLastWindowClosed(False)
 
-        # Detect high-contrast mode and apply appropriate theme
+        # Fusion style + dark palette for consistent OnlyOffice greys on all platforms
+        self._qapp.setStyle(QStyleFactory.create("Fusion"))
         self._high_contrast = self._detect_high_contrast()
         if self._high_contrast:
             self._apply_high_contrast_theme()
         else:
+            self._qapp.setPalette(dark_palette())
             self._qapp.setStyleSheet(stylesheet())
         self._qapp.setFont(app_font())
 

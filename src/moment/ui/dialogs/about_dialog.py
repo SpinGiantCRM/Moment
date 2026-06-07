@@ -8,7 +8,6 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QColor, QDesktopServices, QFont
 from PyQt6.QtWidgets import (
-    QDialog,
     QHBoxLayout,
     QHeaderView,
     QPushButton,
@@ -19,6 +18,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from moment.ui.base_dialog import ThemedDialog
 
 # ---------------------------------------------------------------------------
 # Keyboard shortcuts data — grouped by category for alternating-row shading
@@ -783,7 +784,7 @@ Public License instead of this License.  But first, please read
 )
 
 
-class AboutDialog(QDialog):
+class AboutDialog(ThemedDialog):
     """Three-tab About dialog — shortcuts, license, credits."""
 
     def __init__(self, parent=None) -> None:

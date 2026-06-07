@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -25,9 +24,10 @@ from moment.core.config import _PATH_DEFAULTS
 from moment.core.import_discovery import (
     RecordingCandidate,
     discover_recording_paths,
-    ensure_recording_dirs,
+    ensure_source_and_encode_dirs,
     import_recordings_from_dirs,
 )
+from moment.ui.base_dialog import ThemedDialog
 
 if TYPE_CHECKING:
     from moment.core.config import Config
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ImportWizardDialog(QDialog):
+class ImportWizardDialog(ThemedDialog):
     """Guide the user through recording discovery, path setup, and import.
 
     Case A — recordings found: checkbox list of candidates + encode path.
@@ -205,13 +205,13 @@ class ImportWizardDialog(QDialog):
     def _create_source_dir(self) -> None:
         path = self._source_edit.text().strip() or self._default_recordings_dir()
         encode = self._encode_edit.text().strip() or self._default_encode_dir()
-        created = ensure_recording_dirs(path, encode)[0]
+        created = ensure_source_and_encode_dirs(path, encode)[0]
         self._source_edit.setText(str(created))
 
     def _create_encode_dir(self) -> None:
         source = self._source_edit.text().strip() or self._default_recordings_dir()
         path = self._encode_edit.text().strip() or self._default_encode_dir()
-        created = ensure_recording_dirs(source, path)[1]
+        created = ensure_source_and_encode_dirs(source, path)[1]
         self._encode_edit.setText(str(created))
 
     def _save_paths(self, source_dir: str, encode_dir: str) -> None:
@@ -254,7 +254,7 @@ class ImportWizardDialog(QDialog):
             QMessageBox.warning(self, "Encode folder required", "Enter an encode output path.")
             return
 
-        ensure_recording_dirs(source_dir, encode_dir)
+        ensure_source_and_encode_dirs(source_dir, encode_dir)
         try:
             self._save_paths(source_dir, encode_dir)
         except Exception as exc:

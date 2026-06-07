@@ -1442,6 +1442,8 @@ class MainWindow(QMainWindow):
             self._show_shortcuts_dialog()
         elif action == "Capture Settings":
             self._open_capture_settings()
+        elif action == "Import Recordings":
+            self._on_import_wizard_requested()
         elif action == "Reset Database":
             self._confirm_reset_database()
         elif action == "Open Config Folder":

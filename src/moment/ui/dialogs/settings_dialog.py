@@ -36,7 +36,6 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen
 from PyQt6.QtWidgets import (
     QComboBox,
-    QDialog,
     QFileDialog,
     QFormLayout,
     QFrame,
@@ -55,6 +54,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from moment.ui.base_dialog import ThemedDialog
 
 if TYPE_CHECKING:
     from moment.core.config import Config
@@ -196,7 +197,7 @@ _CATEGORIES = [
 ]
 
 
-class SettingsDialog(QDialog):
+class SettingsDialog(ThemedDialog):
     """Two-panel settings dialog with category nav and stacked content."""
 
     def __init__(
@@ -716,8 +717,7 @@ class SettingsDialog(QDialog):
         self._storage_bar = QProgressBar()
         self._storage_bar.setRange(0, 100)
         self._storage_bar.setValue(0)
-        self._storage_bar.setTextVisible(True)
-        self._storage_bar.setFormat("0 / 0 GB")
+        self._storage_bar.setTextVisible(False)
         self._storage_bar.setFixedHeight(8)
         self._storage_bar.setStyleSheet("""
             QProgressBar {
@@ -730,7 +730,16 @@ class SettingsDialog(QDialog):
                 border-radius: 4px;
             }
         """)
-        layout.addWidget(self._storage_bar)
+        self._storage_label = QLabel("0 / 0 GB")
+        self._storage_label.setObjectName("cardMeta")
+        self._storage_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        storage_row = QHBoxLayout()
+        storage_row.setSpacing(8)
+        storage_row.addWidget(self._storage_bar, stretch=1)
+        storage_row.addWidget(self._storage_label)
+        layout.addLayout(storage_row)
 
         layout.addSpacing(8)
 

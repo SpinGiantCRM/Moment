@@ -12,12 +12,13 @@ from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
 )
+
+from moment.ui.base_dialog import ThemedDialog
 
 if TYPE_CHECKING:
     from PyQt6.QtMultimedia import QMediaPlayer
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class TrimDialog(QDialog):
+class TrimDialog(ThemedDialog):
     """Trim dialog with dual-handle timeline widget.
 
     Signals:
