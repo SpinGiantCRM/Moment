@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 GSR_BINARY = "gpu-screen-recorder"
 
+# Legacy overlay settings — no longer consumed by GSRController (handled in app.py).
+_DEPRECATED_GSR_SETTINGS = frozenset({"hotkey_show_overlay", "overlay_auto_hide"})
+
 # Default recording parameters (when no Config override)
 DEFAULT_FPS = 60
 DEFAULT_QUALITY = "very_high"
@@ -132,6 +135,26 @@ class GSRController:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def is_available() -> bool:
+        """Return ``True`` when ``gpu-screen-recorder`` is on ``PATH``."""
+        return shutil.which(GSR_BINARY) is not None
+
+    @staticmethod
+    def _notify_unavailable(message: str) -> None:
+        """Log and surface a user-visible toast when GSR cannot start."""
+        logger.warning(message)
+        try:
+            from moment.ui.widgets.toast import toast_manager
+
+            toast_manager.show_toast(
+                "warning",
+                "GPU Screen Recorder unavailable",
+                message,
+            )
+        except Exception:
+            logger.debug("Could not show GSR unavailable toast", exc_info=True)
+
+    @staticmethod
     def _kill_external_gsr() -> None:
         """Kill any ``gpu-screen-recorder`` processes NOT managed by us.
 
@@ -203,10 +226,10 @@ class GSRController:
         with the correct shim and configuration.
         """
         # Check GSR binary availability
-        if not shutil.which(GSR_BINARY):
-            raise GSRControllerError(
-                f"{GSR_BINARY} not found in PATH. Install gpu-screen-recorder to use replay mode."
-            )
+        if not self.is_available():
+            msg = f"{GSR_BINARY} not found in PATH. Install gpu-screen-recorder to use replay mode."
+            self._notify_unavailable(msg)
+            raise GSRControllerError(msg)
 
         with self._lock:
             # Kill any GSR running outside Moment (autostart, manual, etc.)

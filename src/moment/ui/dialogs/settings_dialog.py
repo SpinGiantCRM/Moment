@@ -33,7 +33,7 @@ from PyQt6.QtCore import (
     pyqtProperty,
     pyqtSignal,
 )
-from PyQt6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QKeySequence, QPainter, QPen
 from PyQt6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -89,7 +89,6 @@ _HOTKEY_KEY_MAP: dict[str, str] = {
     "Save clip": "hotkey_save_clip",
     "Save with replay": "hotkey_save_with_replay",
     "Toggle recording": "hotkey_toggle_recording",
-    "Open overlay": "hotkey_show_overlay",
 }
 
 
@@ -341,6 +340,17 @@ class SettingsDialog(ThemedDialog):
         f.setStyleSheet("background-color: #3d3d3d; max-height: 1px; margin: 0 0 16px 0;")
         return f
 
+    def _set_elided_path(self, edit: QLineEdit, path: str) -> None:
+        """Show a filesystem path with middle-elision and full path in tooltip."""
+        edit.setToolTip(path)
+        width = max(edit.minimumWidth(), edit.width(), 220)
+        elided = QFontMetrics(edit.font()).elidedText(path, Qt.TextElideMode.ElideMiddle, width)
+        edit.setText(elided)
+
+    def _configure_form(self, form: QFormLayout) -> None:
+        """Apply shared form layout constraints to prevent value-column clipping."""
+        form.setColumnMinimumWidth(1, 220)
+
     def _make_form_row(
         self,
         label: str,
@@ -349,7 +359,8 @@ class SettingsDialog(ThemedDialog):
     ) -> None:
         lbl = QLabel(label)
         lbl.setStyleSheet("font-size: 13px; color: var(--text-secondary); background: transparent;")
-        lbl.setFixedWidth(120)
+        lbl.setMinimumWidth(120)
+        lbl.setWordWrap(True)
         lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         parent_layout.addRow(lbl, control)
 
@@ -364,6 +375,7 @@ class SettingsDialog(ThemedDialog):
         form = QFormLayout()
         form.setVerticalSpacing(10)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        self._configure_form(form)
 
         self._theme_cb = QComboBox()
         self._theme_cb.addItems(["Dark", "Light", "System"])
@@ -423,12 +435,14 @@ class SettingsDialog(ThemedDialog):
 
         form = QFormLayout()
         form.setVerticalSpacing(10)
+        self._configure_form(form)
 
         # Output directory
         row_dir = QHBoxLayout()
         self._recordings_path_edit = QLineEdit()
         self._recordings_path_edit.setReadOnly(True)
         self._recordings_path_edit.setPlaceholderText("~/Videos")
+        self._recordings_path_edit.setMinimumWidth(220)
         row_dir.addWidget(self._recordings_path_edit, stretch=1)
         browse_btn = QPushButton("Browse")
         browse_btn.setFixedHeight(28)
@@ -493,6 +507,7 @@ class SettingsDialog(ThemedDialog):
 
         form = QFormLayout()
         form.setVerticalSpacing(10)
+        self._configure_form(form)
 
         self._video_encoder_cb = QComboBox()
         self._video_encoder_cb.addItems([label for label, _ in _VIDEO_ENCODER_OPTIONS])
@@ -562,7 +577,7 @@ class SettingsDialog(ThemedDialog):
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
-        self._hotkeys_table = QTableWidget(4, 2)
+        self._hotkeys_table = QTableWidget(3, 2)
         self._hotkeys_table.setHorizontalHeaderLabels(["Action", "Shortcut"])
         self._hotkeys_table.horizontalHeader().setStretchLastSection(True)
         self._hotkeys_table.horizontalHeader().setSectionResizeMode(
@@ -603,7 +618,6 @@ class SettingsDialog(ThemedDialog):
             ("Save clip", "save_clip"),
             ("Save with replay", "save_with_replay"),
             ("Toggle recording", "toggle_recording"),
-            ("Open overlay", "open_overlay"),
         ]
         for row, (label, key) in enumerate(actions):
             self._hotkeys_table.setItem(row, 0, QTableWidgetItem(label))
@@ -630,6 +644,7 @@ class SettingsDialog(ThemedDialog):
 
         form = QFormLayout()
         form.setVerticalSpacing(10)
+        self._configure_form(form)
 
         # Auto-upload target
         self._upload_target_cb = QComboBox()
@@ -667,7 +682,7 @@ class SettingsDialog(ThemedDialog):
         self._storage_limit_sb.setRange(10, 9999)
         self._storage_limit_sb.setValue(100)
         self._storage_limit_sb.setFixedHeight(28)
-        self._storage_limit_sb.setFixedWidth(80)
+        self._storage_limit_sb.setFixedWidth(120)
         row_limit.addWidget(self._storage_limit_sb)
         row_limit.addWidget(QLabel("GB"))
         row_limit.addStretch()
@@ -855,7 +870,7 @@ class SettingsDialog(ThemedDialog):
         # Recording
         recordings = self._config.get_path("recordings_dir")
         if recordings and recordings != _PATH_DEFAULTS.get("recordings_dir", ""):
-            self._recordings_path_edit.setText(recordings)
+            self._set_elided_path(self._recordings_path_edit, recordings)
         mode = self._config.get_gsr_setting("replay_record_area")
         if isinstance(mode, str):
             idx = self._record_mode_cb.findText(mode, Qt.MatchFlag.MatchFixedString)
@@ -902,12 +917,9 @@ class SettingsDialog(ThemedDialog):
                 continue
             label = item.text()
             key = _HOTKEY_KEY_MAP.get(label, "")
-            if key == "hotkey_show_overlay":
-                val = self._config.get_hotkey()
-            elif key:
-                val = self._config.get(key, None)
-            else:
+            if not key:
                 continue
+            val = self._config.get(key, None)
             if val and isinstance(val, str) and val.strip():
                 widget = self._hotkeys_table.cellWidget(row, 1)
                 if isinstance(widget, QKeySequenceEdit):
@@ -926,7 +938,10 @@ class SettingsDialog(ThemedDialog):
         self._config.set("minimize_to_tray", self._minimize_tray_ts.isChecked())
 
         # Recording
-        recordings = self._recordings_path_edit.text().strip()
+        recordings = (
+            self._recordings_path_edit.toolTip().strip()
+            or self._recordings_path_edit.text().strip()
+        )
         if recordings:
             self._config.set_path("recordings_dir", recordings)
         self._config.set_gsr_setting(
@@ -966,9 +981,7 @@ class SettingsDialog(ThemedDialog):
             widget = self._hotkeys_table.cellWidget(row, 1)
             if isinstance(widget, QKeySequenceEdit):
                 seq = widget.keySequence().toString()
-                if key == "hotkey_show_overlay":
-                    self._config.set_gsr_setting("hotkey_show_overlay", seq if seq else "Alt+Z")
-                elif key and seq:
+                if key and seq:
                     self._config.set(key, seq)
 
     # ==================================================================
@@ -991,7 +1004,7 @@ class SettingsDialog(ThemedDialog):
             current,
         )
         if directory:
-            self._recordings_path_edit.setText(directory)
+            self._set_elided_path(self._recordings_path_edit, directory)
 
     # ==================================================================
     # QSettings geometry persistence
