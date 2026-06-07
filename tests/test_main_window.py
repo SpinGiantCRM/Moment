@@ -50,7 +50,7 @@ class TestMainWindowInit:
 
     def test_sidebar_width(self, qapp):
         window = MainWindow()
-        assert window.SIDEBAR_W == 56
+        assert window.SIDEBAR_W == 64
         _cleanup_window(window)
 
     def test_status_bar_initial(self, qapp):

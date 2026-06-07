@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
     sort_changed = pyqtSignal(str)
     card_size_changed = pyqtSignal(int)
 
-    SIDEBAR_W = 56
+    SIDEBAR_W = 64
 
     def __init__(
         self, store: "Store | None" = None, parent=None, store_init_error: str | None = None
@@ -152,7 +152,7 @@ class MainWindow(QMainWindow):
         self.resize(960, 650)
         self.setMinimumSize(720, 420)
         self._drag_pos: QPoint | None = None
-        self._resize_margin = 8
+        self._resize_margin = 12
         self._resize_dir = 0  # 0=none, 1=N, 2=E, 3=S, 4=W, 5=NE, 6=SE, 7=SW, 8=NW
         self._resize_start_geo: QRect | None = None
         self._resize_start_pos: QPoint | None = None

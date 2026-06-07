@@ -50,7 +50,7 @@ _COLOUR_TOKENS: dict[str, str] = {
     "--bg-skeleton": "#2e2e2e",
     "--bg-skeleton-shimmer": "#363636",
     # ── Borders ──────────────────────────────────────────────────────────
-    "--border-default": "#404040",
+    "--border-default": "#5a5955",
     "--border-subtle": "#454545",
     "--border-input": "#454545",
     "--border-focus": "#5b9cf5",
@@ -116,6 +116,7 @@ def color(name: str) -> str:
         The colour string or ``"#000000"`` if the token is unknown.
     """
     return _COLOUR_TOKENS.get(name, "#000000")
+
 
 def dark_palette() -> QPalette:
     """Return a :class:`QPalette` matching the dark theme colour tokens."""
@@ -483,7 +484,7 @@ QTabBar::tab:!selected {{
 QComboBox {{
     background: var(--bg-inset);
     border: 1px solid var(--border-input);
-    border-radius: 4px;
+    border-radius: 6px;
     color: var(--text-primary);
     font-size: 13px;
     padding: 0 8px;
@@ -518,7 +519,7 @@ QComboBox::down-arrow {{
 QComboBox QAbstractItemView {{
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
-    border-radius: 4px;
+    border-radius: 6px;
     selection-background-color: var(--bg-active);
     selection-color: var(--text-primary);
     color: var(--text-primary);
@@ -531,7 +532,7 @@ QComboBox QAbstractItemView {{
 QLineEdit, QTextEdit {{
     background: var(--bg-inset);
     border: 1px solid var(--border-input);
-    border-radius: 4px;
+    border-radius: 6px;
     color: var(--text-primary);
     font-size: 13px;
     padding: 0 8px;
@@ -566,7 +567,7 @@ QCheckBox::indicator, QRadioButton::indicator {{
     width: 16px;
     height: 16px;
     border: 1px solid var(--border-hover);
-    border-radius: 3px;
+    border-radius: 4px;
     background: var(--bg-inset);
 }}
 
@@ -674,7 +675,7 @@ QMenu {{
 
 QMenu::item {{
     padding: 6px 28px 6px 12px;
-    border-radius: 3px;
+    border-radius: 4px;
     color: var(--text-primary);
     font-size: 13px;
 }}
@@ -704,7 +705,7 @@ QMenu::icon {{
 QToolTip {{
     background: var(--bg-elevated);
     border: 1px solid var(--border-subtle);
-    border-radius: 3px;
+    border-radius: 8px;
     color: var(--text-primary);
     font-size: 11px;
     padding: 4px 8px;
@@ -715,7 +716,7 @@ QToolTip {{
 QSlider::groove:horizontal {{
     background: var(--slider-track);
     height: 4px;
-    border-radius: 2px;
+    border-radius: 4px;
 }}
 
 QSlider::handle:horizontal {{
@@ -723,7 +724,7 @@ QSlider::handle:horizontal {{
     width: 14px;
     height: 14px;
     margin: -5px 0;
-    border-radius: 7px;
+    border-radius: 8px;
     border: 2px solid var(--slider-fill);
 }}
 
@@ -733,7 +734,7 @@ QSlider::handle:horizontal:hover {{
 
 QSlider::sub-page:horizontal {{
     background: var(--slider-fill);
-    border-radius: 2px;
+    border-radius: 4px;
 }}
 
 /* ---- Progress bar --------------------------------------------------------- */
@@ -741,7 +742,7 @@ QSlider::sub-page:horizontal {{
 QProgressBar {{
     background-color: var(--bg-inset);
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
     height: 4px;
     text-align: center;
     font-size: 10px;
@@ -750,7 +751,7 @@ QProgressBar {{
 
 QProgressBar::chunk {{
     background-color: var(--accent-blue);
-    border-radius: 3px;
+    border-radius: 4px;
 }}
 
 /* ---- Labels --------------------------------------------------------------- */
@@ -815,11 +816,11 @@ QLabel#muted {{
 QToolButton#sidebarBtn {{
     background: transparent;
     border: none;
-    border-left: 2px solid transparent;
-    border-radius: 0;
+    border-left: 3px solid transparent;
+    border-radius: 6px;
     padding: 0;
-    min-width: 56px;
-    max-width: 56px;
+    min-width: 64px;
+    max-width: 64px;
     min-height: 48px;
     max-height: 48px;
 }}
@@ -830,7 +831,7 @@ QToolButton#sidebarBtn:hover {{
 
 QToolButton#sidebarBtn:checked {{
     background: var(--bg-active);
-    border-left: 2px solid var(--accent-blue);
+    border-left: 3px solid var(--accent-blue);
 }}
 
 QToolButton#sidebarBtn:focus {{
@@ -860,7 +861,7 @@ QPushButton#toolbarAction:hover {{
 QToolButton#cardSizeToggle {{
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 3px;
+    border-radius: 4px;
     padding: 2px;
     min-width: 28px;
     max-width: 28px;
@@ -957,7 +958,7 @@ QSpinBox, QDoubleSpinBox {{
     background-color: var(--bg-inset);
     color: var(--text-primary);
     border: 1px solid var(--border-input);
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 0 8px;
     min-height: 28px;
     font-size: 13px;
