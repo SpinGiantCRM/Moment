@@ -1,7 +1,8 @@
-"""GSR controller — manages gpu-screen-recorder in instant-replay (-k) mode.
+"""GSR controller — manages gpu-screen-recorder in instant-replay mode.
 
-Launches GSR as a headless background service with ``-k`` (circular buffer).
-SIGUSR1 triggers a buffer dump. Graceful shutdown with SIGTERM→SIGKILL.
+Launches GSR as a headless background service with ``-r`` (circular buffer).
+SIGUSR1 / SIGRTMIN+* trigger buffer dumps. Graceful shutdown with
+SIGTERM→SIGKILL.
 
 The controller is thread-safe: all subprocess mutations are serialised via
 an internal lock so the hotkey thread and watcher thread can safely interact.
@@ -29,6 +30,16 @@ logger = logging.getLogger(__name__)
 
 GSR_BINARY = "gpu-screen-recorder"
 
+# Processes from gpu-screen-recorder-ui that compete with Moment's overlay.
+_GSR_UI_PROCESS_NAMES = (
+    "gsr-ui",
+    "gsr-global-hotkeys",
+    "gsr-kwin-helper",
+    "gsr-game-tracker",
+    "gsr-wayland-bridge",
+    "gsr-kms-server",
+)
+
 # Legacy overlay settings — no longer consumed by GSRController (handled in app.py).
 _DEPRECATED_GSR_SETTINGS = frozenset({"hotkey_show_overlay", "overlay_auto_hide"})
 
@@ -48,13 +59,77 @@ _RESTART_WINDOW = 60.0  # seconds
 # Debounce window for save_replay() — prevent buffer-dump spam
 _SAVE_DEBOUNCE = 1.0
 
+# GSR 5.x replay save signals (man gpu-screen-recorder SIGNALS section)
+_REPLAY_SIGNAL_OFFSETS: dict[int, int] = {
+    30: 2,  # SIGRTMIN+2 → last 30 seconds
+    60: 3,  # SIGRTMIN+3 → last 60 seconds
+}
+
+# ffmpeg / NVENC names → GSR ``-k`` codec values
+_CODEC_MAP: dict[str, str] = {
+    "auto": "auto",
+    "h264": "h264",
+    "h264_nvenc": "h264",
+    "hevc": "hevc",
+    "hevc_nvenc": "hevc",
+    "av1": "av1",
+    "av1_nvenc": "av1",
+    "av1_10bit": "av1_10bit",
+    "av1_10bit_nvenc": "av1_10bit",
+    "hevc_hdr": "hevc_hdr",
+    "av1_hdr": "av1_hdr",
+    "vp8": "vp8",
+    "vp9": "vp9",
+}
+
+# Settings UI record-area labels → GSR ``-w`` values
+_RECORD_AREA_MAP: dict[str, str] = {
+    "screen": "screen",
+    "game": "screen",
+    "desktop": "screen",
+    "window": "focused",
+    "focused": "focused",
+    "monitor": "screen",
+}
+
+
+def map_record_area(value: str) -> str:
+    """Map a config/UI record-area value to a GSR ``-w`` argument."""
+    key = value.strip().lower()
+    return _RECORD_AREA_MAP.get(key, value)
+
+
+def map_video_codec(value: str | None) -> str:
+    """Map ffmpeg-style codec names to GSR ``-k`` values."""
+    if not value or not str(value).strip():
+        return "auto"
+    key = str(value).strip().lower()
+    return _CODEC_MAP.get(key, key)
+
+
+def replay_signal_for_duration(seconds: int | None) -> int:
+    """Return the POSIX signal number to save *seconds* of replay buffer.
+
+    Args:
+        seconds: Requested clip length (30, 60, or None/other for full dump).
+
+    Returns:
+        ``signal.SIGUSR1`` for full-buffer dumps, else ``SIGRTMIN + offset``.
+    """
+    if seconds is None:
+        return signal.SIGUSR1
+    offset = _REPLAY_SIGNAL_OFFSETS.get(seconds)
+    if offset is None:
+        return signal.SIGUSR1
+    return signal.SIGRTMIN + offset
+
 
 class GSRControllerError(RuntimeError):
     """Raised when the GSR process fails irrecoverably."""
 
 
 class GSRController:
-    """Manages a gpu-screen-recorder process in instant-replay (``-k``) mode.
+    """Manages a gpu-screen-recorder process in instant-replay mode.
 
     Thread-safe: all subprocess mutations go through an internal lock.
 
@@ -68,7 +143,7 @@ class GSRController:
         )
         ctrl.start()
         # ... user presses hotkey ...
-        ctrl.save_replay()
+        ctrl.save_replay(30)
         # ... on shutdown ...
         ctrl.stop()
     """
@@ -99,9 +174,9 @@ class GSRController:
         container: Output container (``mp4`` or ``mkv``).
         replay_duration: Circular buffer size in seconds.
         audio_device: Audio input device (``-a`` flag). None = no audio.
-        record_area: ``-w`` flag value (``screen``, ``window``, etc.).
-        show_cursor: Whether GSR renders the cursor (``--show-cursor``).
-        video_codec: ``-v`` flag value (e.g. ``h264_nvenc``). None = auto.
+        record_area: ``-w`` flag value (``screen``, ``focused``, etc.).
+        show_cursor: Whether GSR renders the cursor (``-cursor yes|no``).
+        video_codec: ``-k`` flag value (e.g. ``h264``). None = auto.
         on_crash: Called as ``callback(message)`` when process dies
             irrecoverably.
         on_file_ready: Called as ``callback(path)`` when a replay file
@@ -113,9 +188,9 @@ class GSRController:
         self._container = container
         self._replay_duration = replay_duration
         self._audio_device = audio_device
-        self._record_area = record_area
+        self._record_area = map_record_area(record_area)
         self._show_cursor = show_cursor
-        self._video_codec = video_codec
+        self._video_codec = map_video_codec(video_codec)
         self._on_crash = on_crash
         self._on_file_ready = on_file_ready
 
@@ -155,65 +230,89 @@ class GSRController:
             logger.debug("Could not show GSR unavailable toast", exc_info=True)
 
     @staticmethod
-    def _kill_external_gsr() -> None:
-        """Kill any ``gpu-screen-recorder`` processes NOT managed by us.
+    def _kill_processes_by_name(names: tuple[str, ...], *, label: str) -> int:
+        """Send SIGTERM then SIGKILL to processes matching *names*.
 
-        Uses ``pgrep`` to find existing instances and sends SIGTERM
-        (graceful) followed by SIGKILL (force) after a short grace
-        period. Handles the case where GSR was started outside Moment
-        (autostart, previous crash, manual launch).
+        Returns:
+            Number of processes signalled on the first pass.
         """
         import subprocess as _sp
 
-        try:
-            result = _sp.run(
-                ["pgrep", "-x", GSR_BINARY],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-        except (FileNotFoundError, _sp.TimeoutExpired):
-            return
-
-        if result.returncode != 0 or not result.stdout.strip():
-            return
-
-        pids = [int(pid) for pid in result.stdout.strip().splitlines() if pid.strip()]
-        if not pids:
-            return
-
-        logger.info("Found %d external GSR process(es) — stopping", len(pids))
-        for pid in pids:
-            logger.debug("Stopping external GSR (pid=%d)", pid)
+        killed = 0
+        for name in names:
             try:
-                os.kill(pid, signal.SIGTERM)
-            except (ProcessLookupError, OSError):
+                result = _sp.run(
+                    ["pgrep", "-x", name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+            except (FileNotFoundError, _sp.TimeoutExpired):
                 continue
 
-        # Wait for graceful exit
-        try:
-            _sp.run(
-                ["sleep", str(_TERM_GRACE)],
-                timeout=_TERM_GRACE + 1,
-            )
-        except _sp.TimeoutExpired:
-            logger.debug("Terminate grace period expired")
+            if result.returncode != 0 or not result.stdout.strip():
+                continue
 
-        # SIGKILL survivors
-        remaining = _sp.run(
-            ["pgrep", "-x", GSR_BINARY],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if remaining.returncode == 0 and remaining.stdout.strip():
-            for pid_text in remaining.stdout.strip().splitlines():
-                pid = int(pid_text.strip())
+            for pid_text in result.stdout.strip().splitlines():
                 try:
+                    pid = int(pid_text.strip())
+                except ValueError:
+                    continue
+                logger.debug("Stopping %s (pid=%d)", name, pid)
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    killed += 1
+                except (ProcessLookupError, OSError):
+                    continue
+
+        if killed == 0:
+            return 0
+
+        try:
+            _sp.run(["sleep", str(_TERM_GRACE)], timeout=_TERM_GRACE + 1)
+        except _sp.TimeoutExpired:
+            logger.debug("Terminate grace period expired for %s", label)
+
+        for name in names:
+            try:
+                remaining = _sp.run(
+                    ["pgrep", "-x", name],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+            except (FileNotFoundError, _sp.TimeoutExpired):
+                continue
+
+            if remaining.returncode != 0 or not remaining.stdout.strip():
+                continue
+
+            for pid_text in remaining.stdout.strip().splitlines():
+                try:
+                    pid = int(pid_text.strip())
                     os.kill(pid, signal.SIGKILL)
-                    logger.warning("Sent SIGKILL to external GSR (pid=%d)", pid)
+                    logger.warning("Sent SIGKILL to %s (pid=%d)", name, pid)
                 except (ProcessLookupError, OSError) as exc:
-                    logger.debug("SIGKILL failed for stale GSR (pid=%d): %s", pid, exc)
+                    logger.debug("SIGKILL failed for %s (pid=%s): %s", name, pid_text, exc)
+
+        return killed
+
+    @staticmethod
+    def _kill_external_gsr() -> None:
+        """Kill any ``gpu-screen-recorder`` processes NOT managed by us."""
+        count = GSRController._kill_processes_by_name((GSR_BINARY,), label="external GSR")
+        if count:
+            logger.info("Stopped %d external gpu-screen-recorder process(es)", count)
+
+    @staticmethod
+    def _stop_competing_gsr_ui() -> None:
+        """Stop gpu-screen-recorder-ui helpers that own Alt+Z / ShadowPlay overlay."""
+        count = GSRController._kill_processes_by_name(_GSR_UI_PROCESS_NAMES, label="GSR UI")
+        if count:
+            logger.info(
+                "Stopped %d gpu-screen-recorder-ui helper(s) so Moment overlay can take over",
+                count,
+            )
 
     def start(self) -> None:
         """Launch GSR in instant-replay mode.
@@ -221,18 +320,16 @@ class GSRController:
         Creates the output directory if needed, spawns the GSR process,
         and starts the crash-monitor background thread.
 
-        If GSR is already running on the system (including our own
-        managed process) it is stopped first so Moment can take control
-        with the correct shim and configuration.
+        Competing GSR UI helpers and external recorder instances are stopped
+        first so Moment controls replay with the configured CLI flags.
         """
-        # Check GSR binary availability
         if not self.is_available():
             msg = f"{GSR_BINARY} not found in PATH. Install gpu-screen-recorder to use replay mode."
             self._notify_unavailable(msg)
             raise GSRControllerError(msg)
 
         with self._lock:
-            # Kill any GSR running outside Moment (autostart, manual, etc.)
+            self._stop_competing_gsr_ui()
             self._kill_external_gsr()
 
             if self._proc is not None:
@@ -249,16 +346,26 @@ class GSRController:
             self._stopped_intentionally = True
             self._stop_process_unlocked()
 
-    def save_replay(self) -> None:
-        """Trigger a buffer dump via SIGUSR1.
+    def save_replay(self, seconds: int | None = None) -> None:
+        """Trigger a replay buffer dump.
+
+        Uses GSR-native signals when possible:
+        - 30s → ``SIGRTMIN+2``
+        - 60s → ``SIGRTMIN+3``
+        - other / None → ``SIGUSR1`` (full buffer up to ``-r``)
 
         Debounced: calls within 1 second of each other are ignored.
+
+        Args:
+            seconds: Requested clip length, or ``None`` for full buffer.
         """
         now = time.monotonic()
         if now - self._last_save < _SAVE_DEBOUNCE:
             logger.debug("save_replay() debounced — too soon since last save")
             return
         self._last_save = now
+
+        sig = replay_signal_for_duration(seconds)
 
         with self._lock:
             if self._proc is None or self._proc.poll() is not None:
@@ -270,11 +377,16 @@ class GSRController:
                 logger.warning("Cannot save replay: no PID")
                 return
 
-            logger.info("Sending SIGUSR1 to GSR (pid=%d) to dump buffer", pid)
+            logger.info(
+                "Sending signal %d to GSR (pid=%d) for %s replay save",
+                sig,
+                pid,
+                f"{seconds}s" if seconds is not None else "full-buffer",
+            )
             try:
-                os.kill(pid, signal.SIGUSR1)
+                os.kill(pid, sig)
             except (ProcessLookupError, OSError) as exc:
-                logger.error("Failed to send SIGUSR1: %s", exc)
+                logger.error("Failed to send replay signal: %s", exc)
 
     # ------------------------------------------------------------------
     # Public API — queries
@@ -302,9 +414,11 @@ class GSRController:
     # ------------------------------------------------------------------
 
     def _build_command(self) -> list[str]:
-        """Build the GSR command line for instant-replay mode."""
+        """Build the GSR 5.x command line for instant-replay mode."""
         cmd: list[str] = [
             GSR_BINARY,
+            "-v",
+            "no",
             "-w",
             self._record_area,
             "-f",
@@ -315,19 +429,18 @@ class GSRController:
             self._container,
             "-q",
             self._quality,
-            "-k",  # instant replay (circular buffer)
+            "-k",
+            self._video_codec,
+            "-replay-storage",
+            "ram",
+            "-cursor",
+            "yes" if self._show_cursor else "no",
             "-o",
             str(self._output_dir),
         ]
 
-        if self._video_codec:
-            cmd.extend(["-v", self._video_codec])
-
         if self._audio_device:
             cmd.extend(["-a", self._audio_device])
-
-        if self._show_cursor:
-            cmd.append("--show-cursor")
 
         return cmd
 
@@ -349,7 +462,6 @@ class GSRController:
         except (OSError, FileNotFoundError) as exc:
             raise GSRControllerError(f"Failed to start {GSR_BINARY}: {exc}") from exc
 
-        # Start crash-monitor thread
         t = threading.Thread(target=self._monitor_process, daemon=True)
         t.start()
 
@@ -368,7 +480,6 @@ class GSRController:
 
         logger.info("Stopping GSR (pid=%d) …", pid)
 
-        # Send SIGTERM to the process group
         try:
             os.kill(pid, signal.SIGTERM)
         except (ProcessLookupError, OSError) as exc:
@@ -376,7 +487,6 @@ class GSRController:
             self._proc = None
             return
 
-        # Wait for graceful exit
         try:
             self._proc.wait(timeout=_TERM_GRACE)
             logger.info("GSR terminated gracefully")
@@ -424,7 +534,6 @@ class GSRController:
                     self._lock.acquire()
                 return
 
-            # Auto-restart
             logger.info("Auto-restarting GSR …")
             try:
                 self._spawn_process_unlocked()

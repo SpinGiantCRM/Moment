@@ -14,6 +14,7 @@ import logging
 import os
 import shutil
 import sys
+import time
 import traceback
 import uuid
 from datetime import datetime, timezone
@@ -229,6 +230,8 @@ class AppManager(QObject):
         self._bookmarker = None
         self._update_timer: QTimer | None = None
         self._pending_save_duration: int | None = None
+        self._gsr_started_at: float | None = None
+        self._gsr_duration_timer: QTimer | None = None
 
     @property
     def app(self) -> QApplication | None:
@@ -695,13 +698,19 @@ class AppManager(QObject):
 
         if self._window is not None:
             self._window._gsr_controller = self._gsr_controller
+            self._register_overlay_hotkey()
 
+        self._gsr_started_at = time.monotonic()
+        self._start_gsr_duration_ticker()
+        self._refresh_recent_clips()
         self._update_replay_status(active=True)
-        self._register_overlay_hotkey()
         return True
 
     def _stop_gsr_stack(self) -> None:
         """Stop GSR, watcher, overlay, and unregister the global hotkey."""
+        self._stop_gsr_duration_ticker()
+        self._gsr_started_at = None
+
         if self._hotkey_manager is not None:
             try:
                 self._hotkey_manager.unregister()
@@ -758,6 +767,70 @@ class AppManager(QObject):
         self._hotkey_manager.triggered.connect(self._overlay.toggle)
         backend = self._hotkey_manager.register(parent_widget=self._window)
         logger.info("Global hotkey registered (backend: %s)", backend)
+
+    def _start_gsr_duration_ticker(self) -> None:
+        """Update overlay REC duration once per second while replay is active."""
+        self._stop_gsr_duration_ticker()
+        if self._overlay is None:
+            return
+
+        self._gsr_duration_timer = QTimer(self)
+        self._gsr_duration_timer.setInterval(1000)
+        self._gsr_duration_timer.timeout.connect(self._on_gsr_duration_tick)
+        self._gsr_duration_timer.start()
+        self._on_gsr_duration_tick()
+
+    def _stop_gsr_duration_ticker(self) -> None:
+        """Stop the overlay duration ticker."""
+        if self._gsr_duration_timer is not None:
+            self._gsr_duration_timer.stop()
+            self._gsr_duration_timer.deleteLater()
+            self._gsr_duration_timer = None
+
+    def _on_gsr_duration_tick(self) -> None:
+        """Push elapsed replay time into the overlay REC indicator."""
+        if self._overlay is None or self._gsr_started_at is None:
+            return
+        elapsed = int(time.monotonic() - self._gsr_started_at)
+        self._overlay.set_recording_duration(elapsed)
+
+    def _format_relative_time(
+        self,
+        recorded_at: datetime | None,
+        now: datetime,
+    ) -> str:
+        """Format a clip timestamp as a short relative string."""
+        if recorded_at is None:
+            return "just now"
+        if recorded_at.tzinfo is None:
+            recorded_at = recorded_at.replace(tzinfo=timezone.utc)
+        secs = int((now - recorded_at).total_seconds())
+        if secs < 60:
+            return f"{secs}s ago"
+        mins = secs // 60
+        if mins < 60:
+            return f"{mins}m ago"
+        return f"{mins // 60}h ago"
+
+    def _refresh_recent_clips(self) -> None:
+        """Refresh overlay and tray recent-clip lists from the store."""
+        if self._store is None:
+            return
+        try:
+            clips = self._store.list_clips(limit=5)
+            now = datetime.now(timezone.utc)
+            overlay_rows: list[tuple[str, str]] = []
+            tray_rows: list[tuple[str, str]] = []
+            for clip in clips:
+                rel = self._format_relative_time(clip.recorded_at, now)
+                overlay_rows.append((clip.stem, rel))
+                tray_rows.append((clip.stem, clip.r2_url or ""))
+            if self._overlay is not None:
+                self._overlay.set_recent_clips(overlay_rows)
+            if self._tray is not None:
+                self._tray.update_recent(tray_rows)
+        except Exception as exc:
+            logger.debug("Recent clips refresh failed: %s", exc)
 
     def _reload_gsr_settings(self) -> None:
         """Apply recording/overlay settings after the settings dialog closes."""
@@ -827,7 +900,7 @@ class AppManager(QObject):
 
             self._window = window
 
-            if self._overlay is not None and self._hotkey_manager is None:
+            if self._overlay is not None:
                 self._register_overlay_hotkey()
 
             # Show window unless --minimized
@@ -1013,8 +1086,9 @@ class AppManager(QObject):
         elif action_name.startswith("save_replay:"):
             duration = int(action_name.split(":", 1)[1])
             logger.info("Save %ds replay", duration)
+            self._pending_save_duration = duration
             if self._gsr_controller is not None:
-                self._gsr_controller.save_replay()
+                self._gsr_controller.save_replay(duration)
         elif action_name == "screenshot":
             self._screenshot()
         elif action_name == "bookmark":
@@ -1249,6 +1323,7 @@ class AppManager(QObject):
 
             # Notify the user (via signal for thread safety)
             self._gsr_import_success.emit(stem, "encoding started")
+            self._refresh_recent_clips()
 
         except Exception as exc:
             logger.exception("Failed to import GSR replay: %s", exc)
@@ -1258,8 +1333,10 @@ class AppManager(QObject):
         """Called when the user clicks a quick-save button in the overlay."""
         logger.info("Overlay save %ds requested", duration)
         self._pending_save_duration = duration
+        if self._overlay is not None:
+            self._overlay.show_save_confirmation(duration)
         if self._gsr_controller is not None:
-            self._gsr_controller.save_replay()
+            self._gsr_controller.save_replay(duration)
 
     # ------------------------------------------------------------------
     # Pipeline callbacks

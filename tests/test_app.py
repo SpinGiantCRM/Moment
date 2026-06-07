@@ -366,9 +366,20 @@ class TestAppManagerGsr:
 
         mgr = AppManager(_parse_args([]))
         mgr._gsr_controller = MagicMock()
+        mgr._overlay = MagicMock()
         mgr._on_overlay_save(60)
         assert mgr._pending_save_duration == 60
-        mgr._gsr_controller.save_replay.assert_called_once()
+        mgr._gsr_controller.save_replay.assert_called_once_with(60)
+        mgr._overlay.show_save_confirmation.assert_called_once_with(60)
+
+    def test_tray_save_replay_sets_pending_duration(self) -> None:
+        from moment.ui.app import AppManager, _parse_args
+
+        mgr = AppManager(_parse_args([]))
+        mgr._gsr_controller = MagicMock()
+        mgr._on_action("save_replay:30")
+        assert mgr._pending_save_duration == 30
+        mgr._gsr_controller.save_replay.assert_called_once_with(30)
 
 
 class TestAppManagerInitServices:

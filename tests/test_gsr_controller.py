@@ -16,6 +16,9 @@ from moment.core.gsr_controller import (
     GSR_BINARY,
     GSRController,
     GSRControllerError,
+    map_record_area,
+    map_video_codec,
+    replay_signal_for_duration,
 )
 
 pytestmark = [pytest.mark.integration]
@@ -64,6 +67,7 @@ class TestBinaryCheck:
     def test_binary_found_starts(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_monitor_process"),
@@ -87,6 +91,7 @@ class TestLifecycle:
     def test_start_creates_output_dir(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch("pathlib.Path.mkdir") as mock_mkdir,
@@ -103,6 +108,7 @@ class TestLifecycle:
     def test_start_replaces_existing_process(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_monitor_process"),
@@ -122,6 +128,7 @@ class TestLifecycle:
     def test_stop(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_monitor_process"),
@@ -150,6 +157,7 @@ class TestSaveReplay:
     def test_sends_sigusr1(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch("os.kill") as mock_kill,
@@ -164,6 +172,42 @@ class TestSaveReplay:
             gsr.save_replay()
             mock_kill.assert_called_once_with(42, signal.SIGUSR1)
 
+    def test_save_30s_sends_sigrtmin_plus_2(self, gsr: GSRController) -> None:
+        with (
+            patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
+            patch.object(gsr, "_kill_external_gsr"),
+            patch("subprocess.Popen") as mock_popen,
+            patch("os.kill") as mock_kill,
+            patch.object(gsr, "_monitor_process"),
+        ):
+            mock_proc = MagicMock()
+            mock_proc.pid = 42
+            mock_proc.poll.return_value = None
+            mock_popen.return_value = mock_proc
+            gsr.start()
+
+            gsr.save_replay(30)
+            mock_kill.assert_called_once_with(42, signal.SIGRTMIN + 2)
+
+    def test_save_60s_sends_sigrtmin_plus_3(self, gsr: GSRController) -> None:
+        with (
+            patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
+            patch.object(gsr, "_kill_external_gsr"),
+            patch("subprocess.Popen") as mock_popen,
+            patch("os.kill") as mock_kill,
+            patch.object(gsr, "_monitor_process"),
+        ):
+            mock_proc = MagicMock()
+            mock_proc.pid = 42
+            mock_proc.poll.return_value = None
+            mock_popen.return_value = mock_proc
+            gsr.start()
+
+            gsr.save_replay(60)
+            mock_kill.assert_called_once_with(42, signal.SIGRTMIN + 3)
+
     def test_noop_when_not_running(self, gsr: GSRController) -> None:
         with patch("os.kill") as mock_kill:
             gsr.save_replay()
@@ -172,6 +216,7 @@ class TestSaveReplay:
     def test_debounce(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch("os.kill") as mock_kill,
@@ -190,6 +235,7 @@ class TestSaveReplay:
     def test_sigusr1_on_dead_process(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch("os.kill") as mock_kill,
@@ -216,8 +262,12 @@ class TestBuildCommand:
         cmd = gsr._build_command()
         assert GSR_BINARY in cmd
         assert "-k" in cmd
+        assert "auto" in cmd
         assert "-f" in cmd
         assert "60" in cmd
+        assert "-replay-storage" in cmd
+        assert "ram" in cmd
+        assert "-cursor" in cmd
 
     def test_includes_replay_duration(self) -> None:
         ctrl = GSRController(output_dir="/tmp", replay_duration=90)
@@ -228,14 +278,45 @@ class TestBuildCommand:
     def test_with_video_codec(self) -> None:
         ctrl = GSRController(output_dir="/tmp", video_codec="h264_nvenc")
         cmd = ctrl._build_command()
-        assert "-v" in cmd
-        assert "h264_nvenc" in cmd
+        k_idx = cmd.index("-k")
+        assert cmd[k_idx + 1] == "h264"
 
     def test_with_audio_device(self) -> None:
-        ctrl = GSRController(output_dir="/tmp", audio_device="default")
+        ctrl = GSRController(output_dir="/tmp", audio_device="default_output")
         cmd = ctrl._build_command()
         assert "-a" in cmd
-        assert "default" in cmd
+        assert "default_output" in cmd
+
+    def test_cursor_disabled(self) -> None:
+        ctrl = GSRController(output_dir="/tmp", show_cursor=False)
+        cmd = ctrl._build_command()
+        cursor_idx = cmd.index("-cursor")
+        assert cmd[cursor_idx + 1] == "no"
+
+
+class TestMappingHelpers:
+    def test_map_record_area_ui_values(self) -> None:
+        assert map_record_area("game") == "screen"
+        assert map_record_area("Desktop") == "screen"
+        assert map_record_area("window") == "focused"
+
+    def test_map_video_codec_nvenc(self) -> None:
+        assert map_video_codec("h264_nvenc") == "h264"
+        assert map_video_codec("") == "auto"
+        assert map_video_codec(None) == "auto"
+
+    def test_replay_signal_for_duration(self) -> None:
+        assert replay_signal_for_duration(30) == signal.SIGRTMIN + 2
+        assert replay_signal_for_duration(60) == signal.SIGRTMIN + 3
+        assert replay_signal_for_duration(120) == signal.SIGUSR1
+        assert replay_signal_for_duration(None) == signal.SIGUSR1
+
+
+class TestStopCompetingGsrUi:
+    def test_stops_ui_helpers(self) -> None:
+        with patch.object(GSRController, "_kill_processes_by_name", return_value=3) as mock_kill:
+            GSRController._stop_competing_gsr_ui()
+        mock_kill.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +329,7 @@ class TestCrashRecovery:
         """If the process dies, the monitor thread should restart it."""
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
         ):
@@ -276,6 +358,7 @@ class TestCrashRecovery:
         crashes: list[str] = []
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(GSRController, "_stop_competing_gsr_ui"),
             patch.object(GSRController, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
         ):
@@ -306,6 +389,7 @@ class TestCrashRecovery:
         """If we intentionally stopped, monitor should not restart."""
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_spawn_process_unlocked") as mock_spawn,
@@ -357,6 +441,7 @@ class TestQueries:
     def test_recording_after_start(self, gsr: GSRController) -> None:
         with (
             patch("shutil.which", return_value="/usr/bin/gpu-screen-recorder"),
+            patch.object(gsr, "_stop_competing_gsr_ui"),
             patch.object(gsr, "_kill_external_gsr"),
             patch("subprocess.Popen") as mock_popen,
             patch.object(gsr, "_monitor_process"),

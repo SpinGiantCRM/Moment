@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from moment.core.config import Config
 
 from moment.core.config import _PATH_DEFAULTS
+from moment.core.gsr_controller import map_record_area
 
 logger = logging.getLogger(__name__)
 
@@ -879,12 +880,14 @@ class SettingsDialog(ThemedDialog):
             self._set_elided_path(self._recordings_path_edit, recordings)
         mode = self._config.get_gsr_setting("replay_record_area")
         if isinstance(mode, str):
-            idx = self._record_mode_cb.findText(mode, Qt.MatchFlag.MatchFixedString)
-            if idx < 0:
-                # Try case-insensitive
-                idx = self._record_mode_cb.findText(
-                    mode.capitalize(), Qt.MatchFlag.MatchFixedString
-                )
+            ui_mode = {
+                "screen": "Desktop",
+                "game": "Game",
+                "desktop": "Desktop",
+                "focused": "Window",
+                "window": "Window",
+            }.get(mode.lower(), mode.capitalize())
+            idx = self._record_mode_cb.findText(ui_mode, Qt.MatchFlag.MatchFixedString)
             if idx >= 0:
                 self._record_mode_cb.setCurrentIndex(idx)
         replay_fps = self._config.get_gsr_setting("replay_fps")
@@ -898,9 +901,8 @@ class SettingsDialog(ThemedDialog):
         overlay_auto_hide = self._config.get_gsr_setting("overlay_auto_hide")
         if isinstance(overlay_auto_hide, int):
             self._overlay_auto_hide_sb.setValue(overlay_auto_hide)
-        self._capture_audio_ts.setChecked(
-            self._config.get_gsr_setting("replay_audio_device") is not None
-        )
+        audio_device = self._config.get_gsr_setting("replay_audio_device")
+        self._capture_audio_ts.setChecked(audio_device is not None and audio_device != "")
         replay_container = self._config.get_gsr_setting("replay_container")
         if isinstance(replay_container, str):
             fmt = replay_container.upper()
@@ -909,7 +911,12 @@ class SettingsDialog(ThemedDialog):
                 self._format_cb.setCurrentIndex(idx)
 
         # Video
-        preferred_codec = self._config.get_preferred_codec()
+        replay_codec = self._config.get_gsr_setting("replay_codec")
+        preferred_codec = (
+            str(replay_codec)
+            if isinstance(replay_codec, str) and replay_codec
+            else self._config.get_preferred_codec()
+        )
         for i, (_, value) in enumerate(_VIDEO_ENCODER_OPTIONS):
             if value == preferred_codec:
                 self._video_encoder_cb.setCurrentIndex(i)
@@ -951,7 +958,8 @@ class SettingsDialog(ThemedDialog):
         if recordings:
             self._config.set_path("recordings_dir", recordings)
         self._config.set_gsr_setting(
-            "replay_record_area", self._record_mode_cb.currentText().lower()
+            "replay_record_area",
+            map_record_area(self._record_mode_cb.currentText()),
         )
 
         try:
@@ -966,15 +974,15 @@ class SettingsDialog(ThemedDialog):
             self._config.set_gsr_setting("replay_container", fmt)
         if not self._capture_audio_ts.isChecked():
             self._config.set_gsr_setting("replay_audio_device", None)
-        else:
-            # Keep whatever was set
-            pass
+        elif not self._config.get_gsr_setting("replay_audio_device"):
+            self._config.set_gsr_setting("replay_audio_device", "default_output")
 
         # Video
         sel = self._video_encoder_cb.currentText()
         for label, value in _VIDEO_ENCODER_OPTIONS:
             if label == sel:
                 self._config.set_preferred_codec(value)
+                self._config.set_gsr_setting("replay_codec", value)
                 break
 
         self._config.set_gsr_setting("replay_quality", self._quality_cb.currentText())

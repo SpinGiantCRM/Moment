@@ -226,6 +226,27 @@ class TestSettingsSave:
         dlg._save_settings()
         config.set_gsr_setting.assert_any_call("overlay_auto_hide", 12)
 
+    def test_save_record_area_maps_to_gsr_values(self, qapp) -> None:
+        config = _make_config()
+        dlg = SettingsDialog(config=config)
+        dlg._record_mode_cb.setCurrentText("Window")
+        dlg._save_settings()
+        config.set_gsr_setting.assert_any_call("replay_record_area", "focused")
+
+    def test_save_replay_codec_from_encoder(self, qapp) -> None:
+        config = _make_config()
+        dlg = SettingsDialog(config=config)
+        dlg._video_encoder_cb.setCurrentText("NVENC HEVC")
+        dlg._save_settings()
+        config.set_gsr_setting.assert_any_call("replay_codec", "hevc_nvenc")
+
+    def test_save_audio_defaults_to_default_output(self, qapp) -> None:
+        config = _make_config()
+        dlg = SettingsDialog(config=config)
+        dlg._capture_audio_ts.setChecked(True)
+        dlg._save_settings()
+        config.set_gsr_setting.assert_any_call("replay_audio_device", "default_output")
+
 
 class TestSettingsWidgets:
     """Tests that key widgets exist across all pages."""
