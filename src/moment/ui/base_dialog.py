@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QShowEvent
 from PyQt6.QtWidgets import QDialog, QWidget
 
 from moment.ui.resources import stylesheet
@@ -18,4 +19,9 @@ class ThemedDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet(stylesheet())
+
+    def showEvent(self, event: QShowEvent) -> None:
+        """Re-apply stylesheet on show to override KDE titlebar palette bleed."""
+        super().showEvent(event)
         self.setStyleSheet(stylesheet())

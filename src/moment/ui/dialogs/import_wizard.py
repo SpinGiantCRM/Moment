@@ -123,9 +123,6 @@ class ImportWizardDialog(ThemedDialog):
                 count_text = f"{total} clip{'s' if total != 1 else ''}"
             cb = QCheckBox(f"{display}  ({count_text})")
             cb.setChecked(new_count > 0)
-            cb.setEnabled(new_count > 0)
-            if new_count == 0:
-                cb.setToolTip("All clips from this folder are already in the library")
             scroll_layout.addWidget(cb)
             self._candidate_checks.append((cb, candidate))
         scroll_layout.addStretch()

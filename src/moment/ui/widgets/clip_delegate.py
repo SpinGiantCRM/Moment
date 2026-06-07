@@ -36,17 +36,17 @@ _THUMB_TOP_RADIUS = 4
 _PADDING = 8
 
 # ── Colours (from design system) ────────────────────────────────────────────
-BG_NORMAL = QColor("#242424")
-BG_ELEVATED = QColor("#2a2a2a")
-BORDER_SUBTLE = QColor("#3d3d3d")
-BORDER_HOVER = QColor("#555555")
+BG_NORMAL = QColor("#363636")
+BG_ELEVATED = QColor("#333333")
+BORDER_SUBTLE = QColor("#454545")
+BORDER_HOVER = QColor("#505050")
 BORDER_FOCUS = QColor("#4a9eff")
-TEXT_PRIMARY = QColor("#e8e8e8")
-TEXT_SECONDARY = QColor("#a0a0a0")
+TEXT_PRIMARY = QColor("#f0f0f0")
+TEXT_SECONDARY = QColor("#b8b8b8")
 OVERLAY_BADGE = QColor(0, 0, 0, 200)
-HEART_INACTIVE = QColor("#555555")
+HEART_INACTIVE = QColor("#505050")
 HEART_ACTIVE = QColor("#f87171")
-SKELETON_BASE = QColor("#2a2a2a")
+SKELETON_BASE = QColor("#2e2e2e")
 SKELETON_SHINE = QColor("#333333")
 
 
