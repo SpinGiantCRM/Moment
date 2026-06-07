@@ -843,7 +843,7 @@ QPushButton#toolbarAction {{
     background: transparent;
     border: 1px solid var(--btn-secondary-border);
     color: var(--btn-secondary-text);
-    border-radius: 3px;
+    border-radius: 6px;
     padding: 0 8px;
     min-height: 28px;
     max-height: 28px;

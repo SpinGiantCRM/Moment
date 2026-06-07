@@ -112,9 +112,15 @@ def _candidate_dirs(config: "Config | None") -> list[tuple[Path, str]]:
     _add(videos / "GPU-Screen-Recorder", "GPU Screen Recorder")
     _add(videos / "Moment", "Moment recordings")
     _add(videos / "OBS", "OBS Studio")
-    _add(videos / "Clips", "Clips")
+    for clip_dir in ("Clips", "clips"):
+        base = videos / clip_dir
+        _add(base, clip_dir)
+        _add(base / "source", f"{clip_dir}/source")
+
     _add(videos / "Recordings", "Recordings")
+    _add(videos / "Recordings" / "source", "Recordings/source")
     _add(videos / "Screen Recordings", "Screen Recordings")
+    _add(videos / "Screen Recordings" / "source", "Screen Recordings/source")
 
     encoded_default = home / ".local/share/moment/encoded"
     _add(encoded_default, "Encoded output")
